@@ -18,9 +18,15 @@ import config
 class YoloAnalyzer:
     """Thin wrapper around Ultralytics YOLO with lazy model loading."""
 
-    def __init__(self, model: str = config.DEFAULT_MODEL, conf: float = config.DEFAULT_CONF):
+    def __init__(
+        self,
+        model: str = config.DEFAULT_MODEL,
+        conf: float = config.DEFAULT_CONF,
+        device: str = config.YOLO_DEVICE,
+    ):
         self.model_name = model
         self.conf = conf
+        self.device = device or "cpu"
         self._model = None
 
     def _ensure_model(self, model: str | None, conf: float | None) -> None:
@@ -49,7 +55,7 @@ class YoloAnalyzer:
         start = time.perf_counter()
         try:
             self._ensure_model(model, conf)
-            results = self._model(str(image_path), conf=self.conf, verbose=False)
+            results = self._model(str(image_path), conf=self.conf, device=self.device, verbose=False)
             result = results[0]
 
             detections = []
@@ -178,3 +184,58 @@ def llm_available() -> bool:
     if config.LLM_BACKEND != "ollama":
         return False
     return bool(ollama_models())
+
+
+# ---------------------------------------------------------------------------
+# Deterministic Swedish summary built from YOLO detections.
+# Reliable and language-stable — no LLM needed for "Jag ser 1 bil och 1 katt."
+# ---------------------------------------------------------------------------
+
+# COCO class -> (singular, plural) in Swedish
+_SV_LABELS = {
+    "person": ("person", "personer"),
+    "car": ("bil", "bilar"),
+    "truck": ("lastbil", "lastbilar"),
+    "bus": ("buss", "bussar"),
+    "motorcycle": ("motorcykel", "motorcyklar"),
+    "bicycle": ("cykel", "cyklar"),
+    "airplane": ("flygplan", "flygplan"),
+    "train": ("tåg", "tåg"),
+    "boat": ("båt", "båtar"),
+    "cat": ("katt", "katter"),
+    "dog": ("hund", "hundar"),
+    "bird": ("fågel", "fåglar"),
+    "horse": ("häst", "hästar"),
+    "cow": ("ko", "kor"),
+    "sheep": ("får", "får"),
+    "elephant": ("elefant", "elefanter"),
+    "bear": ("björn", "björnar"),
+    "zebra": ("zebra", "zebror"),
+    "giraffe": ("giraff", "giraffer"),
+}
+
+# Classes we care about: people, vehicles, animals
+_INTEREST_CLASSES = set(_SV_LABELS)
+
+
+def summarize_detections(detections: list) -> str:
+    """Build a short Swedish sentence from YOLO detections, e.g.
+    'Jag ser 2 personer, 1 bil och 1 katt.' or 'Jag ser inget av intresse.'
+    """
+    counts: dict = {}
+    for d in detections:
+        cls = d.get("class", "")
+        if cls in _INTEREST_CLASSES:
+            counts[cls] = counts.get(cls, 0) + 1
+
+    if not counts:
+        return "Jag ser inget av intresse."
+
+    items = []
+    for cls, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+        singular, plural = _SV_LABELS.get(cls, (cls, cls))
+        items.append(f"{n} {plural if n > 1 else singular}")
+
+    if len(items) == 1:
+        return "Jag ser " + items[0] + "."
+    return "Jag ser " + ", ".join(items[:-1]) + " och " + items[-1] + "."

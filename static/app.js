@@ -143,6 +143,10 @@ function renderResult(card, data) {
     ? `<div class="llm-err">⚠️ ${escapeHtml(data.llm_error)}</div>`
     : "";
 
+  const summaryHtml = data.summary
+    ? `<div class="llm-box summary"><span class="tag">Sammanfattning</span><p>${escapeHtml(data.summary)}</p></div>`
+    : "";
+
   const haHtml = data.ha_error
     ? `<div class="llm-err">🏠 ${escapeHtml(data.ha_error)}</div>`
     : "";
@@ -155,6 +159,7 @@ function renderResult(card, data) {
     <img src="${data.annotated_url}" alt="annotated" />
     <div class="body">
       <h3>Detections</h3>
+      ${summaryHtml}
       ${detHtml}
       ${llmHtml}
       ${haHtml}

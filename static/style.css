@@ -163,6 +163,8 @@ input[type="range"] { accent-color: var(--accent); }
   line-height: 1.5;
 }
 .llm-box .tag { color: var(--yellow); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.llm-box.summary { border-left-color: var(--green); }
+.llm-box.summary .tag { color: var(--green); }
 .llm-err { color: var(--red); font-size: 12.5px; margin-top: 8px; }
 
 .error-banner {

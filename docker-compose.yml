@@ -7,10 +7,16 @@ services:
     container_name: camera-ai
     ports:
       - "8000:8000"
+    # Intel iGPU passthrough (Quick Sync / OpenVINO). The LXC must expose
+    # /dev/dri first — see README "Intel iGPU passthrough".
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
     environment:
       - LLM_BACKEND=ollama
       - OLLAMA_URL=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-moondream}
+      - YOLO_DEVICE=${YOLO_DEVICE:-cpu}          # cpu | openvino:GPU (Intel iGPU)
       - HA_ENABLED=${HA_ENABLED:-0}
       - HA_TRANSPORT=${HA_TRANSPORT:-mqtt}
       - HA_MQTT_HOST=${HA_MQTT_HOST:-}
@@ -29,6 +35,8 @@ services:
     container_name: ollama
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_NOPRUNE=true   # keep pulled models (don't prune blobs at startup)
     volumes:
       - ollama-models:/root/.ollama
     restart: unless-stopped

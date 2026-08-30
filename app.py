@@ -14,7 +14,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
-from analyzer import YoloAnalyzer, active_ollama_model, describe_with_ollama, llm_available
+from analyzer import (
+    YoloAnalyzer,
+    active_ollama_model,
+    describe_with_ollama,
+    llm_available,
+    summarize_detections,
+)
 from ha_client import HAClient
 
 analyzer = YoloAnalyzer()
@@ -87,6 +93,7 @@ async def analyze(
     response = {
         "filename": filename,
         "detections": result["detections"],
+        "summary": summarize_detections(result["detections"]),
         "annotated_url": f"/media/{Path(result['annotated']).name}" if result["annotated"] else None,
         "model": result["model"],
         "inference_ms": result["inference_ms"],

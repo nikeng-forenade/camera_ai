@@ -67,6 +67,40 @@ Notes:
 - Reolink: run `docker exec camera-ai python reolink_motion.py` (with `REOLINK_*` in `.env`)
   to test the motion → snapshot → AI → HA flow, or wire it to Frigate/HA triggers.
 
+### Intel iGPU passthrough (Quick Sync / OpenVINO)
+
+To accelerate YOLO on the host's Intel iGPU from inside the LXC:
+
+1. On the Proxmox host, edit the LXC config (`/etc/pve/lxc/<id>.conf`) and add:
+   ```
+   lxc.cgroup2.devices.allow: c 226:0 rwm
+   lxc.cgroup2.devices.allow: c 226:128 rwm
+   lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
+   lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
+   ```
+   Restart the container and verify inside the LXC: `ls -la /dev/dri`.
+
+2. Install OpenVINO in the camera-ai container:
+   ```
+   docker exec camera-ai pip install openvino
+   ```
+   (or add `openvino` to `requirements.txt`).
+
+3. Enable the Intel GPU in `.env`:
+   ```
+   YOLO_DEVICE=openvino:GPU
+   ```
+
+4. Restart the stack: `docker compose up -d --force-recreate camera-ai` and watch
+   the inference time in the GUI drop.
+
+Intel passthrough notes:
+- The iGPU must already be enabled/usable on the Proxmox host (BIOS: enable iGPU).
+- If `/dev/dri` is not exposed in the LXC, remove the `devices:` block from
+  `docker-compose.yml` (CPU mode still works).
+- Ollama has limited Intel iGPU support; `moondream` runs fine on CPU — the
+  passthrough mainly speeds up YOLO via OpenVINO.
+
 ## Talk to Home Assistant
 
 The app can push every analysis result to HA. Two transports — **no custom add-on needed**.

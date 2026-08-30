@@ -23,6 +23,9 @@ MEDIA_DIR.mkdir(exist_ok=True)
 # YOLO defaults
 DEFAULT_MODEL = os.getenv("YOLO_MODEL", "yolo11n.pt")
 DEFAULT_CONF = float(os.getenv("YOLO_CONF", "0.35"))
+# Inference device: "cpu" (default), "0"/"gpu" (NVIDIA CUDA), or
+# "openvino"/"openvino:GPU" for Intel iGPU/Arc (needs OpenVINO installed).
+YOLO_DEVICE = os.getenv("YOLO_DEVICE", "cpu")
 
 # Small vision LLM (describes the scene).
 #   llm_backend = "ollama" | "none"
@@ -34,9 +37,9 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "moondream")
 LLM_DEFAULT_PROMPT = os.getenv(
     "LLM_PROMPT",
-    "Answer in ONE short line. Report only whether people, cars, or animals are "
-    "visible, as 'people: N, cars: N, animals: N' (use 0 for none). "
-    "Do not describe anything else.",
+    "Svara på svenska med EN kort mening om vad du ser: bara personer, bilar "
+    "och djur, med antal. Exempel: 'Jag ser 2 personer, 1 bil och 1 katt.' "
+    "Ser du inget av detta, svara 'Jag ser inget av intresse.' Nämn inget annat.",
 )
 
 # Optional Reolink integration (used by reolink_motion.py)
