@@ -183,6 +183,31 @@ Entities appear in HA automatically — no YAML, no restart. This is the same me
 In the GUI tick **“Send results to Home Assistant”** to push each uploaded picture.
 When wired to the camera, `reolink_motion.py` publishes the same results automatically on motion.
 
+### Full flow: Reolink → HA saves snapshot → Camera AI → back to HA
+
+This is the flow you described — the camera image ends up **saved on Home Assistant**,
+then analysed, and the result comes back as HA entities.
+
+```mermaid
+flowchart LR
+    R[Reolink] -->|motion| HA[Home Assistant]
+    HA -->|camera.snapshot| IMG[/config/www/snapshots/latest.jpg/]
+    HA -->|rest_command POST /api/analyze-url| AI[Camera AI in LXC]
+    IMG -->|downloaded from /local/...| AI
+    AI -->|MQTT discovery| HA
+    HA --> UI[sensors + image]
+```
+
+1. **On the HA side**, copy `ha/rest_command.yaml` and `ha/automation.yaml`, replace the
+   entity names and IPs, create `/config/www/snapshots`, and reload config/automations.
+   On motion the automation:
+   - `camera.snapshot` saves the Reolink picture to `/config/www/snapshots/latest.jpg`
+     (visible at `http://<HA-IP>:8123/local/snapshots/latest.jpg`)
+   - calls `rest_command.camera_ai_analyze` → POSTs that URL to
+     `http://<LXC-IP>:8000/api/analyze-url`
+2. **Camera AI** downloads the image, runs YOLO + the Swedish summary, and publishes the
+   result back to HA over MQTT (auto-discovered entities).
+
 ## Next step: wire up the Reolink camera
 
 The `analyzer.py` pipeline is the same one used by `reolink_motion.py`, which:

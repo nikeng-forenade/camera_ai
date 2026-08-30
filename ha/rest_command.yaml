@@ -1,0 +1,13 @@
+# Home Assistant: REST command that pushes a saved Reolink snapshot to Camera AI.
+#
+# Add to configuration.yaml:
+#   rest_command: !include rest_command.yaml
+#
+# Replace <LXC-IP> with the Camera AI LXC's IP.
+rest_command:
+  camera_ai_analyze:
+    url: "http://<LXC-IP>:8000/api/analyze-url"
+    method: POST
+    content_type: "application/x-www-form-urlencoded"
+    payload: "url={{ (url | string) | urlencode }}&use_ha=true&use_llm=false"
+    timeout: 120

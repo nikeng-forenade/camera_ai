@@ -7,7 +7,9 @@ from __future__ import annotations
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -87,11 +89,42 @@ async def analyze(
     filename = f"{uuid.uuid4().hex}{ext}"
     upload_path = config.UPLOAD_DIR / filename
     upload_path.write_bytes(await file.read())
+    return JSONResponse(_run_pipeline(upload_path, model, conf, use_llm, prompt, use_ha))
 
+
+@app.post("/api/analyze-url")
+async def analyze_url(
+    url: str = Form(...),
+    model: str = Form(config.DEFAULT_MODEL),
+    conf: float = Form(config.DEFAULT_CONF),
+    use_llm: bool = Form(False),
+    prompt: str = Form(""),
+    use_ha: bool = Form(False),
+):
+    """HA-push endpoint: HA saves a Reolink snapshot, then POSTs its URL here."""
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+        content = resp.content
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"Could not fetch image from HA ({url}): {exc}") from exc
+
+    ext = Path(urlparse(url).path).suffix.lower()
+    if ext not in ALLOWED:
+        ext = ".jpg"
+    filename = f"{uuid.uuid4().hex}{ext}"
+    upload_path = config.UPLOAD_DIR / filename
+    upload_path.write_bytes(content)
+    return JSONResponse(_run_pipeline(upload_path, model, conf, use_llm, prompt, use_ha))
+
+
+def _run_pipeline(upload_path, model: str, conf: float, use_llm: bool, prompt: str, use_ha: bool) -> dict:
+    """Shared YOLO + LLM + HA pipeline used by /api/analyze and /api/analyze-url."""
     result = analyzer.analyze(upload_path, model=model, conf=conf)
 
     response = {
-        "filename": filename,
+        "filename": upload_path.name,
         "detections": result["detections"],
         "summary": summarize_detections(result["detections"]),
         "annotated_url": f"/media/{Path(result['annotated']).name}" if result["annotated"] else None,
@@ -119,7 +152,7 @@ async def analyze(
         except Exception as exc:  # noqa: BLE001 - YOLO result still returned
             response["ha_error"] = f"Home Assistant publish failed: {exc}"
 
-    return JSONResponse(response)
+    return response
 
 
 app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="static")

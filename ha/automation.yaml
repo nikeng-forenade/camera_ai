@@ -1,0 +1,31 @@
+# Home Assistant: automation that on Reolink motion takes a snapshot, saves it
+# in HA, and sends it to Camera AI for analysis.
+#
+# Setup:
+#   1. Create the folder /config/www/snapshots once (File editor / SSH).
+#      Images are then visible at http://<HA-IP>:8123/local/snapshots/
+#   2. Replace the entity names and IPs below:
+#      - binary_sensor.<reolink>_motion  → your Reolink motion sensor
+#      - camera.<reolink>                → your Reolink camera entity
+#      - <HA-IP>                         → HA IP as seen from the LXC
+#
+# After it runs, Home Assistant gets (via MQTT discovery + this request):
+#   - binary_sensor.camera_ai_motion        (ON when people/cars/animals seen)
+#   - sensor.camera_ai_last_detection       (classes + confidence)
+#   - sensor.camera_ai_scene_description    (Swedish summary, e.g. "Jag ser 1 bil och 1 katt.")
+#   - image.camera_ai_snapshot              (annotated image)
+alias: "Camera AI — Analysera rörelsebild"
+trigger:
+  platform: state
+  entity_id: binary_sensor.reolink_front_motion
+  to: "on"
+action:
+  - service: camera.snapshot
+    target:
+      entity_id: camera.reolink_front
+    data:
+      filename: /config/www/snapshots/latest.jpg
+  - service: rest_command.camera_ai_analyze
+    data:
+      url: "http://<HA-IP>:8123/local/snapshots/latest.jpg"
+mode: single
