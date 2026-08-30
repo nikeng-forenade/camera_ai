@@ -41,6 +41,32 @@ If Ollama isn't running, YOLO detection still works — the description just sho
 - `GET  /api/health` — model + LLM status
 - `POST /api/analyze` — multipart `file` (+ optional `model`, `conf`, `use_llm`, `prompt`) → detections, annotated image URL, description
 
+## Deploy in an LXC (Docker)
+
+The whole stack (app **+ Ollama**) is containerised so it runs in an LXC
+(e.g. on Proxmox) without running Ollama on the host machine.
+
+1. Create an LXC (Ubuntu 22.04/24.04, 2–4 GB RAM, ~20 GB disk) and install Docker:
+   ```
+   apt update && apt install -y docker.io docker-compose-v2
+   ```
+2. Copy this project into the LXC (`git clone …` or scp).
+3. Create `.env` next to `docker-compose.yml` (copy from `example.env`) and set
+   `HA_ENABLED=1`, `HA_MQTT_HOST=<your HA IP>` — point it at Home Assistant on your LAN.
+4. Start and pull the small vision model:
+   ```
+   docker compose up -d
+   docker exec ollama ollama pull moondream
+   ```
+5. Open `http://<lxc-ip>:8000`.
+
+Notes:
+- **No GPU needed** for yolo11n/yolo11s + moondream on a few cameras (CPU is fine).
+- If the LXC host has an NVIDIA GPU you *can* pass it through, but that's fiddly in LXC
+  — a small VM is easier for GPU passthrough. For 1–3 cameras, CPU is usually enough.
+- Reolink: run `docker exec camera-ai python reolink_motion.py` (with `REOLINK_*` in `.env`)
+  to test the motion → snapshot → AI → HA flow, or wire it to Frigate/HA triggers.
+
 ## Talk to Home Assistant
 
 The app can push every analysis result to HA. Two transports — **no custom add-on needed**.

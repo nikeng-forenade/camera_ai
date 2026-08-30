@@ -32,9 +32,11 @@ DEFAULT_CONF = float(os.getenv("YOLO_CONF", "0.35"))
 LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama").strip().lower()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "moondream")
-LLM_DEFAULT_PROMPT = (
-    "Describe what is happening in this image in 1-2 short sentences. "
-    "Mention people, vehicles, animals and anything unusual."
+LLM_DEFAULT_PROMPT = os.getenv(
+    "LLM_PROMPT",
+    "Answer in ONE short line. Report only whether people, cars, or animals are "
+    "visible, as 'people: N, cars: N, animals: N' (use 0 for none). "
+    "Do not describe anything else.",
 )
 
 # Optional Reolink integration (used by reolink_motion.py)

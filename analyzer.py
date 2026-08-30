@@ -93,15 +93,23 @@ class YoloAnalyzer:
 # Small vision LLM via Ollama (moondream / llava / any vision model)
 # ---------------------------------------------------------------------------
 
+_MODELS_CACHE: dict = {"ts": 0.0, "models": []}
+_MODELS_TTL = 5.0  # seconds; avoids probing Ollama on every health check
+
+
 def ollama_models() -> list[dict]:
-    """List models available in the local Ollama instance."""
+    """List models available in the local Ollama instance (cached briefly)."""
+    now = time.time()
+    if now - _MODELS_CACHE["ts"] < _MODELS_TTL:
+        return _MODELS_CACHE["models"]
     try:
         req = urllib.request.Request(f"{config.OLLAMA_URL}/api/tags")
-        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=1.5) as resp:  # noqa: S310
             data = json.loads(resp.read().decode("utf-8"))
-        return data.get("models", [])
+        _MODELS_CACHE.update(ts=time.time(), models=data.get("models", []))
     except (urllib.error.URLError, OSError):
-        return []
+        _MODELS_CACHE.update(ts=time.time(), models=[])
+    return _MODELS_CACHE["models"]
 
 
 def resolve_ollama_model(preferred: str) -> str:
@@ -157,16 +165,16 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
                 f"`ollama pull moondream` (small) or `ollama pull llava`"
             ) from exc
         raise
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            "Ollama is not running — start it (locally: `ollama serve`, "
+            "in the LXC: `docker compose up -d ollama`)."
+        ) from exc
     return (data.get("response") or "").strip()
 
 
 def llm_available() -> bool:
-    """Quick check that the Ollama server is reachable."""
+    """Quick check that the Ollama server is reachable (uses the cached probe)."""
     if config.LLM_BACKEND != "ollama":
         return False
-    try:
-        req = urllib.request.Request(f"{config.OLLAMA_URL}/api/tags")
-        with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310
-            return resp.status == 200
-    except (urllib.error.URLError, OSError):
-        return False
+    return bool(ollama_models())

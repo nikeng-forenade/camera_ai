@@ -1,0 +1,37 @@
+# Camera AI + Ollama — run both in an LXC with:  docker compose up -d
+# Env overrides (e.g. HA_ENABLED, HA_MQTT_HOST, REOLINK_*) come from a .env
+# file next to this compose file.
+services:
+  camera-ai:
+    build: .
+    container_name: camera-ai
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_BACKEND=ollama
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-moondream}
+      - HA_ENABLED=${HA_ENABLED:-0}
+      - HA_TRANSPORT=${HA_TRANSPORT:-mqtt}
+      - HA_MQTT_HOST=${HA_MQTT_HOST:-}
+      - HA_MQTT_PORT=${HA_MQTT_PORT:-1883}
+      - HA_MQTT_USER=${HA_MQTT_USER:-}
+      - HA_MQTT_PASS=${HA_MQTT_PASS:-}
+    volumes:
+      - ./media:/app/media
+      - ./uploads:/app/uploads
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

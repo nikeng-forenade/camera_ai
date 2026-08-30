@@ -22,6 +22,12 @@ async function checkHealth() {
     if (data.llm_backend === "ollama") {
       const model = data.llm_model ? `LLM: ${data.llm_model}` : "LLM: online";
       parts.push(data.ollama_available ? model : "LLM: offline");
+      const llmCb = document.getElementById("useLlm");
+      if (!data.ollama_available) {
+        llmCb.checked = false;
+        llmCb.disabled = true;
+        llmCb.title = "Ollama är inte igång — LLM-beskrivning avstängd";
+      }
     } else {
       parts.push("LLM: off");
       statusEl.classList.remove("ok");
