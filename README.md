@@ -46,19 +46,59 @@ If Ollama isn't running, YOLO detection still works — the description just sho
 The whole stack (app **+ Ollama**) is containerised so it runs in an LXC
 (e.g. on Proxmox) without running Ollama on the host machine.
 
-1. Create an LXC (Ubuntu 22.04/24.04, 2–4 GB RAM, ~20 GB disk) and install Docker:
-   ```
-   apt update && apt install -y docker.io docker-compose-v2
-   ```
-2. Copy this project into the LXC (`git clone …` or scp).
-3. Create `.env` next to `docker-compose.yml` (copy from `example.env`) and set
-   `HA_ENABLED=1`, `HA_MQTT_HOST=<your HA IP>` — point it at Home Assistant on your LAN.
-4. Start and pull the small vision model:
+### Recommended: paste-and-run on the Proxmox host (syslog_mini style)
+
+Open the **Proxmox shell** and paste:
+
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)"
+```
+
+It prompts for **Default** (DHCP, 2 cores, 4 GB RAM, 20 GB disk) or **Advanced**
+(custom IP, CPU/RAM, Intel iGPU, Home Assistant, Reolink).
+
+Non-interactive with options:
+
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)" -- \
+  200 local-lvm vmbr0 192.168.1.50/24 192.168.1.1 \
+  --cores 4 --ram 8192 --disk 30 --igpu --ha-host 192.168.1.10
+```
+
+Script options:
+
+| Argument | Default | Description |
+|---|---|---|
+| `<CT_ID> [STORAGE] [BRIDGE] [IP/CIDR] [GATEWAY]` | `200 local-lvm vmbr0 dhcp` | Container / network |
+| `--disk GB` | `20` | Root disk |
+| `--cores N` | `2` | vCPU cores |
+| `--ram MB` | `4096` | Memory |
+| `--igpu` | off | Pass through Intel iGPU (`/dev/dri`) |
+| `--port`, `--model`, `--yolo-device`, `--llm-model` | `8000 yolo11s.pt cpu moondream` | App settings |
+| `--ha-host`, `--ha-port`, `--ha-user`, `--ha-pass` | — | Home Assistant (MQTT discovery) |
+| `--reolink-host`, `--reolink-user`, `--reolink-pass` | — | Reolink camera |
+
+It creates the LXC, optionally wires up `/dev/dri`, pushes the project, and runs
+`lxc/install.sh` (installs Docker, writes `.env`, `docker compose up -d --build`, pulls
+moondream, sets up the iGPU).
+
+Or clone + run locally (no GitHub needed):
+
+```bash
+git clone https://github.com/nikeng-forenade/camera_ai.git /tmp/camera_ai
+cd /tmp/camera_ai && bash lxc/proxmox-create.sh 200
+```
+
+### Manual: copy project into an LXC
+
+1. Create an LXC (Ubuntu 22.04/24.04, 4–8 GB RAM, 20 GB disk) and copy this project in.
+2. Create `.env` next to `docker-compose.yml` (copy from `example.env`).
+3. Start and pull the small vision model:
    ```
    docker compose up -d
    docker exec ollama ollama pull moondream
    ```
-5. Open `http://<lxc-ip>:8000`.
+4. Open `http://<lxc-ip>:8000`.
 
 Notes:
 - **No GPU needed** for yolo11n/yolo11s + moondream on a few cameras (CPU is fine).
@@ -69,30 +109,35 @@ Notes:
 
 ### Intel iGPU passthrough (Quick Sync / OpenVINO)
 
-To accelerate YOLO on the host's Intel iGPU from inside the LXC:
+To accelerate YOLO on the host's Intel iGPU from inside the LXC, there's a helper
+script (`install_igpu.sh`) modeled on the community-scripts Frigate LXC helper.
 
-1. On the Proxmox host, edit the LXC config (`/etc/pve/lxc/<id>.conf`) and add:
+1. On the Proxmox host, expose `/dev/dri` to the LXC — edit `/etc/pve/lxc/<id>.conf` and add:
    ```
    lxc.cgroup2.devices.allow: c 226:0 rwm
    lxc.cgroup2.devices.allow: c 226:128 rwm
    lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
    lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
    ```
-   Restart the container and verify inside the LXC: `ls -la /dev/dri`.
+   Restart the container. Then inside the LXC run:
+   ```
+   bash install_igpu.sh
+   ```
+   It verifies `/dev/dri`, installs the Intel drivers (`intel-opencl-icd`,
+   `intel-media-va-driver`, `vainfo`, …), syncs the `video`/`render` GIDs with the
+   host and fixes device permissions.
 
-2. Install OpenVINO in the camera-ai container:
+2. The `camera-ai` image already bundles **OpenVINO + Intel OpenCL**. Just enable it:
    ```
-   docker exec camera-ai pip install openvino
-   ```
-   (or add `openvino` to `requirements.txt`).
-
-3. Enable the Intel GPU in `.env`:
-   ```
+   # in .env
    YOLO_DEVICE=openvino:GPU
    ```
 
-4. Restart the stack: `docker compose up -d --force-recreate camera-ai` and watch
-   the inference time in the GUI drop.
+3. Restart the stack:
+   ```
+   docker compose up -d --force-recreate camera-ai
+   ```
+   and watch the inference time in the GUI drop.
 
 Intel passthrough notes:
 - The iGPU must already be enabled/usable on the Proxmox host (BIOS: enable iGPU).

@@ -6,7 +6,7 @@ services:
     build: .
     container_name: camera-ai
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     # Intel iGPU passthrough (Quick Sync / OpenVINO). The LXC must expose
     # /dev/dri first — see README "Intel iGPU passthrough".
     devices:

@@ -2,11 +2,16 @@
 # Ollama runs as a separate service in docker-compose.yml.
 FROM python:3.12-slim
 
+# Intel iGPU userspace — needed by OpenVINO GPU / Quick Sync
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        intel-opencl-icd ocl-icd-libopencl1 mesa-vulkan-drivers vainfo \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Install deps first for better layer caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt openvino
 
 COPY . .
 

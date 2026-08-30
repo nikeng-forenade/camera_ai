@@ -17,6 +17,14 @@ docker compose up -d --build
 echo "==> Pulling small vision model (moondream) into Ollama..."
 docker exec ollama ollama pull moondream
 
+if [[ -d /dev/dri ]]; then
+  echo "==> /dev/dri found — setting up Intel iGPU (install_igpu.sh)..."
+  bash install_igpu.sh || true
+else
+  echo "==> /dev/dri not found — skipping iGPU setup."
+  echo "    To enable Intel passthrough later, see README or run: bash install_igpu.sh"
+fi
+
 echo "==> Done."
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "    GUI:  http://${IP}:8000"
