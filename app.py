@@ -14,6 +14,7 @@ import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import config
 from analyzer import (
@@ -28,6 +29,27 @@ from ha_client import HAClient
 analyzer = YoloAnalyzer()
 ha = HAClient(config)
 
+# Runtime settings — changeable from the HA integration via POST /api/config
+RUNTIME = {
+    "model": config.DEFAULT_MODEL,
+    "conf": config.DEFAULT_CONF,
+    "device": config.YOLO_DEVICE,
+    "use_llm": False,
+    "llm_model": config.OLLAMA_MODEL,
+    "prompt": config.LLM_DEFAULT_PROMPT,
+}
+
+
+class _ConfigIn(BaseModel):
+    """Accepted fields for POST /api/config."""
+
+    model: str | None = None
+    conf: float | None = None
+    device: str | None = None
+    use_llm: bool | None = None
+    llm_model: str | None = None
+    prompt: str | None = None
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -41,6 +63,21 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Camera AI", version="0.1.0", lifespan=lifespan)
 
 ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+
+
+@app.get("/api/config")
+def get_runtime_config():
+    return {**RUNTIME, "ollama_available": llm_available()}
+
+
+@app.post("/api/config")
+def set_runtime_config(payload: _ConfigIn):
+    changes = payload.model_dump(exclude_unset=True, exclude_none=True)
+    RUNTIME.update(changes)
+    analyzer.configure(
+        model=RUNTIME["model"], conf=RUNTIME["conf"], device=RUNTIME["device"]
+    )
+    return {**RUNTIME}
 
 
 @app.get("/")
@@ -76,8 +113,8 @@ def media(name: str):
 @app.post("/api/analyze")
 async def analyze(
     file: UploadFile = File(...),
-    model: str = Form(config.DEFAULT_MODEL),
-    conf: float = Form(config.DEFAULT_CONF),
+    model: str = Form(""),
+    conf: float | None = Form(None),
     use_llm: bool = Form(False),
     prompt: str = Form(""),
     use_ha: bool = Form(False),
@@ -95,8 +132,8 @@ async def analyze(
 @app.post("/api/analyze-url")
 async def analyze_url(
     url: str = Form(...),
-    model: str = Form(config.DEFAULT_MODEL),
-    conf: float = Form(config.DEFAULT_CONF),
+    model: str = Form(""),
+    conf: float | None = Form(None),
     use_llm: bool = Form(False),
     prompt: str = Form(""),
     use_ha: bool = Form(False),
@@ -119,8 +156,13 @@ async def analyze_url(
     return JSONResponse(_run_pipeline(upload_path, model, conf, use_llm, prompt, use_ha))
 
 
-def _run_pipeline(upload_path, model: str, conf: float, use_llm: bool, prompt: str, use_ha: bool) -> dict:
+def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, prompt: str, use_ha: bool) -> dict:
     """Shared YOLO + LLM + HA pipeline used by /api/analyze and /api/analyze-url."""
+    model = model or RUNTIME["model"]
+    conf = conf if conf is not None else RUNTIME["conf"]
+    use_llm = bool(use_llm or RUNTIME["use_llm"])
+    prompt = prompt or RUNTIME["prompt"]
+
     result = analyzer.analyze(upload_path, model=model, conf=conf)
 
     response = {
@@ -138,7 +180,9 @@ def _run_pipeline(upload_path, model: str, conf: float, use_llm: bool, prompt: s
 
     if use_llm and not result["error"]:
         try:
-            response["description"] = describe_with_ollama(upload_path, prompt=prompt or None)
+            response["description"] = describe_with_ollama(
+                upload_path, model=RUNTIME["llm_model"], prompt=prompt
+            )
         except Exception as exc:  # noqa: BLE001 - degrade gracefully to YOLO-only
             response["llm_error"] = f"Vision LLM failed: {exc}"
 

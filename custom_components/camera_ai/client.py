@@ -65,3 +65,9 @@ class CameraAIClient:
         resp = await self._session.get(f"{self.url}{path}", timeout=30)
         resp.raise_for_status()
         return resp.content
+
+    async def set_config(self, config: dict) -> dict:
+        """Push runtime settings (model, conf, device, LLM model/prompt) to the server."""
+        resp = await self._session.post(f"{self.url}/api/config", json=config, timeout=15)
+        resp.raise_for_status()
+        return resp.json()

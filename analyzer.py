@@ -40,6 +40,16 @@ class YoloAnalyzer:
             self.model_name = model
             self.conf = conf
 
+    def configure(self, model: str | None = None, conf: float | None = None, device: str | None = None) -> None:
+        """Update runtime settings (used by POST /api/config from HA)."""
+        if model:
+            self.model_name = model
+        if conf is not None:
+            self.conf = float(conf)
+        if device:
+            self.device = device
+        self._model = None  # force reload on next analyze
+
     def analyze(self, image_path: Path, model: str | None = None, conf: float | None = None) -> dict:
         """Run YOLO on an image and return detections + an annotated image.
 

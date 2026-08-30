@@ -8,7 +8,10 @@
           "url": "Server URL",
           "model": "YOLO model",
           "confidence": "Confidence",
+          "device": "Inference device",
           "use_llm": "Use LLM description",
+          "llm_model": "LLM model (Ollama)",
+          "prompt": "LLM prompt",
           "camera_entity": "Camera entity"
         }
       }
@@ -24,12 +27,15 @@
     "step": {
       "init": {
         "title": "Camera AI",
-        "description": "Adjust model, confidence and camera.",
+        "description": "Adjust everything: model, confidence, device, LLM and camera.",
         "data": {
           "url": "Server URL",
           "model": "YOLO model",
           "confidence": "Confidence",
+          "device": "Inference device",
           "use_llm": "Use LLM description",
+          "llm_model": "LLM model (Ollama)",
+          "prompt": "LLM prompt",
           "camera_entity": "Camera entity"
         }
       }
