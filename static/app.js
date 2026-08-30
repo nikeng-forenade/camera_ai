@@ -176,3 +176,48 @@ function escapeHtml(str) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
 }
+
+/* ---- Stats & history ---- */
+function statCard(label, value) {
+  return `<div class="stat-card"><span class="stat-label">${escapeHtml(label)}</span><span class="stat-value">${escapeHtml(String(value))}</span></div>`;
+}
+
+async function loadStats() {
+  const box = document.getElementById("statsBox");
+  try {
+    const [s, h] = await Promise.all([
+      fetch("/api/stats").then((r) => r.json()),
+      fetch("/api/history?limit=15").then((r) => r.json()),
+    ]);
+
+    let html = `<div class="stat-grid">`;
+    html += statCard("Analyser", s.total_analyses);
+    html += statCard("Detektioner", s.total_detections);
+    html += statCard("Personer", s.people);
+    html += statCard("Djur", s.animals);
+    html += statCard("Bilar", s.vehicles);
+    html += statCard("Färger", s.colors && s.colors.length ? s.colors.join(", ") : "—");
+    html += statCard("Snitt-tid", `${s.avg_inference_ms} ms`);
+    html += `</div>`;
+
+    html += `<div class="stat-cameras">`;
+    for (const [cam, n] of Object.entries(s.per_camera || {})) {
+      html += `<span class="chip">📷 ${escapeHtml(cam)}: ${n}</span>`;
+    }
+    html += `<span class="chip">${escapeHtml(s.model)} · conf ${s.conf} · ${escapeHtml(s.device)}</span>`;
+    html += `</div>`;
+
+    html += `<table class="hist-table"><thead><tr><th>Tid</th><th>Kamera</th><th>Sammanfattning</th><th>ms</th></tr></thead><tbody>`;
+    for (const item of h) {
+      const t = new Date(item.ts * 1000).toLocaleTimeString("sv-SE");
+      html += `<tr><td>${t}</td><td>${escapeHtml(item.camera)}</td><td>${escapeHtml(item.summary)}</td><td>${item.inference_ms}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = `<p class="empty">Kunde inte hämta statistik.</p>`;
+  }
+}
+
+document.getElementById("statsBtn").addEventListener("click", loadStats);
+loadStats();

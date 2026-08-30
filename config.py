@@ -22,7 +22,7 @@ MEDIA_DIR.mkdir(exist_ok=True)
 
 # YOLO defaults
 DEFAULT_MODEL = os.getenv("YOLO_MODEL", "yolo11n.pt")
-DEFAULT_CONF = float(os.getenv("YOLO_CONF", "0.35"))
+DEFAULT_CONF = float(os.getenv("YOLO_CONF", "0.50"))
 # Inference device: "cpu" (default), "0"/"gpu" (NVIDIA CUDA), or
 # "openvino"/"openvino:GPU" for Intel iGPU/Arc (needs OpenVINO installed).
 YOLO_DEVICE = os.getenv("YOLO_DEVICE", "cpu")

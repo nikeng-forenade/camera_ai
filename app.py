@@ -4,7 +4,10 @@ Run:  python app.py        (then open http://127.0.0.1:8000)
 """
 from __future__ import annotations
 
+import asyncio
+import time
 import uuid
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
@@ -39,6 +42,10 @@ RUNTIME = {
     "llm_model": config.OLLAMA_MODEL,
     "prompt": config.LLM_DEFAULT_PROMPT,
 }
+
+# In-memory analysis history for stats / web GUI (keeps the last N results)
+HISTORY: deque = deque(maxlen=50)
+START_TIME = time.time()
 
 
 class _ConfigIn(BaseModel):
@@ -81,6 +88,50 @@ def set_runtime_config(payload: _ConfigIn):
     return {**RUNTIME}
 
 
+@app.get("/api/history")
+def get_history(limit: int = 20):
+    """Recent analyses, newest first."""
+    items = list(HISTORY)
+    return items[-limit:][::-1]
+
+
+@app.get("/api/stats")
+def get_stats():
+    """Aggregated stats across the kept history."""
+    people = animals = vehicles = errors = 0
+    per_camera: dict = {}
+    colors: set = set()
+    inf_times: list = []
+    for h in HISTORY:
+        c = h.get("counts") or {}
+        people += c.get("people", 0)
+        animals += c.get("animals", 0)
+        vehicles += c.get("vehicles", 0)
+        colors.update(c.get("colors") or [])
+        cam = h.get("camera", "cam")
+        per_camera[cam] = per_camera.get(cam, 0) + 1
+        if h.get("error"):
+            errors += 1
+        if h.get("inference_ms"):
+            inf_times.append(h["inference_ms"])
+    return {
+        "total_analyses": len(HISTORY),
+        "total_detections": sum(len(h.get("detections") or []) for h in HISTORY),
+        "people": people,
+        "animals": animals,
+        "vehicles": vehicles,
+        "colors": sorted(colors),
+        "per_camera": per_camera,
+        "avg_inference_ms": round(sum(inf_times) / len(inf_times), 1) if inf_times else 0,
+        "errors": errors,
+        "uptime_seconds": round(time.time() - START_TIME),
+        "model": RUNTIME["model"],
+        "conf": RUNTIME["conf"],
+        "device": RUNTIME["device"],
+        "llm_model": RUNTIME["llm_model"],
+    }
+
+
 @app.get("/")
 def index():
     return FileResponse(config.BASE_DIR / "static" / "index.html")
@@ -119,6 +170,7 @@ async def analyze(
     use_llm: bool = Form(False),
     prompt: str = Form(""),
     use_ha: bool = Form(False),
+    camera: str = Form("cam"),
 ):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED:
@@ -127,7 +179,10 @@ async def analyze(
     filename = f"{uuid.uuid4().hex}{ext}"
     upload_path = config.UPLOAD_DIR / filename
     upload_path.write_bytes(await file.read())
-    return JSONResponse(_run_pipeline(upload_path, model, conf, use_llm, prompt, use_ha))
+    result = await asyncio.to_thread(
+        _run_pipeline, upload_path, model, conf, use_llm, prompt, use_ha, camera
+    )
+    return JSONResponse(result)
 
 
 @app.post("/api/analyze-url")
@@ -138,6 +193,7 @@ async def analyze_url(
     use_llm: bool = Form(False),
     prompt: str = Form(""),
     use_ha: bool = Form(False),
+    camera: str = Form("cam"),
 ):
     """HA-push endpoint: HA saves a Reolink snapshot, then POSTs its URL here."""
     try:
@@ -154,10 +210,13 @@ async def analyze_url(
     filename = f"{uuid.uuid4().hex}{ext}"
     upload_path = config.UPLOAD_DIR / filename
     upload_path.write_bytes(content)
-    return JSONResponse(_run_pipeline(upload_path, model, conf, use_llm, prompt, use_ha))
+    result = await asyncio.to_thread(
+        _run_pipeline, upload_path, model, conf, use_llm, prompt, use_ha, camera
+    )
+    return JSONResponse(result)
 
 
-def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, prompt: str, use_ha: bool) -> dict:
+def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, prompt: str, use_ha: bool, camera: str = "cam") -> dict:
     """Shared YOLO + LLM + HA pipeline used by /api/analyze and /api/analyze-url."""
     model = model or RUNTIME["model"]
     conf = conf if conf is not None else RUNTIME["conf"]
@@ -167,6 +226,7 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
     result = analyzer.analyze(upload_path, model=model, conf=conf)
 
     response = {
+        "camera": camera,
         "filename": upload_path.name,
         "detections": result["detections"],
         "summary": summarize_detections(result["detections"]),
@@ -194,10 +254,23 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
                 detections=result["detections"],
                 description=response["description"],
                 annotated_path=result["annotated"],
+                camera=camera,
             )
         except Exception as exc:  # noqa: BLE001 - YOLO result still returned
             response["ha_error"] = f"Home Assistant publish failed: {exc}"
 
+    HISTORY.append(
+        {
+            "ts": int(time.time()),
+            "camera": camera,
+            "summary": response["summary"],
+            "counts": response["counts"],
+            "detections": result["detections"],
+            "model": response["model"],
+            "inference_ms": response["inference_ms"],
+            "error": bool(result["error"]),
+        }
+    )
     return response
 
 

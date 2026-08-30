@@ -134,22 +134,24 @@ class HAClient:
         detections: list,
         description: str | None,
         annotated_path: str | None = None,
+        camera: str | None = None,
     ) -> None:
         """Send an analysis result to Home Assistant."""
         if not self.available():
             log.debug("[ha] disabled, skipping publish")
             return
         if self.cfg.HA_TRANSPORT == "mqtt":
-            self._publish_mqtt(detections, description, annotated_path)
+            self._publish_mqtt(detections, description, annotated_path, camera)
         elif self.cfg.HA_TRANSPORT == "rest":
-            self._publish_rest(detections, description)
+            self._publish_rest(detections, description, camera)
 
     def _publish_mqtt(
-        self, detections: list, description: str | None, annotated_path: str | None
+        self, detections: list, description: str | None, annotated_path: str | None, camera: str | None
     ) -> None:
         if not (self._mqtt and self._mqtt.is_connected()):
             raise RuntimeError("MQTT not connected — check HA_MQTT_* env vars and the broker")
         payload = {
+            "camera": camera,
             "classes": [d["class"] for d in detections],
             "count": len(detections),
             "confidence": {d["class"]: d["confidence"] for d in detections},
@@ -162,7 +164,7 @@ class HAClient:
             b64 = base64.b64encode(Path(annotated_path).read_bytes()).decode("ascii")
             self._mqtt.publish(f"{self._base}/snapshot", b64)
 
-    def _publish_rest(self, detections: list, description: str | None) -> None:
+    def _publish_rest(self, detections: list, description: str | None, camera: str | None) -> None:
         if not (self.cfg.HA_REST_URL and self.cfg.HA_REST_TOKEN):
             raise RuntimeError("HA_REST_URL / HA_REST_TOKEN not set")
         url = self.cfg.HA_REST_URL.rstrip("/")

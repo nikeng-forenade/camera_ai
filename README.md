@@ -28,7 +28,7 @@ The first YOLO run downloads the model (yolo11n.pt, ~6 MB) — needs internet on
 | Setting | Where | Default |
 |---|---|---|
 | YOLO model | GUI dropdown / env `YOLO_MODEL` | `yolo11n.pt` |
-| Confidence | GUI slider / env `YOLO_CONF` | `0.35` |
+| Confidence | GUI slider / env `YOLO_CONF` | `0.50` |
 | Vision LLM | GUI checkbox / env `LLM_BACKEND` (`ollama` / `none`) | `ollama` |
 | LLM model | env `OLLAMA_MODEL` | `moondream` |
 | LLM server | env `OLLAMA_URL` | `http://localhost:11434` |

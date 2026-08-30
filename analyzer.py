@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
 import time
 import urllib.request
 import urllib.error
@@ -28,27 +29,30 @@ class YoloAnalyzer:
         self.conf = conf
         self.device = device or "cpu"
         self._model = None
+        self._lock = threading.Lock()  # guards model (re)load under concurrency
 
     def _ensure_model(self, model: str | None, conf: float | None) -> None:
         """Reload the YOLO model if the requested model/conf changed."""
-        model = model or self.model_name
-        conf = float(conf) if conf is not None else self.conf
-        if self._model is None or model != self.model_name or conf != self.conf:
-            from ultralytics import YOLO  # imported lazily so the server still boots without torch
+        with self._lock:
+            model = model or self.model_name
+            conf = float(conf) if conf is not None else self.conf
+            if self._model is None or model != self.model_name or conf != self.conf:
+                from ultralytics import YOLO  # imported lazily so the server still boots without torch
 
-            self._model = YOLO(model)
-            self.model_name = model
-            self.conf = conf
+                self._model = YOLO(model)
+                self.model_name = model
+                self.conf = conf
 
     def configure(self, model: str | None = None, conf: float | None = None, device: str | None = None) -> None:
         """Update runtime settings (used by POST /api/config from HA)."""
-        if model:
-            self.model_name = model
-        if conf is not None:
-            self.conf = float(conf)
-        if device:
-            self.device = device
-        self._model = None  # force reload on next analyze
+        with self._lock:
+            if model:
+                self.model_name = model
+            if conf is not None:
+                self.conf = float(conf)
+            if device:
+                self.device = device
+            self._model = None  # force reload on next analyze
 
     def analyze(self, image_path: Path, model: str | None = None, conf: float | None = None) -> dict:
         """Run YOLO on an image and return detections + an annotated image.
@@ -65,7 +69,8 @@ class YoloAnalyzer:
         start = time.perf_counter()
         try:
             self._ensure_model(model, conf)
-            results = self._model(str(image_path), conf=self.conf, device=self.device, verbose=False)
+            yolo = self._model  # local ref — safe even if configure() clears _model
+            results = yolo(str(image_path), conf=self.conf, device=self.device, verbose=False)
             result = results[0]
 
             detections = []
