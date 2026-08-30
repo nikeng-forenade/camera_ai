@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+uploads/
+media/
+*.pt
+.DS_Store

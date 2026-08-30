@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+ultralytics>=8.3
+Pillow>=10.0
+requests>=2.31
+paho-mqtt>=2.0
+python-dotenv>=1.0
