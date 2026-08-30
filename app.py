@@ -224,12 +224,14 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
     prompt = prompt or RUNTIME["prompt"]
 
     result = analyzer.analyze(upload_path, model=model, conf=conf)
+    yolo_summary = summarize_detections(result["detections"])
 
     response = {
         "camera": camera,
         "filename": upload_path.name,
         "detections": result["detections"],
-        "summary": summarize_detections(result["detections"]),
+        "summary": yolo_summary,
+        "yolo_summary": yolo_summary,
         "counts": categorize_detections(result["detections"]),
         "annotated_url": f"/media/{Path(result['annotated']).name}" if result["annotated"] else None,
         "model": result["model"],
@@ -242,9 +244,13 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
 
     if use_llm and not result["error"]:
         try:
-            response["description"] = describe_with_ollama(
+            desc = describe_with_ollama(
                 upload_path, model=RUNTIME["llm_model"], prompt=prompt
             )
+            response["description"] = desc
+            if desc:
+                # The LLM actually sees the scene -> it is authoritative
+                response["summary"] = desc
         except Exception as exc:  # noqa: BLE001 - degrade gracefully to YOLO-only
             response["llm_error"] = f"Vision LLM failed: {exc}"
 

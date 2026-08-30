@@ -137,7 +137,7 @@ function renderResult(card, data) {
         .join("")}</ul>`
     : `<p class="empty">No objects detected at this confidence.</p>`;
 
-  const llmHtml = data.description
+  const llmHtml = data.description && data.description !== data.summary
     ? `<div class="llm-box"><span class="tag">LLM</span><p>${escapeHtml(data.description)}</p></div>`
     : data.llm_error
     ? `<div class="llm-err">⚠️ ${escapeHtml(data.llm_error)}</div>`
