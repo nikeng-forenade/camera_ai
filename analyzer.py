@@ -119,6 +119,11 @@ def resolve_ollama_model(preferred: str) -> str:
     return preferred
 
 
+def active_ollama_model() -> str:
+    """The vision model that will actually be used for descriptions."""
+    return resolve_ollama_model(config.OLLAMA_MODEL)
+
+
 def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str | None = None) -> str:
     """Ask a local vision LLM to describe the image. Returns text.
 

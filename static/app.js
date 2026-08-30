@@ -20,7 +20,8 @@ async function checkHealth() {
     statusEl.classList.add("ok");
     const parts = [`YOLO ${data.yolo_model}`];
     if (data.llm_backend === "ollama") {
-      parts.push(data.ollama_available ? "LLM: online" : "LLM: offline");
+      const model = data.llm_model ? `LLM: ${data.llm_model}` : "LLM: online";
+      parts.push(data.ollama_available ? model : "LLM: offline");
     } else {
       parts.push("LLM: off");
       statusEl.classList.remove("ok");

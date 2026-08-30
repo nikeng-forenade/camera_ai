@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
-from analyzer import YoloAnalyzer, describe_with_ollama, llm_available
+from analyzer import YoloAnalyzer, active_ollama_model, describe_with_ollama, llm_available
 from ha_client import HAClient
 
 analyzer = YoloAnalyzer()
@@ -47,6 +47,7 @@ def health():
         "yolo_model": analyzer.model_name,
         "llm_backend": config.LLM_BACKEND,
         "ollama_available": llm_available(),
+        "llm_model": active_ollama_model() if config.LLM_BACKEND == "ollama" else None,
         "ha_enabled": ha.available(),
     }
 
