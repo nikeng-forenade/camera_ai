@@ -132,7 +132,7 @@ function renderResult(card, data) {
     ? `<ul class="detection-list">${dets
         .map(
           (d) =>
-            `<li><span>${escapeHtml(d.class)}</span><span class="conf">${(d.confidence * 100).toFixed(0)}%</span></li>`
+            `<li><span>${escapeHtml(d.class)}${d.color ? ` · ${escapeHtml(d.color)}` : ""}</span><span class="conf">${(d.confidence * 100).toFixed(0)}%</span></li>`
         )
         .join("")}</ul>`
     : `<p class="empty">No objects detected at this confidence.</p>`;

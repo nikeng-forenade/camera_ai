@@ -80,6 +80,15 @@ class YoloAnalyzer:
                         }
                     )
 
+            # Dominant colour for vehicles (sampled from the image pixels)
+            if detections:
+                from PIL import Image as _PILImage
+
+                with _PILImage.open(image_path) as img:
+                    for d in detections:
+                        if d["class"] in VEHICLE_CLASSES:
+                            d["color"] = vehicle_color(img, d["box"])
+
             annotated = None
             plotted = result.plot()  # BGR numpy array with boxes drawn
             if plotted is not None and plotted.size:
@@ -226,25 +235,130 @@ _SV_LABELS = {
 
 # Classes we care about: people, vehicles, animals
 _INTEREST_CLASSES = set(_SV_LABELS)
+VEHICLE_CLASSES = {"car", "truck", "bus", "motorcycle", "bicycle"}
+ANIMAL_CLASSES = {
+    "cat", "dog", "bird", "horse", "cow", "sheep",
+    "elephant", "bear", "zebra", "giraffe",
+}
+
+
+def categorize_detections(detections: list) -> dict:
+    """Count people/animals/vehicles and list vehicle colours."""
+    people = sum(1 for d in detections if d.get("class") == "person")
+    vehicles = sum(1 for d in detections if d.get("class") in VEHICLE_CLASSES)
+    animals = sum(1 for d in detections if d.get("class") in ANIMAL_CLASSES)
+    colors = [
+        d["color"]
+        for d in detections
+        if d.get("class") in VEHICLE_CLASSES and d.get("color") and d["color"] != "okänd"
+    ]
+    return {"people": people, "vehicles": vehicles, "animals": animals, "colors": colors}
+
+# Swedish colour name -> plural (adjective agreement: "röd bil" / "röda bilar")
+_COLOR_SV_PLURAL = {
+    "röd": "röda", "orange": "orange", "gul": "gula", "grön": "gröna",
+    "cyan": "cyan", "blå": "blå", "lila": "lila", "rosa": "rosa",
+    "vit": "vita", "grå": "grå", "svart": "svarta",
+}
+
+
+def _sv_color_name(h: int, s: int, v: int) -> str:
+    """Map one HSV pixel (PIL, 0-255) to a Swedish colour name."""
+    if s < 40:  # achromatic: white / black / grey
+        if v > 235:
+            return "vit"
+        if v < 45:
+            return "svart"
+        return "grå"
+    hue = h * 360 / 255
+    if hue < 15 or hue >= 345:
+        return "röd"
+    if hue < 40:
+        return "orange"
+    if hue < 65:
+        return "gul"
+    if hue < 170:
+        return "grön"
+    if hue < 200:
+        return "cyan"
+    if hue < 265:
+        return "blå"
+    if hue < 300:
+        return "lila"
+    if hue < 345:
+        return "rosa"
+    return "röd"
+
+
+def vehicle_color(img, box) -> str:
+    """Dominant colour of a detected vehicle, sampled from the body band.
+
+    Robust to colour cast / low-light security feeds: if the whole body region
+    is near-neutral (low average saturation) it is classified as grey/white/
+    black by brightness; only a clearly chromatic region is hue-classified.
+    """
+    try:
+        x1, y1, x2, y2 = (int(round(v)) for v in box)
+        w = max(1, x2 - x1)
+        h = max(1, y2 - y1)
+        top = int(y1 + h * 0.3)   # skip roof / sky
+        bottom = int(y1 + h * 0.75)  # skip wheels / shadow
+        crop = img.crop((x1, top, x2, bottom)).convert("RGB").resize((48, 20))
+        hsv = crop.convert("HSV")
+        px = hsv.load()
+        pixels = [px[x, y] for y in range(hsv.height) for x in range(hsv.width)]
+        if not pixels:
+            return "okänd"
+        s_avg = sum(p[1] for p in pixels) / len(pixels)
+        v_avg = sum(p[2] for p in pixels) / len(pixels)
+
+        # Near-neutral region (grey/white/black) — classify by brightness
+        if s_avg < 70:
+            if v_avg > 205:
+                return "vit"
+            if v_avg < 60:
+                return "svart"
+            return "grå"
+
+        # Chromatic region — vote by hue, ignoring neutral pixels
+        counts: dict = {}
+        for hh, ss, vv in pixels:
+            if ss < 70:
+                continue
+            name = _sv_color_name(hh, ss, vv)
+            counts[name] = counts.get(name, 0) + 1
+        if not counts:
+            return "grå"
+        return max(counts, key=counts.get)
+    except Exception:  # noqa: BLE001 - colour is best-effort
+        return "okänd"
 
 
 def summarize_detections(detections: list) -> str:
     """Build a short Swedish sentence from YOLO detections, e.g.
-    'Jag ser 2 personer, 1 bil och 1 katt.' or 'Jag ser inget av intresse.'
+    'Jag ser 2 personer, 1 röd bil och 1 katt.' or 'Jag ser inget av intresse.'
     """
     counts: dict = {}
     for d in detections:
         cls = d.get("class", "")
-        if cls in _INTEREST_CLASSES:
-            counts[cls] = counts.get(cls, 0) + 1
+        if cls not in _INTEREST_CLASSES:
+            continue
+        color = d.get("color") if cls in VEHICLE_CLASSES else None
+        key = (cls, color)
+        counts[key] = counts.get(key, 0) + 1
 
     if not counts:
         return "Jag ser inget av intresse."
 
     items = []
-    for cls, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+    for (cls, color), n in sorted(counts.items(), key=lambda kv: -kv[1]):
         singular, plural = _SV_LABELS.get(cls, (cls, cls))
-        items.append(f"{n} {plural if n > 1 else singular}")
+        noun = plural if n > 1 else singular
+        if color and color != "okänd":
+            c = _COLOR_SV_PLURAL.get(color, color) if n > 1 else color
+            items.append(f"{n} {c} {noun}")
+        else:
+            items.append(f"{n} {noun}")
 
     if len(items) == 1:
         return "Jag ser " + items[0] + "."

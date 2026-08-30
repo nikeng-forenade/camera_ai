@@ -20,6 +20,7 @@ import config
 from analyzer import (
     YoloAnalyzer,
     active_ollama_model,
+    categorize_detections,
     describe_with_ollama,
     llm_available,
     summarize_detections,
@@ -169,6 +170,7 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
         "filename": upload_path.name,
         "detections": result["detections"],
         "summary": summarize_detections(result["detections"]),
+        "counts": categorize_detections(result["detections"]),
         "annotated_url": f"/media/{Path(result['annotated']).name}" if result["annotated"] else None,
         "model": result["model"],
         "inference_ms": result["inference_ms"],

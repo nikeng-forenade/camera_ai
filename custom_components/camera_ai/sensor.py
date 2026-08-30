@@ -22,8 +22,16 @@ async def async_setup_entry(
             CameraAIStatusSensor(coordinator, entry),
             CameraAILastDetectionSensor(coordinator, entry),
             CameraAIDescriptionSensor(coordinator, entry),
+            CameraAIPeopleSensor(coordinator, entry),
+            CameraAIAnimalSensor(coordinator, entry),
+            CameraAIVehicleSensor(coordinator, entry),
+            CameraAIVehicleColorsSensor(coordinator, entry),
         ]
     )
+
+
+def _counts(coordinator) -> dict:
+    return ((coordinator.data or {}).get("result") or {}).get("counts") or {}
 
 
 class CameraAIStatusSensor(CameraAIEntity, SensorEntity):
@@ -81,8 +89,13 @@ class CameraAILastDetectionSensor(CameraAIEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         result = (self.coordinator.data or {}).get("result") or {}
         dets = result.get("detections") or []
+        counts = result.get("counts") or {}
         return {
             "count": len(dets),
+            "people": counts.get("people", 0),
+            "animals": counts.get("animals", 0),
+            "vehicles": counts.get("vehicles", 0),
+            "colors": counts.get("colors") or [],
             "classes": [d["class"] for d in dets],
             "confidence": {d["class"]: d["confidence"] for d in dets},
             "summary": result.get("summary"),
@@ -92,7 +105,7 @@ class CameraAILastDetectionSensor(CameraAIEntity, SensorEntity):
 
 
 class CameraAIDescriptionSensor(CameraAIEntity, SensorEntity):
-    """The Swedish scene description, e.g. 'Jag ser 1 bil och 1 katt.'"""
+    """The Swedish scene description, e.g. 'Jag ser 1 röd bil och 1 katt.'"""
 
     _attr_icon = "mdi:form-textbox"
 
@@ -107,3 +120,73 @@ class CameraAIDescriptionSensor(CameraAIEntity, SensorEntity):
         if not result:
             return "unknown"
         return result.get("summary") or "Inget"
+
+
+class CameraAIPeopleSensor(CameraAIEntity, SensorEntity):
+    """Number of people detected in the last analysis."""
+
+    _attr_icon = "mdi:account-group"
+    _attr_native_unit_of_measurement = "st"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_people"
+        self._attr_name = "People"
+
+    @property
+    def native_value(self) -> int:
+        return _counts(self.coordinator).get("people", 0)
+
+
+class CameraAIAnimalSensor(CameraAIEntity, SensorEntity):
+    """Number of animals detected in the last analysis."""
+
+    _attr_icon = "mdi:paw"
+    _attr_native_unit_of_measurement = "st"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_animals"
+        self._attr_name = "Animals"
+
+    @property
+    def native_value(self) -> int:
+        return _counts(self.coordinator).get("animals", 0)
+
+
+class CameraAIVehicleSensor(CameraAIEntity, SensorEntity):
+    """Number of vehicles detected in the last analysis."""
+
+    _attr_icon = "mdi:car"
+    _attr_native_unit_of_measurement = "st"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_vehicles"
+        self._attr_name = "Vehicles"
+
+    @property
+    def native_value(self) -> int:
+        return _counts(self.coordinator).get("vehicles", 0)
+
+
+class CameraAIVehicleColorsSensor(CameraAIEntity, SensorEntity):
+    """Colours of the vehicles detected in the last analysis."""
+
+    _attr_icon = "mdi:palette"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_vehicle_colors"
+        self._attr_name = "Vehicle colours"
+
+    @property
+    def native_value(self) -> str:
+        colors = _counts(self.coordinator).get("colors") or []
+        if not colors:
+            return "Inga"
+        return ", ".join(dict.fromkeys(colors))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"colors": _counts(self.coordinator).get("colors") or []}
