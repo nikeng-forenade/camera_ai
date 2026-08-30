@@ -183,6 +183,48 @@ Entities appear in HA automatically — no YAML, no restart. This is the same me
 In the GUI tick **“Send results to Home Assistant”** to push each uploaded picture.
 When wired to the camera, `reolink_motion.py` publishes the same results automatically on motion.
 
+## HACS integration (custom component)
+
+A full Home Assistant integration (`custom_components/camera_ai`) that talks to
+the Camera AI server over its REST API and lets you pick the YOLO model etc.
+from the HA UI — **no MQTT needed**.
+
+### Install via HACS
+
+1. In HACS: **Settings → Custom repositories** → add
+   `https://github.com/nikeng-forenade/camera_ai`, category **Integration**.
+   (For a *private* repo, add a GitHub **personal access token** in HACS settings.)
+2. HACS → **Integrations** → search **Camera AI** → **Download** → restart HA.
+3. **Settings → Devices & Services → Add integration → Camera AI** and set:
+   - **Server URL** — `http://<lxc-ip>:8000`
+   - **YOLO model** — dropdown (`yolo11n/s/m/l/x.pt`)
+   - **Confidence**, **Use LLM**, **Camera entity**
+
+Entities created:
+- `sensor.camera_ai_server_status` — online/offline + active model
+- `sensor.camera_ai_last_detection` — classes + confidence
+- `sensor.camera_ai_scene_description` — the Swedish summary
+- `binary_sensor.camera_ai_motion` — ON when people/cars/animals detected
+- `camera.camera_ai_annotated_snapshot` — the annotated image
+
+Services (choose model/confidence per call):
+- `camera_ai.analyze_camera` — snapshot a camera and analyze it
+- `camera_ai.analyze_url` — analyze an image URL
+
+Example automation (motion → analyze):
+```yaml
+alias: "Camera AI — analysera på rörelse"
+trigger:
+  platform: state
+  entity_id: binary_sensor.reolink_front_motion
+  to: "on"
+action:
+  - service: camera_ai.analyze_camera
+    data:
+      camera_entity: camera.reolink_front
+      model: yolo11s.pt
+```
+
 ### Full flow: Reolink → HA saves snapshot → Camera AI → back to HA
 
 This is the flow you described — the camera image ends up **saved on Home Assistant**,

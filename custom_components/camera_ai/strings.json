@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Camera AI",
+        "description": "Connect to your Camera AI server (the LXC app).",
+        "data": {
+          "url": "Server URL",
+          "model": "YOLO model",
+          "confidence": "Confidence",
+          "use_llm": "Use LLM description",
+          "camera_entity": "Camera entity"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the Camera AI server — check the URL and that it is running."
+    },
+    "abort": {
+      "already_configured": "This server URL is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Camera AI",
+        "description": "Adjust model, confidence and camera.",
+        "data": {
+          "url": "Server URL",
+          "model": "YOLO model",
+          "confidence": "Confidence",
+          "use_llm": "Use LLM description",
+          "camera_entity": "Camera entity"
+        }
+      }
+    }
+  }
+}
