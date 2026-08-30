@@ -293,9 +293,9 @@ def _sv_color_name(h: int, s: int, v: int) -> str:
 def vehicle_color(img, box) -> str:
     """Dominant colour of a detected vehicle, sampled from the body band.
 
-    Robust to colour cast / low-light security feeds: if the whole body region
-    is near-neutral (low average saturation) it is classified as grey/white/
-    black by brightness; only a clearly chromatic region is hue-classified.
+    Robust to colour cast / low-light security feeds: a colour is only reported
+    when clearly saturated (S > 100) pixels make up the majority of the body;
+    otherwise the vehicle is white / black / grey by brightness.
     """
     try:
         x1, y1, x2, y2 = (int(round(v)) for v in box)
@@ -309,22 +309,20 @@ def vehicle_color(img, box) -> str:
         pixels = [px[x, y] for y in range(hsv.height) for x in range(hsv.width)]
         if not pixels:
             return "okänd"
-        s_avg = sum(p[1] for p in pixels) / len(pixels)
+
+        chroma = [(hh, ss, vv) for hh, ss, vv in pixels if ss > 100]
         v_avg = sum(p[2] for p in pixels) / len(pixels)
 
-        # Near-neutral region (grey/white/black) — classify by brightness
-        if s_avg < 70:
-            if v_avg > 205:
+        if len(chroma) / len(pixels) < 0.5:
+            # Mostly neutral (white with a colour cast included) -> brightness
+            if v_avg > 180:
                 return "vit"
-            if v_avg < 60:
+            if v_avg < 55:
                 return "svart"
             return "grå"
 
-        # Chromatic region — vote by hue, ignoring neutral pixels
         counts: dict = {}
-        for hh, ss, vv in pixels:
-            if ss < 70:
-                continue
+        for hh, ss, vv in chroma:
             name = _sv_color_name(hh, ss, vv)
             counts[name] = counts.get(name, 0) + 1
         if not counts:
