@@ -98,6 +98,11 @@ class YoloAnalyzer:
             yolo = self._model  # local ref — safe even if configure() clears _model
             results = yolo(str(image_path), conf=self.conf, device=self._infer_device(), verbose=False)
             result = results[0]
+            # Log which device actually ran inference (visible in `docker logs camera-ai`)
+            print(
+                f"[analyzer] {self.model_name} on {self._infer_device()} "
+                f"— {round((time.perf_counter() - start) * 1000, 1)} ms"
+            )
 
             detections = []
             if result.boxes is not None:
