@@ -35,6 +35,12 @@ class HAClient:
         self.camera_id = cfg.HA_CAMERA_ID
         self._base = f"camera_ai/{self.camera_id}"
         self._mqtt = None
+        self._alarm_callback = None
+        self._alarm_topic = getattr(cfg, "HA_ALARM_TOPIC", "homeassistant/alarm_control_panel/+/state")
+
+    def on_alarm_state(self, fn) -> None:
+        """Registrera callback som anropas nar HA-larmets tillstand andras."""
+        self._alarm_callback = fn
 
     # ------------------------------------------------------------------ status
     def available(self) -> bool:
@@ -66,9 +72,21 @@ class HAClient:
         client.connect(self.cfg.HA_MQTT_HOST, self.cfg.HA_MQTT_PORT, 30)
         client.loop_start()
         self._mqtt = client
+        client.on_message = self._on_message
+        client.subscribe(self._alarm_topic)
         self.publish_discovery()
         self.set_availability(True)
-        log.info("[ha] mqtt connected to %s:%s", self.cfg.HA_MQTT_HOST, self.cfg.HA_MQTT_PORT)
+        log.info("[ha] mqtt connected to %s:%s (alarm topic %s)",
+                 self.cfg.HA_MQTT_HOST, self.cfg.HA_MQTT_PORT, self._alarm_topic)
+
+    def _on_message(self, client, userdata, msg) -> None:
+        """Hantera inkommande MQTT (just nu: larmstatus)."""
+        try:
+            state = msg.payload.decode("utf-8").strip().lower()
+            if self._alarm_callback:
+                self._alarm_callback(state)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[ha] alarm message error: %s", exc)
 
     def set_availability(self, online: bool) -> None:
         if self._mqtt:

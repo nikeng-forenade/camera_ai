@@ -241,6 +241,32 @@ def active_ollama_model() -> str:
     return resolve_ollama_model(config.OLLAMA_MODEL)
 
 
+_LLM_KEEP_ALIVE: str | None = None  # None = anvand Ollamas default (5m)
+
+
+def set_llm_keep_alive(keep_alive: str | None, model: str | None = None) -> None:
+    """Satt keep_alive for LLM-anrop och applicera direkt (ladda/plocka ut).
+
+    keep_alive="-1" laddar modellen och haller den kvar; "0" plockar ut den.
+    """
+    global _LLM_KEEP_ALIVE
+    _LLM_KEEP_ALIVE = keep_alive
+    if keep_alive is None:
+        return
+    model = resolve_ollama_model(model or config.OLLAMA_MODEL)
+    try:
+        payload = {"model": model, "prompt": "ok", "stream": False, "keep_alive": keep_alive}
+        req = urllib.request.Request(
+            f"{config.OLLAMA_URL}/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30):  # noqa: S310 - lokal Ollama
+            pass
+    except Exception as exc:  # noqa: BLE001 - ej kritiskt
+        print(f"[ollama] keep_alive '{keep_alive}' apply failed: {exc}")
+
+
 def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str | None = None) -> str:
     """Ask a local vision LLM to describe the image. Returns text.
 
@@ -259,6 +285,8 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
         "stream": False,
         "options": {"temperature": 0.2},
     }
+    if _LLM_KEEP_ALIVE is not None:
+        payload["keep_alive"] = _LLM_KEEP_ALIVE
     req = urllib.request.Request(
         f"{config.OLLAMA_URL}/api/generate",
         data=json.dumps(payload).encode("utf-8"),

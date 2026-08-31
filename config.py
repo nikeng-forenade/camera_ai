@@ -87,3 +87,9 @@ HA_DISCOVERY_PREFIX = os.getenv("HA_DISCOVERY_PREFIX", "homeassistant")
 # REST API (alternative transport)
 HA_REST_URL = os.getenv("HA_REST_URL", "")      # e.g. http://homeassistant.local:8123
 HA_REST_TOKEN = os.getenv("HA_REST_TOKEN", "")  # Profile -> long-lived access token
+
+# Larmstyrd LLM-laddning: nar larmet ar skarp (armed) laddas LLM in i minnet
+# (keep_alive), nar det ar av (disarmed) plockas den ut for att frigora VRAM.
+HA_ALARM_TOPIC = os.getenv("HA_ALARM_TOPIC", "homeassistant/alarm_control_panel/+/state")
+OLLAMA_KEEP_ALIVE_ARMED = os.getenv("OLLAMA_KEEP_ALIVE_ARMED", "-1")
+OLLAMA_KEEP_ALIVE_DISARMED = os.getenv("OLLAMA_KEEP_ALIVE_DISARMED", "0")

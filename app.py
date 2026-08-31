@@ -59,8 +59,20 @@ class _ConfigIn(BaseModel):
     prompt: str | None = None
 
 
+def _on_ha_alarm(state: str) -> None:
+    """Larm skarpt -> ladda LLM (klar direkt), larm av -> plocka ut den."""
+    armed = state in ("armed_away", "armed_home", "armed_night", "armed_custom_bypass", "arming", "pending")
+    keep_alive = config.OLLAMA_KEEP_ALIVE_ARMED if armed else config.OLLAMA_KEEP_ALIVE_DISARMED
+    print(f"[ha] alarm state '{state}' -> ollama keep_alive {keep_alive}")
+    try:
+        analyzer.set_llm_keep_alive(keep_alive)
+    except Exception as exc:  # noqa: BLE001 - aldrig krascha servern
+        print(f"[ha] set_llm_keep_alive failed: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    ha.on_alarm_state(_on_ha_alarm)
     try:
         ha.connect()
     except Exception as exc:  # noqa: BLE001 - never crash the server on HA failure
