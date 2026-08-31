@@ -72,12 +72,15 @@ def _ensure_icon() -> str | None:
 
 def run_server() -> None:
     """Run the FastAPI app with uvicorn in a background thread."""
-    import uvicorn
+    try:
+        import uvicorn
 
-    import app as server  # repo root is on sys.path
+        import app as server  # repo root is on sys.path
 
-    log.info("starting server on %s:%s", HOST, PORT)
-    uvicorn.run(server.app, host=HOST, port=PORT, log_level="warning")
+        log.info("starting server on %s:%s", HOST, PORT)
+        uvicorn.run(server.app, host=HOST, port=PORT, log_level="warning")
+    except Exception as exc:  # noqa: BLE001 - never die silently
+        log.exception("server thread failed: %s", exc)
 
 
 def _show_window() -> None:
@@ -131,10 +134,10 @@ def main() -> None:
             # Stänga fönstret = minimera till tray (avsluta via tray-ikonen).
             _window.events.closed += _show_window
         webview.start()
-    except ImportError:
+    except Exception as exc:  # noqa: BLE001 - fall back to the browser
+        log.exception("pywebview window failed, using browser: %s", exc)
         import webbrowser
 
-        log.info("pywebview missing - opening browser: %s", URL)
         webbrowser.open(URL)
         print(f"Camera AI running at {URL} - press Ctrl+C to stop.")
         try:
