@@ -82,6 +82,16 @@ It creates the LXC, optionally wires up `/dev/dri`, pushes the project, and runs
 `lxc/install.sh` (installs Docker, writes `.env`, `docker compose up -d --build`, pulls
 moondream, sets up the iGPU).
 
+**Inside the LXC you can run `install.sh` interactively** — with no options it
+prompts for the GUI port, YOLO model/device, vision LLM, Home Assistant and
+Reolink settings instead of requiring command-line flags:
+
+```bash
+# inside the container (as root)
+pct enter 200
+cd /root/camera-ai && bash lxc/install.sh
+```
+
 Or clone + run locally (no GitHub needed):
 
 ```bash

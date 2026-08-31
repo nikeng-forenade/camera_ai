@@ -2,12 +2,13 @@
 # Camera AI LXC Install Script — run inside an LXC container (Debian 12+).
 #
 # Usage:
-#   bash install.sh
+#   bash install.sh                                    → interactive setup guide
 #   bash install.sh --port 8000 --ha-host 192.168.1.10 --yolo-device openvino:GPU
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────
 PORT="8000"
+ARGS_GIVEN="0"
 MODEL="yolo11s.pt"
 YOLO_DEVICE="cpu"
 LLM_MODEL="moondream"
@@ -37,13 +38,18 @@ Options:
   --reolink-host HOST    Reolink camera host
   --reolink-user USER    Reolink camera user
   --reolink-pass PASS    Reolink camera password
+  --non-interactive      Skip the interactive guide (defaults + flags only)
   --help                 Show this help
+
+With no options, install.sh runs an interactive setup guide that prompts
+for port, model, device, LLM, Home Assistant and Reolink settings.
 EOF
   exit 0
 }
 
 # ── Parse CLI options ─────────────────────────────────────
 while [[ $# -gt 0 ]]; do
+  ARGS_GIVEN="1"
   case "$1" in
     --port)          PORT="$2"; shift 2 ;;
     --model)         MODEL="$2"; shift 2 ;;
@@ -58,9 +64,39 @@ while [[ $# -gt 0 ]]; do
     --reolink-user)  REOLINK_USER="$2"; shift 2 ;;
     --reolink-pass)  REOLINK_PASS="$2"; shift 2 ;;
     --help)          show_help ;;
+    --non-interactive) shift ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
+
+# ── Interactive setup (no options + a terminal) ───────────
+# Run `bash install.sh` with no arguments to be guided through the settings.
+if [[ "$ARGS_GIVEN" == "0" ]] && [[ -t 0 ]]; then
+  echo ""
+  echo "  ┌──────────────────────────────────────────────────┐"
+  echo "  │  📷 Camera AI — interactive setup               │"
+  echo "  └──────────────────────────────────────────────────┘"
+  echo "  Press Enter to keep the default shown in [brackets]."
+  echo ""
+  read -r -p "  GUI port [${PORT}]: " input; PORT="${input:-$PORT}"
+  read -r -p "  YOLO model [${MODEL}] (yolo11n.pt | yolo11s.pt): " input; MODEL="${input:-$MODEL}"
+  read -r -p "  YOLO device [${YOLO_DEVICE}] (cpu | openvino:GPU): " input; YOLO_DEVICE="${input:-$YOLO_DEVICE}"
+  read -r -p "  Vision LLM model [${LLM_MODEL}] (moondream | llava): " input; LLM_MODEL="${input:-$LLM_MODEL}"
+  read -r -p "  Home Assistant host (empty = skip): " input
+  if [[ -n "$input" ]]; then
+    HA_ENABLED="1"; HA_MQTT_HOST="$input"
+    read -r -p "  HA MQTT port [${HA_MQTT_PORT}]: " input; HA_MQTT_PORT="${input:-$HA_MQTT_PORT}"
+    read -r -p "  HA MQTT user: " input; HA_MQTT_USER="${input:-$HA_MQTT_USER}"
+    read -r -p "  HA MQTT password: " input; HA_MQTT_PASS="${input:-$HA_MQTT_PASS}"
+  fi
+  read -r -p "  Reolink camera host (empty = skip): " input
+  if [[ -n "$input" ]]; then
+    REOLINK_HOST="$input"
+    read -r -p "  Reolink user: " input; REOLINK_USER="${input:-$REOLINK_USER}"
+    read -r -p "  Reolink password: " input; REOLINK_PASS="${input:-$REOLINK_PASS}"
+  fi
+  echo ""
+fi
 
 # ── cd to project root (this script lives at <project>/lxc/install.sh) ──
 cd "$(cd "$(dirname "$0")" && pwd)/.."
