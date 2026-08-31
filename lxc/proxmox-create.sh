@@ -32,7 +32,7 @@ fi
 
 # ── Defaults ──────────────────────────────────────────────
 CT_ID="200"; STORAGE="local-lvm"; BRIDGE="vmbr0"; IP="dhcp"; GATEWAY=""
-DISK_SIZE="20"; CORES="2"; RAM="4096"; IGPU="0"; INSTALL_OPTS=""
+DISK_SIZE="40"; CORES="2"; RAM="4096"; IGPU="0"; INSTALL_OPTS=""
 
 show_help() {
   cat <<'EOF'
@@ -42,7 +42,7 @@ Positional (optional):
   <CT_ID> [STORAGE] [BRIDGE] [IP/CIDR] [GATEWAY]
 
 Container options:
-  --disk GB       Root disk size (default: 20)
+  --disk GB       Root disk size (default: 40)
   --cores N       vCPU cores (default: 2)
   --ram MB        Memory in MB (default: 4096)
   --igpu          Pass through Intel iGPU (/dev/dri) to the container
@@ -92,7 +92,7 @@ if [[ ${#POS_ARGS[@]} -eq 0 ]] && [[ -z "$INSTALL_OPTS" ]]; then
   echo "  │           📷 Camera AI LXC               │"
   echo "  └──────────────────────────────────────────┘"
   echo ""
-  echo "  Default:  DHCP, 2 cores, 4 GB RAM, 20 GB disk, no iGPU"
+  echo "  Default:  DHCP, 2 cores, 4 GB RAM, 40 GB disk, no iGPU"
   echo "  Advanced: Custom IP, CPU/RAM, Intel iGPU, HA/Reolink"
   echo ""
   read -r -p "  Default [d] or Advanced [a]? (d/a): " MODE
@@ -107,7 +107,7 @@ if [[ ${#POS_ARGS[@]} -eq 0 ]] && [[ -z "$INSTALL_OPTS" ]]; then
     fi
     read -r -p "  Cores [2]: " input; CORES="${input:-2}"
     read -r -p "  RAM MB [4096]: " input; RAM="${input:-4096}"
-    read -r -p "  Disk GB [20]: " input; DISK_SIZE="${input:-20}"
+    read -r -p "  Disk GB [40]: " input; DISK_SIZE="${input:-40}"
     read -r -p "  Intel iGPU passthrough? (y/N): " input
     [[ "$input" =~ ^[Yy]$ ]] && IGPU="1"
     read -r -p "  Home Assistant host (empty to skip): " input

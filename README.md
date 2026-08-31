@@ -21,7 +21,7 @@ Everything (app + Ollama) runs in a Debian 12 LXC container.
    bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)"
    ```
 
-2. Pick **Default** (DHCP, 2 cores, 4 GB RAM, 20 GB disk) or **Advanced**
+2. Pick **Default** (DHCP, 2 cores, 4 GB RAM, 40 GB disk) or **Advanced**
    (custom IP/CIDR, CPU/RAM, disk, Intel iGPU, Home Assistant host).
 
 3. Wait — the script creates the container, pushes the project in, installs
@@ -116,7 +116,7 @@ Open the **Proxmox shell** and paste:
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)"
 ```
 
-It prompts for **Default** (DHCP, 2 cores, 4 GB RAM, 20 GB disk) or **Advanced**
+It prompts for **Default** (DHCP, 2 cores, 4 GB RAM, 40 GB disk) or **Advanced**
 (custom IP, CPU/RAM, Intel iGPU, Home Assistant, Reolink).
 
 Non-interactive with options:
@@ -132,7 +132,7 @@ Script options:
 | Argument | Default | Description |
 |---|---|---|
 | `<CT_ID> [STORAGE] [BRIDGE] [IP/CIDR] [GATEWAY]` | `200 local-lvm vmbr0 dhcp` | Container / network |
-| `--disk GB` | `20` | Root disk |
+| `--disk GB` | `40` | Root disk |
 | `--cores N` | `2` | vCPU cores |
 | `--ram MB` | `4096` | Memory |
 | `--igpu` | off | Pass through Intel iGPU (`/dev/dri`) |
@@ -163,7 +163,7 @@ cd /tmp/camera_ai && bash lxc/proxmox-create.sh 200
 
 ### Manual: copy project into an LXC
 
-1. Create an LXC (Ubuntu 22.04/24.04, 4–8 GB RAM, 20 GB disk) and copy this project in.
+1. Create an LXC (Ubuntu 22.04/24.04, 4–8 GB RAM, 40 GB disk) and copy this project in.
 2. Create `.env` next to `docker-compose.yml` (copy from `example.env`).
 3. Start and pull the small vision model:
    ```
