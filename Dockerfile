@@ -5,8 +5,11 @@
 # bookworm also matches the Debian 12 LXC that lxc/proxmox-create.sh creates.
 FROM python:3.12-slim-bookworm
 
-# Intel iGPU userspace — needed by OpenVINO GPU / Quick Sync
+# Intel iGPU userspace — needed by OpenVINO GPU / Quick Sync.
+# libgl1 + libglib2.0-0 are required by OpenCV (pulled in by ultralytics):
+# without them cv2 fails to import with 'libGL.so.1: cannot open shared object'.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 \
         intel-opencl-icd ocl-icd-libopencl1 mesa-vulkan-drivers vainfo \
     && rm -rf /var/lib/apt/lists/*
 
