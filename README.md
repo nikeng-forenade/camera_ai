@@ -69,6 +69,43 @@ pip install -r requirements.txt
 python app.py                              # open http://127.0.0.1:8000
 ```
 
+### Option 4 — Windows-app med GUI (Intel Arc B50 Pro + Vulkan + HA)
+
+Kör Camera AI som en Windows-app med eget GUI-fönster + taskbar/tray-ikon.
+YOLO körs på **Intel Arc B50 Pro** via OpenVINO (`openvino:GPU` → `intel:gpu`),
+och vision-LLM (Ollama) på Arc-kortet via **Vulkan** (`OLLAMA_VULKAN=1`).
+
+1. Krav: Windows 10/11 eller Server 2025, **Intel Arc B50 Pro** med drivrutin,
+   Python 3.12 (x64), Git och [Ollama](https://ollama.com).
+
+2. Sätt upp:
+   ```powershell
+   git clone https://github.com/nikeng-forenade/camera_ai.git C:\camera_ai
+   cd C:\camera_ai
+   powershell -ExecutionPolicy Bypass -File windows\setup.ps1
+   ```
+
+3. Aktivera Vulkan för Ollama (Arc B50 Pro):
+   - Sätt systemvariabeln `OLLAMA_VULKAN=1` och starta om Ollama.
+   - Testa: `ollama run moondream` — Arc-kortet ska belastas.
+
+4. Starta appen (GUI-fönster + tray-ikon; stäng = minimera till tray, avsluta via ikonen):
+   ```powershell
+   .\windows\start.bat
+   ```
+   Utan pywebview öppnas webbläsaren istället: `http://127.0.0.1:8000`.
+
+5. Home Assistant: kopiera `custom_components/camera_ai` till HA:s
+   `custom_components/`, lägg till integrationen med `http://<dator-ip>:8000`
+   (appen lyssnar på `0.0.0.0`).
+
+6. Uppdatera (ingen EXE-byggning):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File windows\update.ps1
+   ```
+
+Valfritt: kör som tjänst (headless) med `windows\install-service.ps1` (NSSM).
+
 ## Quick start
 
 ```powershell
