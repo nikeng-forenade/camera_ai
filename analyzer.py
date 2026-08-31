@@ -73,9 +73,15 @@ class YoloAnalyzer:
         return str(ov_dir)
 
     def _infer_device(self) -> str:
-        """Map the config device to the string ultralytics understands."""
+        """Map the config device to the string ultralytics understands.
+
+        For OpenVINO models ultralytics expects an ``intel:<device>`` string
+        (e.g. ``intel:gpu``). Passing a bare ``GPU``/``gpu`` falls into the
+        NVIDIA CUDA check and fails on machines without CUDA.
+        """
         if self.device.startswith("openvino:"):
-            return self.device.split(":", 1)[1] or "CPU"  # openvino:GPU -> GPU
+            dev = (self.device.split(":", 1)[1] or "CPU").lower()
+            return f"intel:{dev}"  # ultralytics OpenVINO device, e.g. 'intel:gpu'
         return self.device
 
     def _ensure_model(self, model: str | None, conf: float | None) -> None:
@@ -117,11 +123,31 @@ class YoloAnalyzer:
         try:
             self._ensure_model(model, conf)
             yolo = self._model  # local ref — safe even if configure() clears _model
-            results = yolo(str(image_path), conf=self.conf, device=self._infer_device(), verbose=False)
+
+            # Device candidates: preferred first, then graceful fallbacks.
+            # OpenVINO models in ultralytics use 'intel:<device>' (e.g. intel:gpu);
+            # a bare 'GPU'/'gpu' hits the NVIDIA CUDA check and fails on machines
+            # without CUDA, so we never pass that.
+            candidates = [self._infer_device()]
+            if self.device.startswith("openvino:"):
+                candidates += ["intel:cpu", "cpu"]  # OpenVINO CPU, then torch CPU
+
+            last_exc = None
+            used_device = candidates[0]
+            for used_device in candidates:
+                try:
+                    results = yolo(str(image_path), conf=self.conf, device=used_device, verbose=False)
+                    last_exc = None
+                    break
+                except Exception as exc:  # noqa: BLE001 - try the next candidate
+                    last_exc = exc
+                    print(f"[analyzer] device '{used_device}' failed: {exc}")
+            if last_exc is not None:
+                raise last_exc
             result = results[0]
             # Log which device actually ran inference (visible in `docker logs camera-ai`)
             print(
-                f"[analyzer] {self.model_name} on {self._infer_device()} "
+                f"[analyzer] {self.model_name} on {used_device} "
                 f"— {round((time.perf_counter() - start) * 1000, 1)} ms"
             )
 
