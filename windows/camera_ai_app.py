@@ -108,6 +108,13 @@ def _run_tray() -> None:
 
 
 def main() -> None:
+    # Headless server mode (--server, anvands av Windows-tjansten via NSSM):
+    # bara webbservern, inget fonster/tray/webblasare.
+    if "--server" in sys.argv:
+        log.info("headless server mode (--server)")
+        run_server()  # blockerar (uvicorn.run)
+        return
+
     global _window
     import importlib.util as _util
 

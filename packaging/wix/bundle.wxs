@@ -1,0 +1,34 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Bundle Name="Camera AI" Version="1.0.0" Manufacturer="nikeng-forenade"
+          UpgradeCode="b7c4d9a1-2e3f-4a5b-8c6d-1a2b3c4d5e6f">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkLicense"
+          LicenseUrl="" />
+    </BootstrapperApplication>
+
+    <!-- Detektera om Python 3.12 redan ar installerat -->
+    <util:RegistrySearch Id="Python312Search"
+                         Root="HKLM"
+                         Key="SOFTWARE\Python\PythonCore\3.12\InstallPath"
+                         Variable="Python312Installed" />
+
+    <Chain>
+
+      <ExePackage Id="Python312"
+                  Name="Python 3.12"
+                  PerMachine="yes"
+                  DetectCondition="Python312Installed"
+                  InstallArguments="/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1 TargetDir=C:\Program Files\Python312"
+                  RepairArguments="/quiet InstallAllUsers=1"
+                  UninstallArguments="/uninstall /quiet"
+                  Vital="yes"
+                  SourceFile="python-3.12.7-amd64.exe" />
+
+      <MsiPackage Id="CameraAI" SourceFile="CameraAI.msi" Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

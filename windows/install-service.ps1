@@ -11,7 +11,7 @@ $Log = "$AppDir\windows\camera_ai.log"
 if (-not (Test-Path $Py)) { Write-Host "Kör först: windows\setup.ps1" -ForegroundColor Red; exit 1 }
 if (-not (Get-Command $Nssm -ErrorAction SilentlyContinue)) { Write-Host "hittar inte $Nssm - ladda ner https://nssm.cc" -ForegroundColor Red; exit 1 }
 
-& $Nssm install camera-ai $Py "$AppDir\windows\camera_ai_app.py"
+& $Nssm install camera-ai $Py "$AppDir\windows\camera_ai_app.py" --server
 & $Nssm set camera-ai AppDirectory $AppDir
 & $Nssm set camera-ai AppStdout $Log
 & $Nssm set camera-ai AppStderr $Log

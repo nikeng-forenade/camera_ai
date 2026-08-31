@@ -1,0 +1,89 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Camera AI"
+           Manufacturer="nikeng-forenade"
+           Version="1.0.0"
+           UpgradeCode="7a3c9f2e-4d1b-4c8a-9f2e-1a2b3c4d5e6f"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="En nyare version av Camera AI ar redan installerad." />
+
+    <!-- Ollama kravs for att vision-LLM ska fungera (installeras separat, ej i bundlen).
+         Obs: ingen blockerande LaunchCondition - per-maskin-MSJ kan inte sakerst
+         per-anvandare-installerad Ollama i HKCU. Appen hanterar saknad Ollama snyggt. -->
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Huvudmapp: C:\Program Files\CameraAI -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="CameraAI" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="Camera AI" />
+    </StandardDirectory>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="nssm_exe">
+        <File Source="nssm.exe" />
+      </Component>
+      <Component Id="app_files" Guid="A1B2C3D4-0001-4A5B-9C6D-111111111111">
+        <File Source="../../app.py" />
+        <File Source="../../config.py" />
+        <File Source="../../analyzer.py" />
+        <File Source="../../ha_client.py" />
+        <File Source="../../reolink_motion.py" />
+        <File Source="../../requirements.txt" />
+        <File Source="../../yolo11n.pt" />
+        <File Source="../../yolo11s.pt" />
+      </Component>
+      <Component Id="static_files" Guid="A1B2C3D4-0002-4A5B-9C6D-222222222222">
+        <File Source="../../static/index.html" />
+        <File Source="../../static/app.js" />
+        <File Source="../../static/style.css" />
+      </Component>
+      <Component Id="windows_files" Guid="A1B2C3D4-0003-4A5B-9C6D-333333333333">
+        <File Source="../../windows/camera_ai_app.py" />
+        <File Source="../../windows/start.bat" />
+        <File Source="install_service.cmd" />
+      </Component>
+      <Component Id="env_file">
+        <File Source="default.env" Name=".env" />
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="ProgramMenuDir">
+      <Component Id="shortcut_component">
+        <Shortcut Id="CameraAIShortcut"
+                  Name="Camera AI"
+                  Description="Starta Camera AI webbserver"
+                  Target="[INSTALLFOLDER]start.bat"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\CameraAI" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Installera beroenden + tjänst via install_service.cmd (finner Python dynamiskt) -->
+    <CustomAction Id="InstallApp" Directory="INSTALLFOLDER"
+                  ExeCommand="cmd.exe /c &quot;[INSTALLFOLDER]install_service.cmd&quot;"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <CustomAction Id="UninstallCameraAIService" Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[INSTALLFOLDER]nssm.exe&quot; stop CameraAI &amp;&amp; &quot;[INSTALLFOLDER]nssm.exe&quot; remove CameraAI confirm"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="InstallApp" After="InstallFiles" Condition="NOT Installed" />
+      <Custom Action="UninstallCameraAIService" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+
+    <Feature Id="Main" Title="Camera AI" Level="1">
+      <ComponentRef Id="nssm_exe" />
+      <ComponentRef Id="app_files" />
+      <ComponentRef Id="static_files" />
+      <ComponentRef Id="windows_files" />
+      <ComponentRef Id="env_file" />
+      <ComponentRef Id="shortcut_component" />
+    </Feature>
+  </Package>
+</Wix>

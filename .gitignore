@@ -22,3 +22,14 @@ webview2_check.txt
 
 # Generated icon (created at runtime / build time)
 windows/camera_ai.ico
+
+# WiX build artifacts (kallor ligger i git, artefakter ignoreras)
+packaging/wix/nssm.exe
+packaging/wix/python-*.exe
+packaging/wix/CameraAI.msi
+packaging/wix/CameraAI.wixpdb
+packaging/wix/bal/
+packaging/wix/util/
+packaging/wix/*.nupkg
+wix_build_out.txt
+wix_build_err.txt
