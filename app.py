@@ -284,4 +284,7 @@ app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="st
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Bind 0.0.0.0 so the app is reachable through the container's network
+    # interface (Docker port mapping). 127.0.0.1 would only be reachable from
+    # inside the container itself.
+    uvicorn.run(app, host="0.0.0.0", port=8000)
