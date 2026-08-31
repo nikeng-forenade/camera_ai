@@ -113,7 +113,7 @@ def main() -> None:
 
     use_tray = _util.find_spec("pystray") is not None
 
-    icon = _ensure_icon()
+    _ensure_icon()  # skapar camera_ai.ico (används av tray-ikonen)
     threading.Thread(target=run_server, daemon=True).start()
     if use_tray:
         threading.Thread(target=_run_tray, daemon=True).start()
@@ -128,7 +128,8 @@ def main() -> None:
             width=1200,
             height=820,
             min_size=(900, 600),
-            icon=icon,  # fönster- + taskbar-ikon
+            # Observera: pywebview 6.x create_window() har inget 'icon'-argument.
+            # Fönster-/taskbar-ikonen kommer från exe:n (byggd med --icon).
         )
         if use_tray:
             # Stänga fönstret = minimera till tray (avsluta via tray-ikonen).

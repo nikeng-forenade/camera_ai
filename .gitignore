@@ -6,3 +6,19 @@ uploads/
 media/
 *.pt
 .DS_Store
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Build/test logs & diagnostics
+build_exe.log
+build_exe.err
+diag_out.txt
+bundle_check.txt
+test_out.txt
+webview2_check.txt
+
+# Generated icon (created at runtime / build time)
+windows/camera_ai.ico
