@@ -8,8 +8,27 @@
 set -euo pipefail
 
 echo "==> Installing Docker..."
-apt-get update
-apt-get install -y docker.io docker-compose-v2
+install_docker() {
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y docker.io curl ca-certificates
+  systemctl enable --now docker 2>/dev/null || true
+  # Compose v2 is a CLI plugin ("docker compose"), not a Debian package.
+  if ! docker compose version >/dev/null 2>&1; then
+    echo "Installing Docker Compose v2 plugin..."
+    mkdir -p /usr/local/lib/docker/cli-plugins
+    case "$(dpkg --print-architecture)" in
+      amd64) URL="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" ;;
+      arm64) URL="https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64" ;;
+      *) echo "ERROR: unsupported arch for Compose plugin"; return 1 ;;
+    esac
+    curl -fsSL "$URL" -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  fi
+  docker --version
+  docker compose version
+}
+install_docker
 
 echo "==> Starting Camera AI stack..."
 docker compose up -d --build
