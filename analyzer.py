@@ -27,9 +27,30 @@ class YoloAnalyzer:
     ):
         self.model_name = model
         self.conf = conf
-        self.device = device or "cpu"
+        self.device = self._normalize_device(device or "cpu")
         self._model = None
         self._lock = threading.Lock()  # guards model (re)load under concurrency
+
+    @staticmethod
+    def _normalize_device(device: str) -> str:
+        """Map loose device names to something ultralytics accepts.
+
+        A bare ``gpu``/``cuda``/``0`` means NVIDIA CUDA to ultralytics. On
+        machines without a usable CUDA GPU this used to fail with an "Invalid
+        CUDA device" error, so we translate it to the Intel iGPU via OpenVINO
+        instead — the user gets GPU acceleration rather than a crash.
+        """
+        d = (device or "cpu").strip().lower()
+        if d in ("gpu", "cuda", "cuda:0", "0"):
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    return "0"
+            except ImportError:
+                pass
+            return "openvino:GPU"  # no NVIDIA GPU → Intel iGPU via OpenVINO
+        return device
 
     def _resolve_model(self, model: str) -> str:
         """Return the path to load, exporting to OpenVINO format if needed.
@@ -77,7 +98,7 @@ class YoloAnalyzer:
             if conf is not None:
                 self.conf = float(conf)
             if device:
-                self.device = device
+                self.device = self._normalize_device(device)
             self._model = None  # force reload on next analyze
 
     def analyze(self, image_path: Path, model: str | None = None, conf: float | None = None) -> dict:
