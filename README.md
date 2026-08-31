@@ -7,6 +7,68 @@ upload pictures, YOLO detects objects, and a small local vision LLM describes th
 camera → snapshot (motion) → YOLO detection → small LLM description → result
 ```
 
+## Installation
+
+Three ways to run it — pick the one that fits:
+
+### Option 1 — Proxmox LXC (recommended, one command)
+
+Everything (app + Ollama) runs in a Debian 12 LXC container.
+
+1. Open the **Proxmox shell** (host, as root) and paste:
+
+   ```bash
+   bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)"
+   ```
+
+2. Pick **Default** (DHCP, 2 cores, 4 GB RAM, 20 GB disk) or **Advanced**
+   (custom IP/CIDR, CPU/RAM, disk, Intel iGPU, Home Assistant host).
+
+3. Wait — the script creates the container, pushes the project in, installs
+   Docker, and starts the stack (first build downloads ~5 GB, give it a few minutes).
+
+4. Open the GUI:
+
+   ```bash
+   pct list                                  # find the container IP
+   # then browse to  http://<lxc-ip>:8000
+   ```
+
+To change settings later, run the interactive installer inside the container:
+
+```bash
+pct enter <CT_ID>
+cd /root/camera-ai && bash lxc/install.sh    # re-prompts, rewrites .env, restarts
+```
+
+### Option 2 — Manual install on any Linux box / existing LXC
+
+1. Copy this project into the machine (e.g. `/opt/camera-ai`).
+2. As **root**, run the installer — it will **prompt you** for port, YOLO
+   model/device, vision LLM, Home Assistant and Reolink settings:
+
+   ```bash
+   bash lxc/install.sh
+   ```
+
+   …or skip the prompts and pass flags:
+
+   ```bash
+   bash lxc/install.sh --port 8000 --ha-host 192.168.1.10 --yolo-device openvino:GPU
+   ```
+
+3. Open `http://<machine-ip>:8000`.
+
+### Option 3 — Local dev (no Docker, Windows/macOS/Linux)
+
+Requires Python 3.9+ and [Ollama](https://ollama.com).
+
+```powershell
+ollama pull moondream                      # small vision LLM (~1.9B, runs on CPU)
+pip install -r requirements.txt
+python app.py                              # open http://127.0.0.1:8000
+```
+
 ## Quick start
 
 ```powershell
