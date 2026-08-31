@@ -123,7 +123,7 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "Installing Docker..."
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y docker.io curl ca-certificates
+  apt-get install -y docker.io curl ca-certificates rsync
   systemctl enable --now docker 2>/dev/null || true
   # Compose v2 is a CLI plugin ("docker compose"), not a Debian package.
   if ! docker compose version >/dev/null 2>&1; then

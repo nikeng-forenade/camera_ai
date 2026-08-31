@@ -32,6 +32,13 @@ tar xzf "$TMP/tarball.tgz" --strip-components=1 -C "$TMP"
 
 # Back up .env, then sync code while keeping local state
 [ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" "$APP_DIR/.env.bak" && echo ".env backed up to .env.bak"
+
+# rsync is used to sync the new code while keeping .env / media / uploads
+if ! command -v rsync >/dev/null 2>&1; then
+  echo "Installing rsync..."
+  apt-get update && apt-get install -y rsync
+fi
+
 rsync -a --delete \
   --exclude '.env' --exclude '.env.bak' \
   --exclude 'media' --exclude 'uploads' \
