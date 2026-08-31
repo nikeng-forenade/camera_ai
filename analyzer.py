@@ -31,6 +31,32 @@ class YoloAnalyzer:
         self._model = None
         self._lock = threading.Lock()  # guards model (re)load under concurrency
 
+    def _resolve_model(self, model: str) -> str:
+        """Return the path to load, exporting to OpenVINO format if needed.
+
+        OpenVINO needs the model exported once to a ``<name>_openvino_model``
+        folder — a plain ``.pt`` file doesn't accept an OpenVINO device string
+        in ultralytics (it errors with "Invalid CUDA device"). The exported
+        folder is cached on disk, so the export only runs once per model.
+        """
+        if not self.device.startswith("openvino:"):
+            return model
+        if not str(model).lower().endswith(".pt"):
+            return model  # already a non-.pt artifact (e.g. an exported folder)
+        from ultralytics import YOLO  # lazy import, mirrors _ensure_model
+
+        ov_dir = Path(model).stem + "_openvino_model"
+        if not Path(ov_dir).exists():
+            print(f"[analyzer] exporting {model} to OpenVINO (one-time)…")
+            YOLO(model).export(format="openvino", device="cpu", verbose=False)
+        return str(ov_dir)
+
+    def _infer_device(self) -> str:
+        """Map the config device to the string ultralytics understands."""
+        if self.device.startswith("openvino:"):
+            return self.device.split(":", 1)[1] or "CPU"  # openvino:GPU -> GPU
+        return self.device
+
     def _ensure_model(self, model: str | None, conf: float | None) -> None:
         """Reload the YOLO model if the requested model/conf changed."""
         with self._lock:
@@ -39,7 +65,7 @@ class YoloAnalyzer:
             if self._model is None or model != self.model_name or conf != self.conf:
                 from ultralytics import YOLO  # imported lazily so the server still boots without torch
 
-                self._model = YOLO(model)
+                self._model = YOLO(self._resolve_model(model))
                 self.model_name = model
                 self.conf = conf
 
@@ -70,7 +96,7 @@ class YoloAnalyzer:
         try:
             self._ensure_model(model, conf)
             yolo = self._model  # local ref — safe even if configure() clears _model
-            results = yolo(str(image_path), conf=self.conf, device=self.device, verbose=False)
+            results = yolo(str(image_path), conf=self.conf, device=self._infer_device(), verbose=False)
             result = results[0]
 
             detections = []
