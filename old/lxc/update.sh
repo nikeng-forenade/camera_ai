@@ -1,6 +1,6 @@
 #!/bin/bash
 # Camera AI LXC Update Script — run inside the container, or from the host:
-#   pct exec <CTID> -- bash /root/camera-ai/lxc/update.sh
+#   pct exec <CTID> -- bash /root/camera-ai/old/lxc/update.sh
 #
 # Re-downloads the latest code from GitHub, keeps .env / media / uploads,
 # and rebuilds the Docker stack. Requires network access.

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Camera AI LXC Creator for Proxmox VE
 # Paste this in your Proxmox shell:
-#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)"
+#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/old/lxc/proxmox-create.sh)"
 #
 # Non-interactive with options:
-#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/lxc/proxmox-create.sh)" -- \
+#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/nikeng-forenade/camera_ai/main/old/lxc/proxmox-create.sh)" -- \
 #       200 local-lvm vmbr0 192.168.1.50/24 192.168.1.1 --cores 4 --ram 8192 --igpu --ha-host 192.168.1.10
 #
 # Set GITHUB_OWNER / GITHUB_REPO / GITHUB_BRANCH if you host this elsewhere.
@@ -27,7 +27,7 @@ else
   echo "Downloading install.sh from $GITHUB_RAW ..."
   mkdir -p /tmp/camera-ai-lxc
   INSTALL_SCRIPT="/tmp/camera-ai-lxc/install.sh"
-  curl -fsSL -o "$INSTALL_SCRIPT" "$GITHUB_RAW/lxc/install.sh"
+  curl -fsSL -o "$INSTALL_SCRIPT" "$GITHUB_RAW/old/lxc/install.sh"
 fi
 
 # ── Defaults ──────────────────────────────────────────────
@@ -222,15 +222,15 @@ fi
 pct push "$CT_ID" "$TARBALL" /root/camera-ai.tgz
 rm -f "$TARBALL"
 pct exec "$CT_ID" -- bash -c "cd /root && tar xzf camera-ai.tgz --strip-components=1 -C /root/camera-ai && rm -f camera-ai.tgz"
-pct push "$CT_ID" "$INSTALL_SCRIPT" /root/camera-ai/lxc/install.sh
-pct exec "$CT_ID" -- chmod +x /root/camera-ai/lxc/install.sh
+pct push "$CT_ID" "$INSTALL_SCRIPT" /root/camera-ai/old/lxc/install.sh
+pct exec "$CT_ID" -- chmod +x /root/camera-ai/old/lxc/install.sh
 
 # ── Run install ───────────────────────────────────────────
 echo "Running install script..."
 if [[ -n "$INSTALL_OPTS" ]]; then
-  pct exec "$CT_ID" -- bash /root/camera-ai/lxc/install.sh $INSTALL_OPTS
+  pct exec "$CT_ID" -- bash /root/camera-ai/old/lxc/install.sh $INSTALL_OPTS
 else
-  pct exec "$CT_ID" -- bash /root/camera-ai/lxc/install.sh
+  pct exec "$CT_ID" -- bash /root/camera-ai/old/lxc/install.sh
 fi
 
 # ── Summary ───────────────────────────────────────────────
@@ -239,5 +239,5 @@ echo ""
 echo "=============================================="
 echo "  📷 Camera AI is ready!"
 echo "  GUI:   http://${IP_ADDR:-<container-ip>}:8000"
-echo "  Check: pct exec $CT_ID -- docker compose -f /root/camera-ai/docker-compose.yml ps"
+  echo "  Check: pct exec $CT_ID -- docker compose -f /root/camera-ai/old/docker-compose.yml ps"
 echo "=============================================="
