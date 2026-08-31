@@ -13,10 +13,17 @@ set -euo pipefail
 
 CT_ID="${1:-202}"
 APP="/root/camera-ai"
+GITHUB_OWNER="${GITHUB_OWNER:-nikeng-forenade}"
+GITHUB_REPO="${GITHUB_REPO:-camera_ai}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
 
 echo "=== Camera AI GPU fix/verify (CT $CT_ID) ==="
 
 pct status "$CT_ID" >/dev/null 2>&1 || { echo "ERROR: container $CT_ID not found"; exit 1; }
+
+echo ""
+echo "--- 0. Hämta senaste koden (GitHub) ---"
+pct exec "$CT_ID" -- bash -c "curl -fsSL -o /tmp/cai.tgz https://codeload.github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tar.gz/refs/heads/${GITHUB_BRANCH} && rm -rf /tmp/cai && mkdir -p /tmp/cai && tar xzf /tmp/cai.tgz --strip-components=1 -C /tmp/cai && rsync -a --delete --exclude '.env' --exclude '.env.bak' --exclude 'media' --exclude 'uploads' /tmp/cai/ '$APP/' && rm -rf /tmp/cai /tmp/cai.tgz && echo 'kod synkad'"
 
 echo ""
 echo "--- 1. .env: YOLO_DEVICE ---"
