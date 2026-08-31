@@ -1,6 +1,9 @@
 # Camera AI app image (for LXC / Docker deployment)
 # Ollama runs as a separate service in docker-compose.yml.
-FROM python:3.12-slim
+# Pin to Debian 12 (bookworm): the floating python:3.12-slim tag now points to
+# trixie, where some of the Intel/VA-API packages below are named differently.
+# bookworm also matches the Debian 12 LXC that lxc/proxmox-create.sh creates.
+FROM python:3.12-slim-bookworm
 
 # Intel iGPU userspace — needed by OpenVINO GPU / Quick Sync
 RUN apt-get update && apt-get install -y --no-install-recommends \
