@@ -62,12 +62,13 @@ class YoloAnalyzer:
         """
         if not self.device.startswith("openvino:"):
             return model
-        if not str(model).lower().endswith(".pt"):
+        path = Path(model)
+        if path.suffix.lower() != ".pt":
             return model  # already a non-.pt artifact (e.g. an exported folder)
         from ultralytics import YOLO  # lazy import, mirrors _ensure_model
 
-        ov_dir = Path(model).stem + "_openvino_model"
-        if not Path(ov_dir).exists():
+        ov_dir = path.with_name(path.stem + "_openvino_model")
+        if not ov_dir.exists():
             print(f"[analyzer] exporting {model} to OpenVINO (one-time)…")
             YOLO(model).export(format="openvino", device="cpu", verbose=False)
         return str(ov_dir)
@@ -92,7 +93,7 @@ class YoloAnalyzer:
             if self._model is None or model != self.model_name or conf != self.conf:
                 from ultralytics import YOLO  # imported lazily so the server still boots without torch
 
-                self._model = YOLO(self._resolve_model(model))
+                self._model = YOLO(self._resolve_model(config.model_path(model)))
                 self.model_name = model
                 self.conf = conf
 

@@ -106,6 +106,22 @@ och vision-LLM (Ollama) på Arc-kortet via **Vulkan** (`OLLAMA_VULKAN=1`).
 
 Valfritt: kör som tjänst (headless) med `windows\install-service.ps1` (NSSM).
 
+### Bygga fristående EXE (valfritt)
+
+På en Windows-maskin med Python 3.12 och repo klonat:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\build_exe.ps1          # onedir (snabb start)
+powershell -ExecutionPolicy Bypass -File windows\build_exe.ps1 -OneFile # en enda fil
+```
+
+Resultat:
+- onedir: `dist\CameraAI\CameraAI.exe` — flytta **hela mappen**.
+- onefile: `dist\CameraAI.exe` — en enda fil (långsammare start).
+
+Kopiera till datorn med Arc B50 Pro och kör. `.env`, `uploads/`, `media/` och
+OpenVINO-modeller skapas automatiskt **bredvid exe:n**. Bygget ger ~1–2 GB.
+
 ## Quick start
 
 ```powershell

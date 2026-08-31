@@ -18,8 +18,12 @@ import sys
 import threading
 from pathlib import Path
 
-# Make the repo root importable (this file lives in windows/) and use it as CWD
-ROOT = Path(__file__).resolve().parent.parent
+# Make the repo root importable (this file lives in windows/) and use it as CWD.
+# In a PyInstaller build the app data lives next to the .exe.
+if getattr(sys, "frozen", False):
+    ROOT = Path(sys.executable).resolve().parent
+else:
+    ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 

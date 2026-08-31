@@ -280,7 +280,7 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
     return response
 
 
-app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="static")
+app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
 
 
 if __name__ == "__main__":

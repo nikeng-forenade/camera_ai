@@ -4,9 +4,30 @@ All values can be overridden with environment variables. The GUI can also
 override model / confidence / LLM settings per request.
 """
 import os
+import sys
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
+# In a PyInstaller build (sys.frozen), keep user data (uploads/media/.env/
+# models) next to the .exe, while read-only bundled files (static/) come from
+# the bundle dir (sys._MEIPASS).
+_FROZEN = bool(getattr(sys, "frozen", False))
+if _FROZEN:
+    BASE_DIR = Path(sys.executable).resolve().parent
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", BASE_DIR))
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    BUNDLE_DIR = BASE_DIR
+STATIC_DIR = BUNDLE_DIR / "static"
+
+
+def model_path(name: str) -> str:
+    """Resolve a model file name to an absolute path (bundled or next to the app)."""
+    for d in (BASE_DIR, BUNDLE_DIR):
+        p = d / name
+        if p.exists():
+            return str(p)
+    return name
+
 
 try:
     from dotenv import load_dotenv
