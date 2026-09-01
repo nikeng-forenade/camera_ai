@@ -485,11 +485,10 @@ async function systemAction(url, label, ask) {
   try {
     const res = await fetch(url, { method: "POST" });
     let data = {};
-    try { data = await res.json(); } catch { /* tomt svar vid omstart */ }
-    if (msg) msg.textContent = label + " ✓ " + JSON.stringify(data);
+    try { data = await res.json(); } catch { data = { raw: (await res.text().catch(() => "")) }; }
+    if (msg) msg.textContent = `${label} → ${res.ok ? "OK" : "fel " + res.status}: ` + JSON.stringify(data);
   } catch (e) {
-    // Vid omstart bryts anslutningen — det är förväntat
-    if (msg) msg.textContent = label + " … (anslutningen bröts — förväntat vid omstart)";
+    if (msg) msg.textContent = label + " → kunde inte nå servern: " + e.message;
   }
 }
 const btnUnload = document.getElementById("btnUnload");

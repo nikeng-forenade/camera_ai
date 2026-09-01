@@ -387,47 +387,40 @@ def system_restart_server():
 
 @app.post("/api/system/restart-ollama")
 def system_restart_ollama():
-    """Starta om Ollama-servern (tömmer allt ur GPU-minnet)."""
-    import os
-    import subprocess
-    import time
+    """Starta om Ollama-servern (tömmer allt ur GPU-minnet).
 
-    pid = None
+    Använder PowerShell för att hitta processen, hämta dess exakta exe + kommando,
+    döda den och starta om med samma kommando — och verifiera att porten svarar igen.
+    """
+    import subprocess
+
+    ps = (
+        "$ErrorActionPreference='SilentlyContinue';"
+        "$line = netstat -ano | Select-String ':11434' | Select-String 'LISTENING' | Select-Object -First 1;"
+        "if (-not $line) { 'NO_OLLAMA'; exit };"
+        "$pid114 = ($line.Line -split '\\s+')[-1];"
+        "$p = Get-CimInstance Win32_Process -Filter \"ProcessId=$pid114\";"
+        "$exe = $p.ExecutablePath; $cmd = $p.CommandLine;"
+        "Stop-Process -Id $pid114 -Force;"
+        "Start-Sleep -Milliseconds 1200;"
+        "$env:OLLAMA_HOST='0.0.0.0:11434';"
+        "if ($exe) { if ($cmd -match 'serve') { Start-Process -FilePath $exe -ArgumentList 'serve' } else { Start-Process -FilePath $exe } }"
+        "else { Start-Process -FilePath 'ollama' -ArgumentList 'serve' };"
+        "Start-Sleep -Seconds 2;"
+        "if (netstat -ano | Select-String ':11434' | Select-String 'LISTENING') { 'OK:' + $pid114 } else { 'FAILED' }"
+    )
     try:
-        out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=15).stdout
-        for line in out.splitlines():
-            if ":11434" in line and "LISTENING" in line:
-                pid = line.split()[-1]
-                break
-    except Exception:  # noqa: BLE001
-        pass
-    exe = None
-    if pid:
-        subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
-        try:
-            w = subprocess.run(
-                ["wmic", "process", "where", f"ProcessId={pid}", "get", "ExecutablePath", "/value"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            for ln in w.stdout.splitlines():
-                if "=" in ln:
-                    exe = ln.split("=", 1)[1].strip() or None
-                    break
-        except Exception:  # noqa: BLE001
-            pass
-    time.sleep(1)
-    env = dict(os.environ)
-    env.setdefault("OLLAMA_HOST", "0.0.0.0:11434")
-    try:
-        if exe:
-            subprocess.Popen([exe], env=env, creationflags=_detached_flags(), close_fds=True)
-        else:
-            subprocess.Popen(["ollama", "serve"], env=env, creationflags=_detached_flags(), close_fds=True)
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        out = (r.stdout + r.stderr).strip()
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc), "killed_pid": pid}
-    return {"ok": True, "killed_pid": pid, "relaunched": exe or "ollama serve"}
+        return {"ok": False, "error": str(exc)}
+    ok = "OK:" in out
+    return {"ok": ok, "output": out}
 
 
 @app.get("/api/history")
