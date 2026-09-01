@@ -33,6 +33,22 @@ $ErrorActionPreference = "Stop"
 $AppDir = Split-Path -Parent $PSScriptRoot
 $LogFile = Join-Path $AppDir "windows\camera_ai.log"
 
+# Skydda mot att registrera aktiviteten från fel mapp (enhetsrot / Windows-mappen
+# / hem-/skrivbordsmappen). Aktiviteten måste peka på en riktig app-mapp.
+$ProfileRoot = [Environment]::GetFolderPath("UserProfile")
+$badLocations = @(
+    ([System.IO.Path]::GetPathRoot($AppDir) -eq $AppDir),
+    ($AppDir -eq $env:SystemRoot),
+    ($AppDir.StartsWith($env:SystemRoot + "\")),
+    ($AppDir -eq $ProfileRoot),
+    ($AppDir -eq (Join-Path $ProfileRoot "Desktop")),
+    ($AppDir -eq (Join-Path $ProfileRoot "Documents"))
+)
+if ($badLocations -contains $true) {
+    Write-Host "ERROR: Registrera aktiviteten från app-mappen, t.ex. C:\camera_ai - inte från enhetsroten, Windows-mappen eller hem-/skrivbordsmappen." -ForegroundColor Red
+    exit 1
+}
+
 # ---- Visa status ---------------------------------------------------------
 function Show-Status {
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue

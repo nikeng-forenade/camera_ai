@@ -31,11 +31,21 @@ $ErrorActionPreference = "Stop"
 $AppDir = Split-Path -Parent $PSScriptRoot
 $TaskName = "CameraAI"
 
-# Skydda mot att installera i hem-/skrivbordsmappen (orsakar SYSTEM-åtkomstproblem)
+# Skydda mot att installera på fel ställe: enhetsrot (t.ex. C:\), Windows-mappen,
+# hem-/skrivbords-/dokumentmappen - orsakar SYSTEM-åtkomstproblem och blandar ihop
+# filer med systemet.
 $ProfileRoot = [Environment]::GetFolderPath("UserProfile")
-if ($AppDir -eq $ProfileRoot -or $AppDir -eq (Join-Path $ProfileRoot "Desktop")) {
-    Write-Host "ERROR: Installera Camera AI i en egen mapp, t.ex. C:\camera_ai - inte i hem-/skrivbordsmappen." -ForegroundColor Red
-    Write-Host "  Flytta install.ps1 till C:\camera_ai och kör den därifrån."
+$badLocations = @(
+    ([System.IO.Path]::GetPathRoot($AppDir) -eq $AppDir),          # enhetsrot, t.ex. "C:\"
+    ($AppDir -eq $env:SystemRoot),                                  # C:\Windows
+    ($AppDir.StartsWith($env:SystemRoot + "\")),                   # något under C:\Windows
+    ($AppDir -eq $ProfileRoot),                                     # hemkatalogen
+    ($AppDir -eq (Join-Path $ProfileRoot "Desktop")),
+    ($AppDir -eq (Join-Path $ProfileRoot "Documents"))
+)
+if ($badLocations -contains $true) {
+    Write-Host "ERROR: Installera Camera AI i en egen mapp, t.ex. C:\camera_ai - inte på enhetsroten, i Windows-mappen eller hem-/skrivbordsmappen." -ForegroundColor Red
+    Write-Host "  Skapa C:\camera_ai, lägg install.ps1 där och kör den därifrån."
     exit 1
 }
 
