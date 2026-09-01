@@ -197,12 +197,18 @@ async function loadModels() {
 
 async function startPull(model) {
   try {
-    await fetch("/api/ollama/pull", {
+    const res = await fetch("/api/ollama/pull", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model }),
     });
+    const data = await res.json();
     pullStatusEl.hidden = false;
+    if (data.started === false) {
+      pullTextEl.textContent = "⚠️ " + (data.reason || "Kunde inte starta nedladdning.");
+      pullBarEl.style.width = "0%";
+      return;
+    }
     pollPull();
   } catch (e) {
     pullTextEl.textContent = "❌ Kunde inte starta nedladdning: " + e.message;
@@ -228,9 +234,12 @@ async function pollPull() {
     } else if (st.state === "failed") {
       pullTextEl.textContent = `❌ ${st.model}: ${st.error || "misslyckades"}`;
       pullBarEl.style.width = "0%";
+    } else {
+      pullTextEl.textContent = "Ingen nedladdning pågår. Kontrollera att Ollama körs.";
+      pullBarEl.style.width = "0%";
     }
   } catch {
-    pullTextEl.textContent = "Kunde inte hämta status.";
+    pullTextEl.textContent = "Kunde inte hämta status (serverprocessen kan vara gammal - starta om via install.ps1).";
   }
 }
 
