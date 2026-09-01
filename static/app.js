@@ -114,6 +114,7 @@ async function loadSettings() {
     const res = await fetch("/api/config");
     const cfg = await res.json();
     if (cfg.model) document.getElementById("model").value = cfg.model;
+    if (cfg.llm_model) document.getElementById("llmModel").value = cfg.llm_model;
     if (cfg.conf != null) {
       confInput.value = cfg.conf;
       confValue.textContent = parseFloat(cfg.conf).toFixed(2);
@@ -127,6 +128,7 @@ async function loadSettings() {
 async function saveSettings(auto) {
   const body = {
     model: document.getElementById("model").value,
+    llm_model: document.getElementById("llmModel").value.trim(),
     conf: parseFloat(confInput.value),
     prompt: document.getElementById("prompt").value,
     keep_alive: document.getElementById("keepAlive").value,
@@ -160,6 +162,7 @@ function scheduleSave() {
 }
 document.getElementById("prompt").addEventListener("input", scheduleSave);
 document.getElementById("model").addEventListener("change", scheduleSave);
+document.getElementById("llmModel").addEventListener("input", scheduleSave);
 document.getElementById("keepAlive").addEventListener("change", scheduleSave);
 confInput.addEventListener("input", scheduleSave);
 
