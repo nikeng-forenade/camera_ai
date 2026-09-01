@@ -202,7 +202,7 @@ class YoloAnalyzer:
 # Small vision LLM via Ollama (moondream / llava / any vision model)
 # ---------------------------------------------------------------------------
 
-_MODELS_CACHE: dict = {"ts": 0.0, "models": []}
+_MODELS_CACHE: dict = {"ts": 0.0, "models": [], "error": None}
 _MODELS_TTL = 5.0  # seconds; avoids probing Ollama on every health check
 
 
@@ -213,12 +213,17 @@ def ollama_models() -> list[dict]:
         return _MODELS_CACHE["models"]
     try:
         req = urllib.request.Request(f"{config.OLLAMA_URL}/api/tags")
-        with urllib.request.urlopen(req, timeout=1.5) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=5.0) as resp:  # noqa: S310
             data = json.loads(resp.read().decode("utf-8"))
-        _MODELS_CACHE.update(ts=time.time(), models=data.get("models", []))
-    except (urllib.error.URLError, OSError):
-        _MODELS_CACHE.update(ts=time.time(), models=[])
+        _MODELS_CACHE.update(ts=time.time(), models=data.get("models", []), error=None)
+    except (urllib.error.URLError, OSError) as exc:
+        _MODELS_CACHE.update(ts=time.time(), models=[], error=str(exc))
     return _MODELS_CACHE["models"]
+
+
+def ollama_models_error() -> str | None:
+    """Senaste fel vid modellista (None = OK)."""
+    return _MODELS_CACHE.get("error")
 
 
 def resolve_ollama_model(preferred: str) -> str:

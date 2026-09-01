@@ -178,6 +178,10 @@ async function loadModels() {
   try {
     const res = await fetch("/api/ollama/models");
     const data = await res.json();
+    if (data.ollama_error) {
+      modelListEl.innerHTML = `<p class="empty" style="color: var(--red)">⚠️ Ollama nås inte: ${escapeHtml(data.ollama_error)}</p>`;
+      return;
+    }
     const installed = new Set(data.models || []);
     const rows = RECOMMENDED_MODELS.map((m) => {
       const isIn = installed.has(m.name) || installed.has(m.name + ":latest");

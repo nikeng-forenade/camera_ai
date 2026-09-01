@@ -28,6 +28,7 @@ from analyzer import (
     describe_with_ollama,
     llm_available,
     ollama_models,
+    ollama_models_error,
     set_llm_keep_alive,
     summarize_detections,
 )
@@ -273,7 +274,11 @@ def ollama_pull_status():
 @app.get("/api/ollama/models")
 def ollama_models_api():
     names = sorted(m.get("name", "") for m in ollama_models())
-    return {"models": names, "ollama_available": llm_available()}
+    return {
+        "models": names,
+        "ollama_available": llm_available(),
+        "ollama_error": ollama_models_error(),
+    }
 
 
 @app.get("/api/history")
