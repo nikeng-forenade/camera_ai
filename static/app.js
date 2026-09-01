@@ -122,13 +122,13 @@ async function loadSettings() {
   } catch { /* server offline - behåll GUI:s standardvärden */ }
 }
 
-async function saveSettings() {
+async function saveSettings(auto) {
   const body = {
     model: document.getElementById("model").value,
     conf: parseFloat(confInput.value),
     prompt: document.getElementById("prompt").value,
   };
-  saveMsg.textContent = "Sparar …";
+  if (!auto) saveMsg.textContent = "Sparar …";
   saveMsg.classList.remove("ok");
   try {
     const res = await fetch("/api/config", {
@@ -138,14 +138,27 @@ async function saveSettings() {
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const cfg = await res.json();
-    saveMsg.textContent = `💾 Sparat: ${cfg.model} · conf ${cfg.conf} · sparas i .env`;
+    saveMsg.textContent = auto
+      ? "💾 Sparat"
+      : `💾 Sparat: ${cfg.model} · conf ${cfg.conf} · sparas i .env`;
     saveMsg.classList.add("ok");
   } catch (e) {
     saveMsg.textContent = "❌ Kunde inte spara: " + e.message;
   }
 }
 
-saveBtn.addEventListener("click", saveSettings);
+saveBtn.addEventListener("click", () => saveSettings(false));
+
+/* Auto-spara med debounce - så prompten/inställningarna sitter kvar efter F5/omstart */
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveSettings(true), 800);
+}
+document.getElementById("prompt").addEventListener("input", scheduleSave);
+document.getElementById("model").addEventListener("change", scheduleSave);
+confInput.addEventListener("input", scheduleSave);
+
 loadSettings();
 
 /* ---- Upload handling ---- */
