@@ -59,7 +59,7 @@ if ($LASTEXITCODE -gt 7) {
 # 4. Beroenden (no-op om oförändrade)
 $Py = "$AppDir\.venv\Scripts\python.exe"
 if (Test-Path $Py) {
-    & $Py -m pip install -r "$AppDir\requirements.txt"
+    & $Py -m pip install -r "$AppDir\requirements.txt" 2>&1 | Out-Host
 } else {
     Write-Host "Varning: $Py saknas - kör windows\setup.ps1 först." -ForegroundColor Yellow
 }

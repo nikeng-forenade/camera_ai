@@ -36,6 +36,16 @@ if (-not $isAdmin) {
     Write-Host "VARNING: Kör inte som administratör - aktivitetsinstallation och winget kan misslyckas." -ForegroundColor Yellow
 }
 
+# Kör ett native-kommando (ollama, winget, pip) utan att stderr tolkas som fel.
+# PowerShell 5.1 gör annars om stderr till ett fel med $ErrorActionPreference="Stop".
+function Invoke-Native {
+    param([scriptblock]$Command)
+    $ErrorActionPreference = "Continue"
+    & $Command 2>&1 | Out-Host
+    $ErrorActionPreference = "Stop"
+    return $LASTEXITCODE
+}
+
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host " Camera AI - installation / uppdatering" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
@@ -100,7 +110,7 @@ if (-not $Py) {
         exit 1
     }
     Write-Host "Python saknas - installerar Python 3.12 via winget ..." -ForegroundColor Yellow
-    winget install --id Python.Python.3.12 -e --accept-source-agreements --accept-package-agreements
+    Invoke-Native { winget install --id Python.Python.3.12 -e --accept-source-agreements --accept-package-agreements }
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
     $Py = "py"
 }
@@ -124,8 +134,8 @@ if (-not (Test-Path $PyExe)) {
     Write-Host "ERROR: kunde inte skapa .venv" -ForegroundColor Red
     exit 1
 }
-& $PyExe -m pip install --upgrade pip
-& $PyExe -m pip install -r "$AppDir\requirements.txt" openvino
+& $PyExe -m pip install --upgrade pip 2>&1 | Out-Host
+& $PyExe -m pip install -r "$AppDir\requirements.txt" openvino 2>&1 | Out-Host
 
 # ---------------------------------------------------------------------------
 # 3. .env (skapas bara om det saknas)
@@ -157,7 +167,7 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
         Write-Host "ERROR: winget saknas - installera Ollama manuellt från https://ollama.com" -ForegroundColor Red
     } else {
         Write-Host "Ollama saknas - installerar via winget ..." -ForegroundColor Yellow
-        winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements
+        Invoke-Native { winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements }
         $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
     }
 }
@@ -172,8 +182,17 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
         Start-Sleep -Seconds 3
     }
     if (-not $NoOllamaModel) {
-        Write-Host "Laddar ner moondream (kan ta en stund) ..."
-        ollama pull moondream
+        # Hoppa över om moondream redan finns i Ollama
+        $models = & ollama list 2>$null
+        if ($LASTEXITCODE -eq 0 -and $models -match "moondream") {
+            Write-Host "moondream finns redan - hoppar över nedladdning." -ForegroundColor Green
+        } else {
+            Write-Host "Laddar ner moondream (kan ta en stund) ..."
+            $code = Invoke-Native { & ollama pull moondream }
+            if ($code -ne 0) {
+                Write-Host "Varning: kunde inte ladda ner moondream (kod $code). Kör 'ollama pull moondream' manuellt." -ForegroundColor Yellow
+            }
+        }
     }
 } else {
     Write-Host "Ollama installerades inte - starta om PowerShell och kör igen, eller installera från https://ollama.com." -ForegroundColor Yellow
