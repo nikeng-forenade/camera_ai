@@ -27,6 +27,14 @@ else:
 sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)
 
+# pythonw.exe / Windows-tjänst (Task Scheduler) kör utan konsol -> sys.stdout
+# och sys.stderr är None, vilket får uvicorn att krascha på sys.stdout.isatty().
+# Ersätt dem med en tyst fil så servern kan starta headless.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 LOG_FILE = Path(__file__).resolve().parent / "camera_ai.log"
 logging.basicConfig(
     filename=str(LOG_FILE),
