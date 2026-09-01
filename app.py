@@ -5,6 +5,7 @@ Run:  python app.py        (then open http://127.0.0.1:8000)
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 import uuid
 from collections import deque
@@ -26,6 +27,7 @@ from analyzer import (
     categorize_detections,
     describe_with_ollama,
     llm_available,
+    ollama_models,
     set_llm_keep_alive,
     summarize_detections,
 )
@@ -181,6 +183,97 @@ def set_runtime_config(payload: _ConfigIn):
             print(f"[config] keep_alive apply failed: {exc}")
     _persist_env(changes)
     return {**RUNTIME}
+
+
+# ---------------------------------------------------------------------------
+# Ollama-modellnedladdning (pull) med status/progress
+# ---------------------------------------------------------------------------
+PULL: dict = {
+    "state": "idle",  # idle | running | completed | failed
+    "model": None,
+    "percent": 0,
+    "status": "",
+    "error": None,
+}
+_pull_lock = threading.Lock()
+
+
+class _PullIn(BaseModel):
+    """Body för POST /api/ollama/pull."""
+
+    model: str
+
+
+def _ollama_pull_worker(model: str) -> None:
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    total: dict = {}
+    done: dict = {}
+    try:
+        payload = _json.dumps({"name": model, "stream": True}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{config.OLLAMA_URL}/api/pull",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=None) as resp:  # noqa: S310 - lokal Ollama
+            for raw in resp:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line:
+                    continue
+                try:
+                    evt = _json.loads(line)
+                except ValueError:
+                    continue
+                if evt.get("error"):
+                    PULL["error"] = evt["error"]
+                    PULL["state"] = "failed"
+                    return
+                status = evt.get("status", "")
+                digest = evt.get("digest")
+                if digest:
+                    total[digest] = evt.get("total", total.get(digest, 0))
+                    done[digest] = evt.get("completed", done.get(digest, 0))
+                s = sum(total.values())
+                if s:
+                    PULL["percent"] = min(100, int(round(sum(done.values()) / s * 100)))
+                PULL["status"] = status
+                if status == "success":
+                    PULL["state"] = "completed"
+        if PULL["state"] == "running":
+            PULL["state"] = "completed"
+    except Exception as exc:  # noqa: BLE001
+        PULL["error"] = str(exc)
+        PULL["state"] = "failed"
+    finally:
+        if PULL["state"] == "completed":
+            PULL["percent"] = 100
+
+
+@app.post("/api/ollama/pull")
+def start_ollama_pull(payload: _PullIn):
+    model = payload.model.strip()
+    if not model:
+        raise HTTPException(400, "model required")
+    if PULL["state"] == "running":
+        return {"started": False, "reason": "En nedladdning pågår redan", "state": PULL["state"]}
+    with _pull_lock:
+        PULL.update(state="running", model=model, percent=0, status="startar …", error=None)
+    threading.Thread(target=_ollama_pull_worker, args=(model,), daemon=True).start()
+    return {"started": True, "model": model}
+
+
+@app.get("/api/ollama/pull/status")
+def ollama_pull_status():
+    return dict(PULL)
+
+
+@app.get("/api/ollama/models")
+def ollama_models_api():
+    names = sorted(m.get("name", "") for m in ollama_models())
+    return {"models": names, "ollama_available": llm_available()}
 
 
 @app.get("/api/history")

@@ -161,6 +161,82 @@ confInput.addEventListener("input", scheduleSave);
 
 loadSettings();
 
+/* ---- Ollama-modeller: lista + ladda ner + status ---- */
+const RECOMMENDED_MODELS = [
+  { name: "moondream", desc: "1.9B — snabb & liten (standard)" },
+  { name: "minicpm-v", desc: "~8B — bra kvalitet för storleken" },
+  { name: "llava", desc: "~7B — klassisk visionmodell" },
+  { name: "llama3.2-vision", desc: "~11B — bästa kvalitet" },
+];
+const modelListEl = document.getElementById("modelList");
+const pullStatusEl = document.getElementById("pullStatus");
+const pullTextEl = document.getElementById("pullText");
+const pullBarEl = document.getElementById("pullBar");
+let pullTimer = null;
+
+async function loadModels() {
+  try {
+    const res = await fetch("/api/ollama/models");
+    const data = await res.json();
+    const installed = new Set(data.models || []);
+    const rows = RECOMMENDED_MODELS.map((m) => {
+      const isIn = installed.has(m.name) || installed.has(m.name + ":latest");
+      if (isIn) {
+        return `<div class="model-row installed"><span>✅ <strong>${m.name}</strong></span><small>${m.desc} · installerad</small></div>`;
+      }
+      return `<div class="model-row"><span><strong>${m.name}</strong></span><small>${m.desc}</small><button class="btn" data-model="${m.name}">⬇️ Ladda ner</button></div>`;
+    }).join("");
+    modelListEl.innerHTML = rows || `<p class="empty">Inga modeller listade.</p>`;
+    modelListEl.querySelectorAll("button[data-model]").forEach((b) =>
+      b.addEventListener("click", () => startPull(b.dataset.model))
+    );
+  } catch {
+    modelListEl.innerHTML = `<p class="empty">Kunde inte nå servern/Ollama.</p>`;
+  }
+}
+
+async function startPull(model) {
+  try {
+    await fetch("/api/ollama/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    });
+    pullStatusEl.hidden = false;
+    pollPull();
+  } catch (e) {
+    pullTextEl.textContent = "❌ Kunde inte starta nedladdning: " + e.message;
+    pullStatusEl.hidden = false;
+  }
+}
+
+async function pollPull() {
+  clearTimeout(pullTimer);
+  try {
+    const res = await fetch("/api/ollama/pull/status");
+    const st = await res.json();
+    pullStatusEl.hidden = false;
+    if (st.state === "running") {
+      pullTextEl.textContent = `⏳ Laddar ner ${st.model} … ${st.percent}%`;
+      pullBarEl.style.width = (st.percent || 0) + "%";
+      pullTimer = setTimeout(pollPull, 2000);
+    } else if (st.state === "completed") {
+      pullTextEl.textContent = `✅ ${st.model} klar!`;
+      pullBarEl.style.width = "100%";
+      setTimeout(() => { pullStatusEl.hidden = true; }, 5000);
+      loadModels();
+    } else if (st.state === "failed") {
+      pullTextEl.textContent = `❌ ${st.model}: ${st.error || "misslyckades"}`;
+      pullBarEl.style.width = "0%";
+    }
+  } catch {
+    pullTextEl.textContent = "Kunde inte hämta status.";
+  }
+}
+
+document.getElementById("refreshModels").addEventListener("click", loadModels);
+loadModels();
+
 /* ---- Upload handling ---- */
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("keydown", (e) => {
