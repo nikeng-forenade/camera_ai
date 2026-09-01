@@ -157,6 +157,7 @@ input[type="range"] { accent-color: var(--accent); }
 .dz-inner p { margin: 6px 0 0; }
 .hint { color: var(--muted); font-size: 12.5px; }
 .hint.warn { color: var(--yellow); }
+.system-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .link { color: var(--accent); text-decoration: underline; }
 
 /* Result cards */

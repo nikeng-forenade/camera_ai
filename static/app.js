@@ -131,19 +131,27 @@ async function loadSettings() {
 
 /* Fyll LLM-rullgardinen med nedladdade Ollama-modeller och välj den aktiva */
 let _llmSizes = {};
+let _llmVision = new Set(); // namn som servern klassat som vision-kapabla
 function llmSizeGb(name) {
   const s = _llmSizes[name] != null ? _llmSizes[name] : _llmSizes[name + ":latest"];
   return s != null ? s : null;
 }
+function isVisionModel(name) {
+  return _llmVision.has(name) || _llmVision.has(name + ":latest");
+}
 function updateLlmModelHint() {
   const hint = document.getElementById("llmModelHint");
   if (!hint) return;
-  const size = llmSizeGb(document.getElementById("llmModel").value);
-  if (size == null) { hint.textContent = ""; return; }
-  hint.textContent = size > 10
-    ? `⚠️ ${size} GB — väldigt stor, laddas troligen inte på GPU:n (HTTP 500).`
-    : `(${size} GB)`;
-  hint.classList.toggle("warn", size > 10);
+  const value = document.getElementById("llmModel").value;
+  const size = llmSizeGb(value);
+  const warnBig = size != null && size > 10;
+  const notVision = value !== "" && !isVisionModel(value);
+  if (!warnBig && !notVision) { hint.textContent = ""; hint.classList.remove("warn"); return; }
+  hint.textContent = [
+    notVision ? "⚠️ Ej vision-stöd — bildanalys kan misslyckas." : "",
+    warnBig ? `⚠️ ${size} GB — väldigt stor modell, laddas troligen inte på GPU:n.` : "",
+  ].filter(Boolean).join(" ");
+  hint.classList.add("warn");
 }
 async function loadLlmModelOptions() {
   try {
@@ -155,14 +163,17 @@ async function loadLlmModelOptions() {
     const cfg = await resCfg.json();
     const sel = document.getElementById("llmModel");
     _llmSizes = data.sizes || {};
+    _llmVision = new Set((data.models || []).map((m) => m.replace(/:latest$/, "")));
     // Den konfigurerade modellen (från servern) ska alltid visas/varas vald
     const current = String(cfg.llm_model || sel.value || "moondream");
-    const models = [...new Set((data.models || []).map((m) => m.replace(/:latest$/, "")))];
+    const models = [..._llmVision];
     if (!models.includes(current)) models.unshift(current);
     sel.innerHTML = models
       .map((m) => {
         const size = llmSizeGb(m);
-        return `<option value="${m}">${m}${size != null ? ` (${size} GB)` : ""}</option>`;
+        const sizeTxt = size != null ? ` (${size} GB)` : "";
+        const mark = isVisionModel(m) ? "" : " ⚠️ ej vision";
+        return `<option value="${m}">${m}${sizeTxt}${mark}</option>`;
       })
       .join("");
     sel.value = current;
@@ -465,4 +476,26 @@ async function loadStats() {
 }
 
 document.getElementById("statsBtn").addEventListener("click", loadStats);
+
+/* ---- System-knappar ---- */
+async function systemAction(url, label, ask) {
+  if (ask && !confirm(ask)) return;
+  const msg = document.getElementById("sysMsg");
+  if (msg) msg.textContent = label + " …";
+  try {
+    const res = await fetch(url, { method: "POST" });
+    let data = {};
+    try { data = await res.json(); } catch { /* tomt svar vid omstart */ }
+    if (msg) msg.textContent = label + " ✓ " + JSON.stringify(data);
+  } catch (e) {
+    // Vid omstart bryts anslutningen — det är förväntat
+    if (msg) msg.textContent = label + " … (anslutningen bröts — förväntat vid omstart)";
+  }
+}
+const btnUnload = document.getElementById("btnUnload");
+const btnRestartServer = document.getElementById("btnRestartServer");
+const btnRestartOllama = document.getElementById("btnRestartOllama");
+if (btnUnload) btnUnload.addEventListener("click", () => systemAction("/api/system/unload-models", "Laddar ur modeller"));
+if (btnRestartServer) btnRestartServer.addEventListener("click", () => systemAction("/api/system/restart-server", "Startar om servern", "Starta om servern? Anslutningen bryts i några sekunder."));
+if (btnRestartOllama) btnRestartOllama.addEventListener("click", () => systemAction("/api/system/restart-ollama", "Startar om Ollama", "Starta om Ollama? Alla modeller töms ur GPU-minnet."));
 loadStats();

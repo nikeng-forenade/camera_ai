@@ -332,6 +332,104 @@ def ollama_models_api():
     }
 
 
+# ---------------------------------------------------------------------------
+# System-åtgärder (knappar i GUI:t)
+# ---------------------------------------------------------------------------
+
+def _detached_flags() -> int:
+    # Windows: DETACHED_PROCESS | CREATE_NO_WINDOW (ingen konsol, ingen parent)
+    return 0x00000008 | 0x08000000
+
+
+@app.post("/api/system/unload-models")
+def system_unload_models():
+    """Ladda ur alla Ollama-modeller ur GPU-minnet (ollama stop per modell)."""
+    import subprocess
+
+    stopped, skipped, failed = [], [], []
+    for m in ollama_models():
+        name = m.get("name", "")
+        try:
+            r = subprocess.run(["ollama", "stop", name], capture_output=True, text=True, timeout=30)
+            if r.returncode == 0:
+                stopped.append(name)
+            else:
+                skipped.append(name)  # t.ex. redan urladdad
+        except Exception as exc:  # noqa: BLE001 - ej kritiskt
+            failed.append(f"{name} ({exc})")
+    return {"stopped": stopped, "skipped": skipped, "failed": failed}
+
+
+@app.post("/api/system/restart-server")
+def system_restart_server():
+    """Starta om servern: en hjälpprocess dödar denna och startar en ny identisk process."""
+    import os
+    import subprocess
+    import sys
+
+    old_pid = os.getpid()
+    python = sys.executable
+    args = [python] + list(sys.argv)
+    code = (
+        "import subprocess,time,os;"
+        f"time.sleep(1);"
+        f"subprocess.run(['taskkill','/F','/PID',str({old_pid})],capture_output=True);"
+        f"time.sleep(0.5);"
+        f"os.chdir({os.getcwd()!r});"
+        f"subprocess.Popen({args!r},creationflags=0x8|0x08000000,close_fds=True)"
+    )
+    try:
+        subprocess.Popen([python, "-c", code], creationflags=_detached_flags(), close_fds=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "restarting": True}
+
+
+@app.post("/api/system/restart-ollama")
+def system_restart_ollama():
+    """Starta om Ollama-servern (tömmer allt ur GPU-minnet)."""
+    import os
+    import subprocess
+    import time
+
+    pid = None
+    try:
+        out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=15).stdout
+        for line in out.splitlines():
+            if ":11434" in line and "LISTENING" in line:
+                pid = line.split()[-1]
+                break
+    except Exception:  # noqa: BLE001
+        pass
+    exe = None
+    if pid:
+        subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+        try:
+            w = subprocess.run(
+                ["wmic", "process", "where", f"ProcessId={pid}", "get", "ExecutablePath", "/value"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            for ln in w.stdout.splitlines():
+                if "=" in ln:
+                    exe = ln.split("=", 1)[1].strip() or None
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+    time.sleep(1)
+    env = dict(os.environ)
+    env.setdefault("OLLAMA_HOST", "0.0.0.0:11434")
+    try:
+        if exe:
+            subprocess.Popen([exe], env=env, creationflags=_detached_flags(), close_fds=True)
+        else:
+            subprocess.Popen(["ollama", "serve"], env=env, creationflags=_detached_flags(), close_fds=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "killed_pid": pid}
+    return {"ok": True, "killed_pid": pid, "relaunched": exe or "ollama serve"}
+
+
 @app.get("/api/history")
 def get_history(limit: int = 20):
     """Recent analyses, newest first."""
