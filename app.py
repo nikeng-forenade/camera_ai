@@ -76,6 +76,46 @@ def _is_prompt_echo(text: str, prompt: str) -> bool:
     return bool(p and (p in t or t in p))
 
 
+# .env-nycklar som ska sparas vid POST /api/config (så inställningarna överlever omstart)
+_ENV_KEYS = {
+    "model": "YOLO_MODEL",
+    "conf": "YOLO_CONF",
+    "device": "YOLO_DEVICE",
+    "llm_model": "OLLAMA_MODEL",
+    "prompt": "LLM_PROMPT",
+}
+
+
+def _persist_env(changes: dict) -> None:
+    """Spara ändrade inställningar till .env så de överlever omstart."""
+    to_write = {}
+    for k, v in changes.items():
+        env_key = _ENV_KEYS.get(k)
+        if env_key is not None:
+            to_write[env_key] = str(v)
+    if not to_write:
+        return
+    env_file = config.BASE_DIR / ".env"
+    try:
+        lines = (
+            env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+        )
+        out = []
+        for line in lines:
+            if "=" in line:
+                key = line.split("=", 1)[0].strip()
+                if key in to_write:
+                    out.append(f"{key}={to_write.pop(key)}")
+                    continue
+            out.append(line)
+        for key, val in to_write.items():
+            out.append(f"{key}={val}")
+        env_file.write_text("\n".join(out) + "\n", encoding="utf-8")
+        print(f"[config] sparade till .env: {', '.join(_ENV_KEYS.get(k, k) for k in changes if _ENV_KEYS.get(k))}")
+    except OSError as exc:
+        print(f"[config] kunde inte spara .env: {exc}")
+
+
 def _on_ha_alarm(state: str) -> None:
     """Larm skarpt -> ladda LLM (klar direkt), larm av -> plocka ut den."""
     armed = state in ("armed_away", "armed_home", "armed_night", "armed_custom_bypass", "arming", "pending")
@@ -120,6 +160,7 @@ def set_runtime_config(payload: _ConfigIn):
             set_llm_keep_alive(str(changes["keep_alive"]))
         except Exception as exc:  # noqa: BLE001 - icke-kritiskt, returnera ändå
             print(f"[config] keep_alive apply failed: {exc}")
+    _persist_env(changes)
     return {**RUNTIME}
 
 

@@ -45,9 +45,13 @@
           <input type="checkbox" id="useHa" checked />
           Send results to Home Assistant
         </label>
-        <label class="wide">LLM prompt
-          <input type="text" id="prompt" value="Svara på svenska med EN kort mening om vad du ser: bara personer, bilar och djur, med antal. Exempel: 'Jag ser 2 personer, 1 bil och 1 katt.' Ser du inget av detta, svara 'Jag ser inget av intresse.' Nämn inget annat." />
+        <label class="wide">LLM prompt (sparas på servern)
+          <textarea id="prompt" rows="5" placeholder="Beskriv vad vision-LLM:en ska svara på...">Beskriv på svenska vad som syns på bilden. Räkna personer, fordon och djur, nämn deras färger och andra tydliga detaljer. Svara med 1-2 korta meningar.</textarea>
         </label>
+      </div>
+      <div class="save-bar">
+        <button id="saveSettings" class="btn" type="button">💾 Spara inställningar</button>
+        <span id="saveMsg" class="save-msg"></span>
       </div>
     </section>
 

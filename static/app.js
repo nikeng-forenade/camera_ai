@@ -105,6 +105,49 @@ checkConfig();
 /* Uppdatera statusarna var 15:e sekund */
 setInterval(() => { checkHealth(); checkHa(); checkConfig(); }, 15000);
 
+/* ---- Inställningar: ladda sparade värden + spara ---- */
+const saveBtn = document.getElementById("saveSettings");
+const saveMsg = document.getElementById("saveMsg");
+
+async function loadSettings() {
+  try {
+    const res = await fetch("/api/config");
+    const cfg = await res.json();
+    if (cfg.model) document.getElementById("model").value = cfg.model;
+    if (cfg.conf != null) {
+      confInput.value = cfg.conf;
+      confValue.textContent = parseFloat(cfg.conf).toFixed(2);
+    }
+    if (cfg.prompt) document.getElementById("prompt").value = cfg.prompt;
+  } catch { /* server offline - behåll GUI:s standardvärden */ }
+}
+
+async function saveSettings() {
+  const body = {
+    model: document.getElementById("model").value,
+    conf: parseFloat(confInput.value),
+    prompt: document.getElementById("prompt").value,
+  };
+  saveMsg.textContent = "Sparar …";
+  saveMsg.classList.remove("ok");
+  try {
+    const res = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const cfg = await res.json();
+    saveMsg.textContent = `💾 Sparat: ${cfg.model} · conf ${cfg.conf} · sparas i .env`;
+    saveMsg.classList.add("ok");
+  } catch (e) {
+    saveMsg.textContent = "❌ Kunde inte spara: " + e.message;
+  }
+}
+
+saveBtn.addEventListener("click", saveSettings);
+loadSettings();
+
 /* ---- Upload handling ---- */
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("keydown", (e) => {
