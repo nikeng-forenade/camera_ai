@@ -22,6 +22,14 @@ kamera → snapshot (rörelse) → YOLO-detektering → LLM-beskrivning → resu
 Krav: Windows 10/11 eller Server 2025, **Intel Arc B50 Pro** med drivrutin,
 Python 3.12 (x64), Git och [Ollama](https://ollama.com).
 
+> **Enklaste vägen (server, headless):** `windows\install.ps1` installerar allt
+> i ett — hämtar senaste koden, Python 3.12 (via winget), Ollama + `moondream`
+> (via winget), beroenden, `.env` och den schemalagda aktiviteten `CameraAI`.
+> Kör du det igen fungerar det som **uppdatering**.
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File windows\install.ps1
+> ```
+
 1. Klona och sätt upp:
    ```powershell
    git clone https://github.com/nikeng-forenade/camera_ai.git C:\camera_ai
