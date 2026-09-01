@@ -64,6 +64,17 @@ if (Test-Path $Py) {
     Write-Host "Varning: $Py saknas - kör windows\setup.ps1 först." -ForegroundColor Yellow
 }
 
+# 4b. Uppgradera Ollama (krävs bl.a. för llama3.2-vision / mllama-stöd)
+if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Write-Host "Kontrollerar nyare Ollama-version ..." -ForegroundColor Cyan
+    try {
+        & winget upgrade --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements 2>&1 | Out-Host
+        Write-Host ("Ollama: " + (ollama --version 2>&1)) -ForegroundColor Green
+    } catch {
+        Write-Host "Ollama-uppgradering hoppades över: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
 # 5. Stoppa körande app (fönstret/tray-ikonen eller aktiviteten)
 Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe' OR Name='CameraAI.exe'" |
     Where-Object { $_.CommandLine -match "camera_ai_app\.py|--server" } |

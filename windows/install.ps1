@@ -200,6 +200,13 @@ if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
     }
 }
 if (Get-Command ollama -ErrorAction SilentlyContinue) {
+    # Uppgradera Ollama om nyare finns (krävs bl.a. för llama3.2-vision / mllama-stöd)
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "Kontrollerar nyare Ollama-version ..." -ForegroundColor Cyan
+        Invoke-Native { winget upgrade --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements }
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+        Write-Host ("Ollama: " + (ollama --version)) -ForegroundColor Green
+    }
     # Vulkan för Intel Arc (globalt om admin)
     if ($isAdmin) { [Environment]::SetEnvironmentVariable("OLLAMA_VULKAN", "1", "Machine") }
     $env:OLLAMA_VULKAN = "1"
