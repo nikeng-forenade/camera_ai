@@ -74,18 +74,15 @@ Resultat:
 
 ### Uppdatera
 
-**Server-koden** (hämtar senaste från GitHub + installerar ev. nya beroenden,
-stoppar den körande appen):
+**Server-koden** (laddar ner senaste från GitHub som ZIP — **ingen git krävs** —
+installerar ev. nya beroenden och startar om aktiviteten/tjänsten automatiskt):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\update.ps1
 ```
 
-Starta sedan om aktiviteten/tjänsten:
-```powershell
-windows\install-task.ps1 -Stop
-windows\install-task.ps1 -Start
-```
+Lokala filer (`.env`, `uploads/`, `media/`, `.venv`, loggar och exporterade
+OpenVINO-modeller) skrivs inte över.
 
 **HA-komponenten** (HACS): **HACS → Camera AI → ⋮ → Re-download** (välj
 "Redownload" för att hämta senaste) → **Inställningar → Enheter & tjänster →
