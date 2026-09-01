@@ -345,7 +345,11 @@ def health():
         "yolo_model": analyzer.model_name,
         "llm_backend": config.LLM_BACKEND,
         "ollama_available": llm_available(),
-        "llm_model": active_ollama_model() if config.LLM_BACKEND == "ollama" else None,
+        "llm_model": (
+            active_ollama_model(RUNTIME["llm_model"])
+            if config.LLM_BACKEND == "ollama"
+            else None
+        ),
         "ha_enabled": ha.available(),
     }
 

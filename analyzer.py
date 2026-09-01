@@ -241,9 +241,9 @@ def resolve_ollama_model(preferred: str) -> str:
     return preferred
 
 
-def active_ollama_model() -> str:
+def active_ollama_model(preferred: str | None = None) -> str:
     """The vision model that will actually be used for descriptions."""
-    return resolve_ollama_model(config.OLLAMA_MODEL)
+    return resolve_ollama_model(preferred or config.OLLAMA_MODEL)
 
 
 _LLM_KEEP_ALIVE: str | int | None = None  # None = använd Ollamas default (5m)
