@@ -125,6 +125,20 @@ async function loadSettings() {
   } catch { /* server offline - behåll GUI:s standardvärden */ }
 }
 
+/* Fyll LLM-rullgardinen med nedladdade Ollama-modeller */
+async function loadLlmModelOptions() {
+  try {
+    const res = await fetch("/api/ollama/models");
+    const data = await res.json();
+    const sel = document.getElementById("llmModel");
+    const current = sel.value || "moondream";
+    const models = [...new Set((data.models || []).map((m) => m.replace(/:latest$/, "")))];
+    if (!models.includes(current)) models.unshift(current);
+    sel.innerHTML = models.map((m) => `<option value="${m}">${m}</option>`).join("");
+    sel.value = current;
+  } catch { /* behåll fältet tomt om Ollama inte nås */ }
+}
+
 async function saveSettings(auto) {
   const body = {
     model: document.getElementById("model").value,
@@ -162,11 +176,12 @@ function scheduleSave() {
 }
 document.getElementById("prompt").addEventListener("input", scheduleSave);
 document.getElementById("model").addEventListener("change", scheduleSave);
-document.getElementById("llmModel").addEventListener("input", scheduleSave);
+document.getElementById("llmModel").addEventListener("change", scheduleSave);
 document.getElementById("keepAlive").addEventListener("change", scheduleSave);
 confInput.addEventListener("input", scheduleSave);
 
 loadSettings();
+loadLlmModelOptions();
 
 /* ---- Ollama-modeller: lista + ladda ner + status ---- */
 const RECOMMENDED_MODELS = [
@@ -242,6 +257,7 @@ async function pollPull() {
       pullBarEl.style.width = "100%";
       setTimeout(() => { pullStatusEl.hidden = true; }, 5000);
       loadModels();
+      loadLlmModelOptions();
     } else if (st.state === "failed") {
       pullTextEl.textContent = `❌ ${st.model}: ${st.error || "misslyckades"}`;
       pullBarEl.style.width = "0%";
