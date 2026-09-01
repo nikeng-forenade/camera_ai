@@ -44,7 +44,19 @@ Python 3.12 (x64), Git och [Ollama](https://ollama.com).
    `custom_components/`, lägg till integrationen med `http://<dator-ip>:8000`
    (appen lyssnar på `0.0.0.0`).
 
-Valfritt: kör som tjänst (headless) med `windows\install-service.ps1` (NSSM).
+Valfritt — kör headless dygnet runt (ingen GUI, bara webb-API på `0.0.0.0:8000`):
+
+- **Schemalagd aktivitet** (inga extra beroenden, rekommenderas):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File windows\install-task.ps1
+  ```
+  Startar vid datorstart som SYSTEM, startar om automatiskt vid fel och
+  loggar till `windows\camera_ai.log`. Fler alternativ (status, start/stopp,
+  avinstallera, köra som användare eller med byggd exe): se toppen av scriptet.
+- **Windows-tjänst via NSSM** (kräver `nssm.exe`, se `windows\install-service.ps1`):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File windows\install-service.ps1
+  ```
 
 ### Fristående EXE (valfritt)
 
