@@ -64,15 +64,20 @@ if (Test-Path $Py) {
     Write-Host "Varning: $Py saknas - kör windows\setup.ps1 först." -ForegroundColor Yellow
 }
 
-# 4b. Uppgradera Ollama (krävs bl.a. för llama3.2-vision / mllama-stöd)
+# 4b. Uppgradera Ollama (krävs bl.a. för llama3.2-vision / mllama-stöd) + starta om
 if (Get-Command winget -ErrorAction SilentlyContinue) {
     Write-Host "Kontrollerar nyare Ollama-version ..." -ForegroundColor Cyan
     try {
         & winget upgrade --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements 2>&1 | Out-Host
-        Write-Host ("Ollama: " + (ollama --version 2>&1)) -ForegroundColor Green
     } catch {
         Write-Host "Ollama-uppgradering hoppades över: $($_.Exception.Message)" -ForegroundColor Yellow
     }
+    Write-Host "Startar om Ollama (så ev. ny version tas emot) ..." -ForegroundColor Cyan
+    Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
+    $oll = Get-Command ollama -ErrorAction SilentlyContinue
+    if ($oll) { Start-Process -FilePath $oll.Source -ArgumentList "serve" -WindowStyle Hidden }
+    Write-Host ("Ollama: " + (ollama --version 2>&1)) -ForegroundColor Green
 }
 
 # 5. Stoppa körande app (fönstret/tray-ikonen eller aktiviteten)

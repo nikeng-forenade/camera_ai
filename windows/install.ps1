@@ -210,12 +210,12 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
     # Vulkan för Intel Arc (globalt om admin)
     if ($isAdmin) { [Environment]::SetEnvironmentVariable("OLLAMA_VULKAN", "1", "Machine") }
     $env:OLLAMA_VULKAN = "1"
-    # Säkerställ att Ollama körs
-    if (-not (Get-Process -Name "ollama*" -ErrorAction SilentlyContinue)) {
-        Write-Host "Startar Ollama ..."
-        Start-Process -FilePath (Get-Command ollama).Source -ArgumentList "serve" -WindowStyle Hidden
-        Start-Sleep -Seconds 3
-    }
+    # Säkerställ att Ollama körs med RÄTT (nya) version — starta om även om den redan körs
+    Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
+    Write-Host "Startar Ollama ..."
+    Start-Process -FilePath (Get-Command ollama).Source -ArgumentList "serve" -WindowStyle Hidden
+    Start-Sleep -Seconds 3
     if (-not $NoOllamaModel) {
         # Hoppa över om moondream redan finns i Ollama
         $models = & ollama list 2>$null
