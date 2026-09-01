@@ -74,8 +74,9 @@ function Invoke-Native {
 }
 
 Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host " Camera AI - installation / uppdatering" -ForegroundColor Cyan
+Write-Host " Camera AI - installation / uppdatering (v2.0)" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "Scriptmapp: $PSScriptRoot"
 Write-Host "App-katalog: $AppDir"
 
 # ---------------------------------------------------------------------------
