@@ -44,8 +44,11 @@ $badLocations = @(
     ($AppDir -eq (Join-Path $ProfileRoot "Desktop")),
     ($AppDir -eq (Join-Path $ProfileRoot "Documents"))
 )
-if ($badLocations -contains $true) {
+$badReason = @("enhetsroten", "Windows-mappen", "något under Windows-mappen", "hemkatalogen", "skrivbordsmappen", "dokumentmappen")
+$badIdx = [Array]::IndexOf($badLocations, $true)
+if ($badIdx -ge 0) {
     Write-Host "ERROR: Registrera aktiviteten från app-mappen, t.ex. C:\camera_ai - inte från enhetsroten, Windows-mappen eller hem-/skrivbordsmappen." -ForegroundColor Red
+    Write-Host "  Detekterad mapp: '$AppDir'  (matchar: $($badReason[$badIdx]))" -ForegroundColor Yellow
     exit 1
 }
 
