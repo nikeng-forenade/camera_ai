@@ -64,9 +64,11 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "moondream")
 OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "")
 LLM_DEFAULT_PROMPT = os.getenv(
     "LLM_PROMPT",
-    "Beskriv på svenska vad som händer på bilden med 1-2 naturliga meningar. "
-    "Nämn personer, fordon eller djur om de syns, men räkna inte upp och "
-    "upprepa inte ord.",
+    "Beskriv på svenska, men BARA detta och inget annat: personer – färg på "
+    "kläder; bilar – bilens färg; djur – vilket djur och dess färg. Svara med "
+    "en kort mening. Ignorera helt: skyltar, registreringsskyltar, hus, träd, "
+    "väder, vägar och allt annat. Om inget av de tre syns, svara 'Inget av "
+    "intresse.'",
 )
 
 # Optional Reolink integration (used by reolink_motion.py)

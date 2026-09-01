@@ -29,9 +29,11 @@ DEFAULT_USE_LLM = False
 DEFAULT_DEVICE = "cpu"
 DEFAULT_LLM_MODEL = "moondream"
 DEFAULT_PROMPT = (
-    "Beskriv på svenska vad som händer på bilden med 1-2 naturliga meningar. "
-    "Nämn personer, fordon eller djur om de syns, men räkna inte upp och "
-    "upprepa inte ord."
+    "Beskriv på svenska, men BARA detta och inget annat: personer – färg på "
+    "kläder; bilar – bilens färg; djur – vilket djur och dess färg. Svara med "
+    "en kort mening. Ignorera helt: skyltar, registreringsskyltar, hus, träd, "
+    "väder, vägar och allt annat. Om inget av de tre syns, svara 'Inget av "
+    "intresse.'"
 )
 DEVICE_OPTIONS = ["cpu", "openvino:GPU", "0"]
 DEVICE_LABELS = {
