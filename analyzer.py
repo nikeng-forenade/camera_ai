@@ -230,18 +230,26 @@ def resolve_ollama_model(preferred: str) -> str:
     """Pick a vision-capable Ollama model.
 
     Returnerar det INSTALLERADE modellnamnet (t.ex. 'moondream:latest') som
-    matchar 'preferred' — så Ollama aldrig får en tag som inte finns ('moondream'
-    matchas mot 'moondream:latest' men vi skickar det fullständiga namnet).
-    Annars den första installerade modellen som stödjer 'vision'.
+    matchar 'preferred' OCH är vision-kapabel — så Ollama aldrig får en tag som
+    inte finns eller en textmodell. Är den valda modellen inte vision-kapabel
+    (t.ex. korrupt 'llama3.2-vision') väljs den första vision-kapabla istället.
     """
     base = (preferred or "").split(":")[0]
-    for m in ollama_models():
+    models = ollama_models()
+    # 1) Föredragen modell, men bara om den är vision-kapabel
+    for m in models:
+        name = m.get("name", "")
+        if (name == preferred or name.split(":")[0] == base) and "vision" in (m.get("capabilities") or []):
+            return name
+    # 2) Annars: första vision-kapabla modellen (hoppa över textmodeller)
+    for m in models:
+        if "vision" in (m.get("capabilities") or []):
+            return m["name"]
+    # 3) Inga vision-modeller alls: använd föredragen ändå (best effort)
+    for m in models:
         name = m.get("name", "")
         if name == preferred or name.split(":")[0] == base:
             return name
-    for m in ollama_models():
-        if "vision" in (m.get("capabilities") or []):
-            return m["name"]
     return preferred
 
 
