@@ -69,14 +69,22 @@ class _ConfigIn(BaseModel):
 
 def _is_prompt_echo(text: str, prompt: str) -> bool:
     """True om vision-LLM:en bara upprepar prompten istället för att beskriva
-    bilden (moondream gör ibland det när prompten innehåller exempel)."""
+    bilden. Korta svar som prompten själv instruerar (t.ex. 'Inget av
+    intresse.') räknas INTE som eko - bara när en stor del av prompten
+    upprepas."""
     import re
 
     if not text or not prompt:
         return False
     norm = lambda s: re.sub(r"[^a-zåäö0-9 ]", " ", s.lower())
     t, p = norm(text), norm(prompt)
-    return bool(p and (p in t or t in p))
+    if not t or not p:
+        return False
+    if p in t:  # hela prompten upprepad i svaret = tydligt eko
+        return True
+    if t in p:  # svaret är en del av prompten
+        return len(t) >= max(10, len(p) * 0.5)
+    return False
 
 
 _STOPWORDS = frozenset({
@@ -473,9 +481,8 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
                 # (t.ex. "Topshop 1. Topshop 2. ...") -> behåll YOLO-sammanfattningen
                 response["description"] = None
                 response["llm_error"] = (
-                    "Vision LLM gav ett repetitivt/ekande svar (t.ex. upprepade ord) - "
-                    "visar YOLO-sammanfattningen. Prova en annan prompt eller en bättre "
-                    "modell (t.ex. llava) i inställningarna."
+                    "Vision LLM gav ett repetitivt/ekande svar - visar "
+                    "YOLO-sammanfattningen. Prova en annan prompt."
                 )
         except Exception as exc:  # noqa: BLE001 - degrade gracefully to YOLO-only
             response["llm_error"] = f"Vision LLM failed: {exc}"
