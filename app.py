@@ -95,6 +95,18 @@ _STOPWORDS = frozenset({
 })
 
 
+def _llm_says_nothing(text: str) -> bool:
+    """True om LLM:en säger att det inte finns något av intresse
+    (t.ex. den instruerade frasen 'Inget av intresse.')."""
+    t = (text or "").lower()
+    if "inget av intresse" in t or "nothing of interest" in t:
+        return True
+    # Kort, nekande svar ("Inget.", "Ingenting.", "Nothing.")
+    if len(t.strip()) <= 20 and any(w in t for w in ("inget", "ingenting", "nothing", "none")):
+        return True
+    return False
+
+
 def _is_low_quality(text: str) -> bool:
     """True om LLM-svaret är repetitivt/skräp, t.ex. 'Topshop 1. Topshop 2. …'.
 
@@ -473,9 +485,18 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
                 upload_path, model=RUNTIME["llm_model"], prompt=prompt
             )
             response["description"] = desc
+            has_dets = bool(result["detections"])
             if desc and not _is_prompt_echo(desc, prompt) and not _is_low_quality(desc):
-                # The LLM actually sees the scene -> it is authoritative
-                response["summary"] = desc
+                if has_dets and _llm_says_nothing(desc):
+                    # LLM:en missade objekten som YOLO ser -> behåll YOLO-sammanfattningen
+                    response["description"] = None
+                    response["llm_error"] = (
+                        "Vision LLM såg inget trots att YOLO detekterade objekt - "
+                        "visar YOLO-sammanfattningen."
+                    )
+                else:
+                    # The LLM actually sees the scene -> it is authoritative
+                    response["summary"] = desc
             elif desc:
                 # LLM:en ekade prompten eller gav ett repetitivt svar
                 # (t.ex. "Topshop 1. Topshop 2. ...") -> behåll YOLO-sammanfattningen
