@@ -312,9 +312,16 @@ def ollama_pull_status():
 
 @app.get("/api/ollama/models")
 def ollama_models_api():
-    names = sorted(m.get("name", "") for m in ollama_models())
+    models = ollama_models()
+    names = sorted(m.get("name", "") for m in models)
+    sizes = {}
+    for m in models:
+        name = m.get("name", "")
+        size = m.get("size") or 0
+        sizes[name] = round(size / (1024 ** 3), 1)  # bytes -> GB
     return {
         "models": names,
+        "sizes": sizes,
         "ollama_available": llm_available(),
         "ollama_error": ollama_models_error(),
     }

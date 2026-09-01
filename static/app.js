@@ -128,6 +128,21 @@ async function loadSettings() {
 }
 
 /* Fyll LLM-rullgardinen med nedladdade Ollama-modeller och välj den aktiva */
+let _llmSizes = {};
+function llmSizeGb(name) {
+  const s = _llmSizes[name] != null ? _llmSizes[name] : _llmSizes[name + ":latest"];
+  return s != null ? s : null;
+}
+function updateLlmModelHint() {
+  const hint = document.getElementById("llmModelHint");
+  if (!hint) return;
+  const size = llmSizeGb(document.getElementById("llmModel").value);
+  if (size == null) { hint.textContent = ""; return; }
+  hint.textContent = size > 10
+    ? `⚠️ ${size} GB — väldigt stor, laddas troligen inte på GPU:n (HTTP 500).`
+    : `(${size} GB)`;
+  hint.classList.toggle("warn", size > 10);
+}
 async function loadLlmModelOptions() {
   try {
     const [resModels, resCfg] = await Promise.all([
@@ -137,12 +152,19 @@ async function loadLlmModelOptions() {
     const data = await resModels.json();
     const cfg = await resCfg.json();
     const sel = document.getElementById("llmModel");
+    _llmSizes = data.sizes || {};
     // Den konfigurerade modellen (från servern) ska alltid visas/varas vald
     const current = String(cfg.llm_model || sel.value || "moondream");
     const models = [...new Set((data.models || []).map((m) => m.replace(/:latest$/, "")))];
     if (!models.includes(current)) models.unshift(current);
-    sel.innerHTML = models.map((m) => `<option value="${m}">${m}</option>`).join("");
+    sel.innerHTML = models
+      .map((m) => {
+        const size = llmSizeGb(m);
+        return `<option value="${m}">${m}${size != null ? ` (${size} GB)` : ""}</option>`;
+      })
+      .join("");
     sel.value = current;
+    updateLlmModelHint();
   } catch { /* behåll fältet tomt om Ollama inte nås */ }
 }
 
@@ -186,7 +208,10 @@ function scheduleSave() {
 }
 document.getElementById("prompt").addEventListener("input", scheduleSave);
 document.getElementById("model").addEventListener("change", scheduleSave);
-document.getElementById("llmModel").addEventListener("change", scheduleSave);
+document.getElementById("llmModel").addEventListener("change", () => {
+  updateLlmModelHint();
+  scheduleSave();
+});
 document.getElementById("keepAlive").addEventListener("change", scheduleSave);
 confInput.addEventListener("input", scheduleSave);
 

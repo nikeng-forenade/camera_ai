@@ -297,6 +297,23 @@ def set_llm_keep_alive(keep_alive: str | None, model: str | None = None) -> None
         print(f"[ollama] keep_alive '{keep_alive}' apply failed: {exc}")
 
 
+def _small_vision_model(exclude: str | None = None) -> str | None:
+    """Return a small vision-capable model (prefer moondream) for fallback."""
+    excluded = (exclude or "").split(":")[0]
+    prefer = ("moondream",)
+    for m in ollama_models():
+        name = m.get("name", "")
+        base = name.split(":")[0]
+        if base != excluded and base in prefer and "vision" in (m.get("capabilities") or []):
+            return name
+    for m in ollama_models():
+        name = m.get("name", "")
+        base = name.split(":")[0]
+        if base != excluded and "vision" in (m.get("capabilities") or []):
+            return name
+    return None
+
+
 def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str | None = None) -> str:
     """Ask a local vision LLM to describe the image. Returns text.
 
@@ -308,23 +325,27 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
     with open(image_path, "rb") as fh:
         b64 = base64.b64encode(fh.read()).decode("utf-8")
 
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "images": [b64],
-        "stream": False,
-        "options": {"temperature": 0.2},
-    }
-    if _LLM_KEEP_ALIVE is not None:
-        payload["keep_alive"] = _LLM_KEEP_ALIVE
-    req = urllib.request.Request(
-        f"{config.OLLAMA_URL}/api/generate",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-    )
-    try:
+    def _generate(m: str) -> str:
+        payload = {
+            "model": m,
+            "prompt": prompt,
+            "images": [b64],
+            "stream": False,
+            "options": {"temperature": 0.2},
+        }
+        if _LLM_KEEP_ALIVE is not None:
+            payload["keep_alive"] = _LLM_KEEP_ALIVE
+        req = urllib.request.Request(
+            f"{config.OLLAMA_URL}/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
         with urllib.request.urlopen(req, timeout=180) as resp:  # noqa: S310 - local Ollama
             data = json.loads(resp.read().decode("utf-8"))
+        return (data.get("response") or "").strip()
+
+    try:
+        return _generate(model)
     except urllib.error.HTTPError as exc:
         detail = ""
         try:
@@ -332,6 +353,22 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
             detail = body[:200].strip()
         except Exception:  # noqa: BLE001 - bästa möjliga
             pass
+        if exc.code == 500:
+            # Modellen kunde inte laddas/generera (vanligen för lite GPU-minne).
+            # Självläkande fallback: testa en liten känd vision-modell först.
+            fallback = _small_vision_model(exclude=model)
+            if fallback:
+                try:
+                    print(f"[llm] '{model}' gav HTTP 500 — försöker med '{fallback}'")
+                    return _generate(fallback)
+                except Exception:  # noqa: BLE001 - fallback misslyckades också
+                    pass
+            raise RuntimeError(
+                f"Vision LLM error (500): modellen '{model}' kunde inte generera "
+                f"svar i Ollama. Vanligaste orsak: för lite GPU-minne för en stor "
+                f"modell. Detalj från Ollama: {detail or 'Internal Server Error'}. "
+                f"Prova en mindre modell (t.ex. moondream)."
+            ) from exc
         if exc.code in (400, 404):
             raise RuntimeError(
                 f"Vision LLM error ({exc.code}): {detail or 'Bad Request'}. "
@@ -344,7 +381,6 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
             "Ollama is not running — start it (locally: `ollama serve`, "
             "in the LXC: `docker compose up -d ollama`)."
         ) from exc
-    return (data.get("response") or "").strip()
 
 
 def llm_available() -> bool:
