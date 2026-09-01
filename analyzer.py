@@ -365,16 +365,18 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
                 except Exception:  # noqa: BLE001 - fallback misslyckades också
                     pass
             raise RuntimeError(
-                f"Vision LLM error (500): modellen '{model}' kunde inte generera "
-                f"svar i Ollama. Vanligaste orsak: för lite GPU-minne för en stor "
-                f"modell. Detalj från Ollama: {detail or 'Internal Server Error'}. "
-                f"Prova en mindre modell (t.ex. moondream)."
+                f"Vision LLM error (500): modellen '{model}' på Ollama "
+                f"({config.OLLAMA_URL}) kunde inte generera svar. Vanligaste "
+                f"orsak: för lite GPU-minne för en stor modell. Detalj från "
+                f"Ollama: {detail or 'Internal Server Error'}. Prova en mindre "
+                f"modell (t.ex. moondream)."
             ) from exc
         if exc.code in (400, 404):
             raise RuntimeError(
-                f"Vision LLM error ({exc.code}): {detail or 'Bad Request'}. "
-                "Kontrollera att modellen är nedladdad (ollama list) och att "
-                "den stödjer bilder (vision)."
+                f"Vision LLM error ({exc.code}): modellen '{model}' på Ollama "
+                f"({config.OLLAMA_URL}) svarade: {detail or 'Bad Request'}. "
+                "Kontrollera att modellen är nedladdad i DEN Ollama-instansen "
+                "(ollama list) och att den stödjer bilder (vision)."
             ) from exc
         raise
     except urllib.error.URLError as exc:
