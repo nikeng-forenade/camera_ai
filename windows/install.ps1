@@ -28,7 +28,13 @@ param(
     [switch]$NoOllamaModel
 )
 $ErrorActionPreference = "Stop"
-$AppDir = Split-Path -Parent $PSScriptRoot
+# App-mappen = mappen där install.ps1 ligger. Kör man scriptet från windows\-
+# undermappen (som i repot) är appen en nivå upp; kör man det från roten är
+# appen här.
+$AppDir = $PSScriptRoot
+if ((Split-Path -Leaf $PSScriptRoot) -eq "windows") {
+    $AppDir = Split-Path -Parent $PSScriptRoot
+}
 $TaskName = "CameraAI"
 
 # Skydda mot att installera på fel ställe: enhetsrot (t.ex. C:\), Windows-mappen,
