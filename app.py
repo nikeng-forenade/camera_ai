@@ -166,7 +166,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Camera AI", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Camera AI", version=config.VERSION, lifespan=lifespan)
 
 ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
@@ -341,6 +341,7 @@ def index():
 def health():
     return {
         "ok": True,
+        "version": config.VERSION,
         "yolo_model": analyzer.model_name,
         "llm_backend": config.LLM_BACKEND,
         "ollama_available": llm_available(),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 
 
 class CameraAIEntity(CoordinatorEntity):
@@ -20,6 +20,6 @@ class CameraAIEntity(CoordinatorEntity):
             "name": "Camera AI",
             "manufacturer": "Camera AI",
             "model": "Reolink + YOLO + LLM",
-            "sw_version": "0.1.0",
+            "sw_version": VERSION,
             "configuration_url": coordinator.client.url,
         }

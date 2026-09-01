@@ -17,6 +17,8 @@ async function checkHealth() {
   try {
     const res = await fetch("/api/health");
     const data = await res.json();
+    const verEl = document.getElementById("ver");
+    if (verEl) verEl.textContent = data.version ? "v" + data.version : "";
     statusEl.classList.add("ok");
     const parts = [`YOLO ${data.yolo_model}`];
     if (data.llm_backend === "ollama") {

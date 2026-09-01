@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 
 
 async def async_setup_entry(
@@ -38,7 +38,7 @@ class CameraAICamera(CoordinatorEntity, Camera):
             "name": "Camera AI",
             "manufacturer": "Camera AI",
             "model": "Reolink + YOLO + LLM",
-            "sw_version": "0.1.0",
+            "sw_version": VERSION,
             "configuration_url": coordinator.client.url,
         }
 
