@@ -250,6 +250,10 @@ if (-not $NoTask) {
     & icacls $AppDir /grant "SYSTEM:(OI)(CI)M" *> $null
     try {
         Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Camera AI - headless server (0.0.0.0:8000)" -Force | Out-Null
+        # Stoppa ev. gammal serverprocess så den nya kan binda port 8000
+        Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe' OR Name='CameraAI.exe'" |
+            Where-Object { $_.CommandLine -match "camera_ai_app\.py|--server" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
         Start-ScheduledTask -TaskName $TaskName
         Write-Host "Aktiviteten '$TaskName' installerad och startad." -ForegroundColor Green
     } catch {
