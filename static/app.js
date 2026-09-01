@@ -168,6 +168,9 @@ async function saveSettings(auto) {
       ? "💾 Sparat"
       : `💾 Sparat: ${cfg.model} · conf ${cfg.conf} · sparas i .env`;
     saveMsg.classList.add("ok");
+    // Uppdatera toppstatus direkt så LLM i toppen ändras på en gång
+    checkHealth();
+    checkConfig();
   } catch (e) {
     saveMsg.textContent = "❌ Kunde inte spara: " + e.message;
   }
