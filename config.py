@@ -58,9 +58,9 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "moondream")
 LLM_DEFAULT_PROMPT = os.getenv(
     "LLM_PROMPT",
-    "Beskriv på svenska vad som syns på bilden. Räkna personer, fordon och "
-    "djur, nämn deras färger och andra tydliga detaljer. Svara med 1-2 korta "
-    "meningar.",
+    "Beskriv på svenska vad som händer på bilden med 1-2 naturliga meningar. "
+    "Nämn personer, fordon eller djur om de syns, men räkna inte upp och "
+    "upprepa inte ord.",
 )
 
 # Optional Reolink integration (used by reolink_motion.py)

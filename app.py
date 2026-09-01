@@ -76,6 +76,25 @@ def _is_prompt_echo(text: str, prompt: str) -> bool:
     return bool(p and (p in t or t in p))
 
 
+def _is_low_quality(text: str) -> bool:
+    """True om LLM-svaret är repetitivt/skräp, t.ex. 'Topshop 1. Topshop 2. …'."""
+    import re
+
+    if not text:
+        return True
+    words = re.findall(r"[a-zåäö0-9]+", text.lower())
+    if not words:
+        return True
+    if len(words) < 5:
+        return False
+    freq: dict = {}
+    for w in words:
+        freq[w] = freq.get(w, 0) + 1
+    top = max(freq.values())
+    # Ett enda ord som dominerar svaret -> repetitivt/skräp
+    return top > 5 or top >= len(words) // 2
+
+
 # .env-nycklar som ska sparas vid POST /api/config (så inställningarna överlever omstart)
 _ENV_KEYS = {
     "model": "YOLO_MODEL",
@@ -324,15 +343,17 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
                 upload_path, model=RUNTIME["llm_model"], prompt=prompt
             )
             response["description"] = desc
-            if desc and not _is_prompt_echo(desc, prompt):
+            if desc and not _is_prompt_echo(desc, prompt) and not _is_low_quality(desc):
                 # The LLM actually sees the scene -> it is authoritative
                 response["summary"] = desc
             elif desc:
-                # LLM:en ekade bara prompten -> behåll YOLO-sammanfattningen
+                # LLM:en ekade prompten eller gav ett repetitivt svar
+                # (t.ex. "Topshop 1. Topshop 2. ...") -> behåll YOLO-sammanfattningen
                 response["description"] = None
                 response["llm_error"] = (
-                    "Vision LLM ekade tillbaka prompten istället för att beskriva bilden "
-                    "- visar YOLO-sammanfattningen."
+                    "Vision LLM gav ett repetitivt/ekande svar (t.ex. upprepade ord) - "
+                    "visar YOLO-sammanfattningen. Prova en annan prompt eller en bättre "
+                    "modell (t.ex. llava) i inställningarna."
                 )
         except Exception as exc:  # noqa: BLE001 - degrade gracefully to YOLO-only
             response["llm_error"] = f"Vision LLM failed: {exc}"

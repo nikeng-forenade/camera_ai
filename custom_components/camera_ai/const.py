@@ -26,9 +26,9 @@ DEFAULT_USE_LLM = False
 DEFAULT_DEVICE = "cpu"
 DEFAULT_LLM_MODEL = "moondream"
 DEFAULT_PROMPT = (
-    "Beskriv på svenska vad som syns på bilden. Räkna personer, fordon och "
-    "djur, nämn deras färger och andra tydliga detaljer. Svara med 1-2 korta "
-    "meningar."
+    "Beskriv på svenska vad som händer på bilden med 1-2 naturliga meningar. "
+    "Nämn personer, fordon eller djur om de syns, men räkna inte upp och "
+    "upprepa inte ord."
 )
 DEVICE_OPTIONS = ["cpu", "openvino:GPU", "0"]
 DEVICE_LABELS = {
