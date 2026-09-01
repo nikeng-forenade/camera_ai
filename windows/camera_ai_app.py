@@ -79,8 +79,11 @@ def run_server() -> None:
 
         log.info("starting server on %s:%s", HOST, PORT)
         uvicorn.run(server.app, host=HOST, port=PORT, log_level="warning")
-    except Exception as exc:  # noqa: BLE001 - never die silently
+    except Exception as exc:  # noqa: BLE001 - aldrig dö tyst
         log.exception("server thread failed: %s", exc)
+        # Kasta vidare så --server-läget avslutas med felkod och Task Scheduler
+        # ser felet (icke-noll) samt kan starta om aktiviteten automatiskt.
+        raise
 
 
 def _show_window() -> None:
@@ -108,11 +111,14 @@ def _run_tray() -> None:
 
 
 def main() -> None:
-    # Headless server mode (--server, anvands av Windows-tjansten via NSSM):
-    # bara webbservern, inget fonster/tray/webblasare.
+    # Headless server mode (--server): bara webbservern, inget fönster/tray.
     if "--server" in sys.argv:
         log.info("headless server mode (--server)")
-        run_server()  # blockerar (uvicorn.run)
+        try:
+            run_server()  # blockerar (uvicorn.run)
+        except Exception:  # noqa: BLE001
+            log.exception("server stopped with error")
+            sys.exit(1)
         return
 
     global _window

@@ -31,6 +31,14 @@ $ErrorActionPreference = "Stop"
 $AppDir = Split-Path -Parent $PSScriptRoot
 $TaskName = "CameraAI"
 
+# Skydda mot att installera i hem-/skrivbordsmappen (orsakar SYSTEM-åtkomstproblem)
+$ProfileRoot = [Environment]::GetFolderPath("UserProfile")
+if ($AppDir -eq $ProfileRoot -or $AppDir -eq (Join-Path $ProfileRoot "Desktop")) {
+    Write-Host "ERROR: Installera Camera AI i en egen mapp, t.ex. C:\camera_ai - inte i hem-/skrivbordsmappen." -ForegroundColor Red
+    Write-Host "  Flytta install.ps1 till C:\camera_ai och kör den därifrån."
+    exit 1
+}
+
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "VARNING: Kör inte som administratör - aktivitetsinstallation och winget kan misslyckas." -ForegroundColor Yellow
