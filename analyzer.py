@@ -246,7 +246,29 @@ def active_ollama_model() -> str:
     return resolve_ollama_model(config.OLLAMA_MODEL)
 
 
-_LLM_KEEP_ALIVE: str | None = None  # None = anvand Ollamas default (5m)
+_LLM_KEEP_ALIVE: str | int | None = None  # None = använd Ollamas default (5m)
+
+
+def _ollama_keep_alive(value) -> str | int | None:
+    """Konvertera vår keep_alive till format Ollama accepterar.
+
+    Ollama tolkar:
+      - sträng som Go-duration (måste ha enhet, t.ex. "300s", "5m")
+      - nummer som nanosekunder (negativt = behåll laddad oändligt)
+    Därför: "-1" -> -1 (nummer), "0" -> 0 (nummer), "300" -> "300s".
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if s in ("-1", "-1.0"):
+        return -1
+    if s in ("0", "0.0"):
+        return 0
+    try:
+        n = int(float(s))
+        return f"{n}s"
+    except ValueError:
+        return s  # redan en Go-duration, t.ex. "5m"
 
 
 def set_llm_keep_alive(keep_alive: str | None, model: str | None = None) -> None:
@@ -255,12 +277,12 @@ def set_llm_keep_alive(keep_alive: str | None, model: str | None = None) -> None
     keep_alive="-1" laddar modellen och haller den kvar; "0" plockar ut den.
     """
     global _LLM_KEEP_ALIVE
-    _LLM_KEEP_ALIVE = keep_alive
-    if keep_alive is None:
+    _LLM_KEEP_ALIVE = _ollama_keep_alive(keep_alive)
+    if _LLM_KEEP_ALIVE is None:
         return
     model = resolve_ollama_model(model or config.OLLAMA_MODEL)
     try:
-        payload = {"model": model, "prompt": "ok", "stream": False, "keep_alive": keep_alive}
+        payload = {"model": model, "prompt": "ok", "stream": False, "keep_alive": _LLM_KEEP_ALIVE}
         req = urllib.request.Request(
             f"{config.OLLAMA_URL}/api/generate",
             data=json.dumps(payload).encode("utf-8"),
