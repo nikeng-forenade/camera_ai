@@ -64,6 +64,18 @@ class _ConfigIn(BaseModel):
     keep_alive: str | int | None = None
 
 
+def _is_prompt_echo(text: str, prompt: str) -> bool:
+    """True om vision-LLM:en bara upprepar prompten istället för att beskriva
+    bilden (moondream gör ibland det när prompten innehåller exempel)."""
+    import re
+
+    if not text or not prompt:
+        return False
+    norm = lambda s: re.sub(r"[^a-zåäö0-9 ]", " ", s.lower())
+    t, p = norm(text), norm(prompt)
+    return bool(p and (p in t or t in p))
+
+
 def _on_ha_alarm(state: str) -> None:
     """Larm skarpt -> ladda LLM (klar direkt), larm av -> plocka ut den."""
     armed = state in ("armed_away", "armed_home", "armed_night", "armed_custom_bypass", "arming", "pending")
@@ -271,9 +283,16 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
                 upload_path, model=RUNTIME["llm_model"], prompt=prompt
             )
             response["description"] = desc
-            if desc:
+            if desc and not _is_prompt_echo(desc, prompt):
                 # The LLM actually sees the scene -> it is authoritative
                 response["summary"] = desc
+            elif desc:
+                # LLM:en ekade bara prompten -> behåll YOLO-sammanfattningen
+                response["description"] = None
+                response["llm_error"] = (
+                    "Vision LLM ekade tillbaka prompten istället för att beskriva bilden "
+                    "- visar YOLO-sammanfattningen."
+                )
         except Exception as exc:  # noqa: BLE001 - degrade gracefully to YOLO-only
             response["llm_error"] = f"Vision LLM failed: {exc}"
 

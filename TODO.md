@@ -1,8 +1,8 @@
 # Att göra
 
-- [ ] **Bättre moondream-prompt** — ge LLM:en en bättre prompt så vi får ut mer
-      av vad som finns på bilen (t.ex. märke, modell, färg, skick, detaljer
-      som syns i bilden).
+- [x] **Bättre moondream-prompt** — ny standardprompt (utan exempel som
+      LLM:en ekar) + skydd som behåller YOLO-sammanfattningen om LLM:en bara
+      upprepar prompten.
 
 - [ ] **Bättre HA add-in** — som enbart skickar bilden via HA-automation och
       sedan får tillbaka svaret.
