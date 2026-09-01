@@ -14,17 +14,19 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
-from .client import CameraAIClient
+from .client import CameraAIClient, server_payload
 from .const import (
     CONF_CAMERA,
     CONF_CONFIDENCE,
     CONF_DEVICE,
+    CONF_KEEP_ALIVE,
     CONF_LLM_MODEL,
     CONF_MODEL,
     CONF_PROMPT,
     CONF_USE_LLM,
     DEFAULT_CONFIDENCE,
     DEFAULT_DEVICE,
+    DEFAULT_KEEP_ALIVE,
     DEFAULT_LLM_MODEL,
     DEFAULT_MODEL,
     DEFAULT_MODELS,
@@ -33,6 +35,8 @@ from .const import (
     DEVICE_LABELS,
     DEVICE_OPTIONS,
     DOMAIN,
+    KEEP_ALIVE_LABELS,
+    KEEP_ALIVE_OPTIONS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,20 +52,7 @@ async def _apply_server_config(url: str, settings: dict) -> None:
     """Push runtime settings to the server so they take effect immediately."""
     async with httpx.AsyncClient(timeout=15) as session:
         client = CameraAIClient(url, session)
-        await client.set_config(
-            {
-                key: settings[key]
-                for key in (
-                    CONF_MODEL,
-                    CONF_CONFIDENCE,
-                    CONF_DEVICE,
-                    CONF_USE_LLM,
-                    CONF_LLM_MODEL,
-                    CONF_PROMPT,
-                )
-                if key in settings
-            }
-        )
+        await client.set_config(server_payload(settings))
 
 
 def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -110,6 +101,19 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             vol.Optional(
                 CONF_PROMPT, default=d.get(CONF_PROMPT, DEFAULT_PROMPT)
             ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Optional(
+                CONF_KEEP_ALIVE, default=d.get(CONF_KEEP_ALIVE, DEFAULT_KEEP_ALIVE)
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value=v, label=KEEP_ALIVE_LABELS.get(v, v)
+                        )
+                        for v in KEEP_ALIVE_OPTIONS
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
             vol.Optional(
                 CONF_CAMERA, default=d.get(CONF_CAMERA, "")
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="camera")),

@@ -74,9 +74,23 @@ Resultat:
 
 ### Uppdatera
 
+**Server-koden** (hämtar senaste från GitHub + installerar ev. nya beroenden,
+stoppar den körande appen):
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File windows\update.ps1
 ```
+
+Starta sedan om aktiviteten/tjänsten:
+```powershell
+windows\install-task.ps1 -Stop
+windows\install-task.ps1 -Start
+```
+
+**HA-komponenten** (HACS): **HACS → Camera AI → ⋮ → Re-download** (välj
+"Redownload" för att hämta senaste) → **Inställningar → Enheter & tjänster →
+Camera AI → ⋮ → Ladda om**. Om nya entiteter inte dyker upp, starta om Home
+Assistant.
 
 ## Konfiguration
 
@@ -138,22 +152,93 @@ HA får `sensor.camera_ai_detection` och eventet `camera_ai_result`
 
 Installera via HACS: **Settings → Custom repositories** → lägg till
 `https://github.com/nikeng-forenade/camera_ai` (kategori **Integration**).
-Lägg sedan till integrationen med server-URL `http://<server-ip>:8000` och välj
-YOLO-modell, konfidens och om LLM ska användas direkt från HA.
+Lägg sedan till integrationen med server-URL `http://<server-ip>:8000`.
 
-Exempelautomation (rörelse → analys):
+När integrationen är tillagd kan du under **Integration → Camera AI → Alternativ**
+ändra **alla** runtime-inställningar direkt — de skickas till servern och
+tillämpas omedelbart (ingen omstart krävs):
+
+- YOLO-modell och konfidens
+- Enhet (`cpu` / `openvino:GPU` / `0`)
+- Använd LLM-beskrivning + LLM-modell (t.ex. `moondream`)
+- **LLM-prompt** (fritext)
+- **Håll LLM i minnet** (`keep_alive`): `-1` = behåll laddad (snabbast), `0` =
+  ladda ur direkt (sparar VRAM), eller antal sekunder
+- Kamera-entitet för `analyze_camera`
+
+Alla värden syns även i sensorn **sensor.camera_ai_runtime_config** (modell,
+konfidens, enhet, prompt, keep_alive, ollama-tillgänglighet).
+
+### Ändra inställningar från en automation
+
+Anropa tjänsten `camera_ai.set_config` med valfria fält — t.ex. hålla LLM i
+minnet när du är borta:
+
 ```yaml
-alias: "Camera AI — analysera på rörelse"
+alias: "Camera AI — behåll LLM i minne när larmet är skarpt"
 trigger:
   platform: state
-  entity_id: binary_sensor.reolink_front_motion
-  to: "on"
+  entity_id: alarm_control_panel.house
+  to: "armed_away"
 action:
+  - service: camera_ai.set_config
+    data:
+      keep_alive: "-1"   # behåll i minne
+  - service: camera_ai.set_config
+    data:
+      prompt: >-
+        Du är en säkerhetskamera. Beskriv på svenska vad du ser med färg,
+        märke och antal, t.ex. 'En silverfärgad Volvo V70 och 1 person.'
+```
+
+### Automation som "LLM Vision" — men skickad till din server
+
+`camera_ai.analyze_camera` returnerar analysen så att du kan bygga exakt
+samma flöde som Home Assistants "LLM Vision"-block, fast mot din Camera AI-
+server: fotografera → analysera → hoppa av om inget intressant → skicka
+foto/meddelande till Telegram.
+
+```yaml
+alias: "Camera AI — rörelse → analys → Telegram"
+trigger:
+  - platform: state
+    entity_id: binary_sensor.garden_person
+    to: "on"
+  - platform: state
+    entity_id: binary_sensor.garden_vehicle
+    to: "on"
+action:
+  # 1. Fotografera och analysera via Camera AI-servern
   - service: camera_ai.analyze_camera
     data:
-      camera_entity: camera.reolink_front
-      model: yolo11s.pt
+      camera_entity: camera.garden
+    response_variable: analysis
+
+  # 2. Hoppa av om inget av intresse hittades (person/bil/djur)
+  - if:
+      - condition: template
+        value_template: "{{ (analysis.counts.people + analysis.counts.vehicles + analysis.counts.animals) == 0 }}"
+    then:
+      - stop: "Inget intressant"
+    else:
+      # 3. Skicka foto + meddelande till Telegram
+      - service: telegram_bot.send_photo
+        data:
+          url: "{{ analysis.annotated_url }}"
+          caption: >-
+            Detektion på garden! {{ analysis.summary }}
+      - service: telegram_bot.send_message
+        data:
+          message: >-
+            {{ analysis.summary }}
+            ({{ analysis.counts.people }} personer, {{ analysis.counts.vehicles }} bilar)
+mode: single
 ```
+
+Resultatet från `analyze_camera` / `analyze_url` innehåller: `detections`,
+`counts` (`people`/`vehicles`/`animals`/`colors`), `summary`, `description`,
+`model`, `inference_ms` och `annotated_url` (absolut URL till den annoterade
+bilden på servern, användbar direkt i t.ex. Telegram).
 
 ## API
 

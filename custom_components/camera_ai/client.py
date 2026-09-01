@@ -8,6 +8,29 @@ from pathlib import Path
 import httpx
 
 
+def server_payload(settings: dict) -> dict:
+    """Map integration option keys to the server's /api/config field names.
+
+    The HA integration uses ``confidence`` for the threshold while the server
+    expects ``conf``; everything else matches 1:1.
+    """
+    mapping = {
+        "model": "model",
+        "confidence": "conf",
+        "device": "device",
+        "use_llm": "use_llm",
+        "llm_model": "llm_model",
+        "prompt": "prompt",
+        "keep_alive": "keep_alive",
+    }
+    payload = {}
+    for integration_key, server_key in mapping.items():
+        if integration_key in settings and settings[integration_key] is not None:
+            value = settings[integration_key]
+            payload[server_key] = float(value) if server_key == "conf" else value
+    return payload
+
+
 class CameraAIClient:
     """Thin async client for the Camera AI server."""
 
@@ -20,12 +43,19 @@ class CameraAIClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_config(self) -> dict:
+        """Current server runtime settings (model, conf, device, LLM, keep_alive)."""
+        resp = await self._session.get(f"{self.url}/api/config", timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+
     async def analyze_file(
         self,
         image_path: Path,
         model: str,
         conf: float,
         use_llm: bool = False,
+        prompt: str | None = None,
     ) -> dict:
         payload = await asyncio.to_thread(image_path.read_bytes)
         files = {"file": (image_path.name, payload, "image/jpeg")}
@@ -35,6 +65,8 @@ class CameraAIClient:
             "use_llm": str(use_llm).lower(),
             "use_ha": "false",
         }
+        if prompt:
+            data["prompt"] = prompt
         resp = await self._session.post(
             f"{self.url}/api/analyze", data=data, files=files, timeout=120
         )
@@ -47,6 +79,7 @@ class CameraAIClient:
         model: str,
         conf: float,
         use_llm: bool = False,
+        prompt: str | None = None,
     ) -> dict:
         data = {
             "url": url,
@@ -55,6 +88,8 @@ class CameraAIClient:
             "use_llm": str(use_llm).lower(),
             "use_ha": "false",
         }
+        if prompt:
+            data["prompt"] = prompt
         resp = await self._session.post(
             f"{self.url}/api/analyze-url", data=data, timeout=120
         )

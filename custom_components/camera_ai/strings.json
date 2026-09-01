@@ -12,6 +12,7 @@
           "use_llm": "Use LLM description",
           "llm_model": "LLM model (Ollama)",
           "prompt": "LLM prompt",
+          "keep_alive": "Keep LLM in memory",
           "camera_entity": "Camera entity"
         }
       }
@@ -36,6 +37,7 @@
           "use_llm": "Use LLM description",
           "llm_model": "LLM model (Ollama)",
           "prompt": "LLM prompt",
+          "keep_alive": "Keep LLM in memory",
           "camera_entity": "Camera entity"
         }
       }

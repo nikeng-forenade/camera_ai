@@ -29,3 +29,37 @@ action:
     data:
       url: "http://<HA-IP>:8123/local/snapshots/latest.jpg"
 mode: single
+
+# ---------------------------------------------------------------------------
+# VERSION 2 (rekommenderas): "LLM Vision"-flöde mot Camera AI-servern.
+# camera_ai.analyze_camera fotograferar + analyserar och returnerar resultatet
+# via response_variable. Hoppar av om inget intressant, annars Telegram.
+# Kräver: telegram_bot-konfiguration och att integrationen är tillagd.
+# ---------------------------------------------------------------------------
+alias: "Camera AI — Rörelse → analys → Telegram"
+trigger:
+  - platform: state
+    entity_id: binary_sensor.garden_person
+    to: "on"
+  - platform: state
+    entity_id: binary_sensor.garden_vehicle
+    to: "on"
+action:
+  - service: camera_ai.analyze_camera
+    data:
+      camera_entity: camera.garden
+    response_variable: analysis
+  - if:
+      - condition: template
+        value_template: "{{ (analysis.counts.people + analysis.counts.vehicles + analysis.counts.animals) == 0 }}"
+    then:
+      - stop: "Inget intressant"
+    else:
+      - service: telegram_bot.send_photo
+        data:
+          url: "{{ analysis.annotated_url }}"
+          caption: "Detektion på garden! {{ analysis.summary }}"
+      - service: telegram_bot.send_message
+        data:
+          message: "{{ analysis.summary }} ({{ analysis.counts.people }} pers, {{ analysis.counts.vehicles }} bilar)"
+mode: single

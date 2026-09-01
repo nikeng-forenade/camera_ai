@@ -9,6 +9,7 @@ CONF_CAMERA = "camera_entity"
 CONF_DEVICE = "device"
 CONF_LLM_MODEL = "llm_model"
 CONF_PROMPT = "prompt"
+CONF_KEEP_ALIVE = "keep_alive"
 
 PLATFORMS = ["sensor", "binary_sensor", "camera"]
 
@@ -34,6 +35,18 @@ DEVICE_LABELS = {
     "cpu": "CPU",
     "openvino:GPU": "Intel iGPU (OpenVINO)",
     "0": "NVIDIA CUDA (device 0)",
+}
+
+# Hur länge vision-LLM:en ska ligga kvar i minnet (keep_alive till Ollama)
+DEFAULT_KEEP_ALIVE = "-1"  # behåll i minne (snabbast)
+KEEP_ALIVE_OPTIONS = ["-1", "0", "300", "600", "1800", "3600"]
+KEEP_ALIVE_LABELS = {
+    "-1": "Behåll i minne (snabbast, kräver VRAM)",
+    "0": "Ladda ur direkt (spara VRAM)",
+    "300": "5 min",
+    "600": "10 min",
+    "1800": "30 min",
+    "3600": "60 min",
 }
 
 EVENT_RESULT = "camera_ai_result"

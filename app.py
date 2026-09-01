@@ -26,6 +26,7 @@ from analyzer import (
     categorize_detections,
     describe_with_ollama,
     llm_available,
+    set_llm_keep_alive,
     summarize_detections,
 )
 from ha_client import HAClient
@@ -41,6 +42,9 @@ RUNTIME = {
     "use_llm": False,
     "llm_model": config.OLLAMA_MODEL,
     "prompt": config.LLM_DEFAULT_PROMPT,
+    # LLM i minne: None = Ollamas default (5 min), "-1" = behåll laddad,
+    # "0" = ladda ur direkt, annars antal sekunder.
+    "keep_alive": None,
 }
 
 # In-memory analysis history for stats / web GUI (keeps the last N results)
@@ -57,6 +61,7 @@ class _ConfigIn(BaseModel):
     use_llm: bool | None = None
     llm_model: str | None = None
     prompt: str | None = None
+    keep_alive: str | int | None = None
 
 
 def _on_ha_alarm(state: str) -> None:
@@ -65,7 +70,7 @@ def _on_ha_alarm(state: str) -> None:
     keep_alive = config.OLLAMA_KEEP_ALIVE_ARMED if armed else config.OLLAMA_KEEP_ALIVE_DISARMED
     print(f"[ha] alarm state '{state}' -> ollama keep_alive {keep_alive}")
     try:
-        analyzer.set_llm_keep_alive(keep_alive)
+        set_llm_keep_alive(keep_alive)
     except Exception as exc:  # noqa: BLE001 - aldrig krascha servern
         print(f"[ha] set_llm_keep_alive failed: {exc}")
 
@@ -97,6 +102,12 @@ def set_runtime_config(payload: _ConfigIn):
     analyzer.configure(
         model=RUNTIME["model"], conf=RUNTIME["conf"], device=RUNTIME["device"]
     )
+    # Applicera LLM keep_alive direkt (ladda / plocka ut modellen)
+    if changes.get("keep_alive") is not None:
+        try:
+            set_llm_keep_alive(str(changes["keep_alive"]))
+        except Exception as exc:  # noqa: BLE001 - icke-kritiskt, returnera ändå
+            print(f"[config] keep_alive apply failed: {exc}")
     return {**RUNTIME}
 
 

@@ -20,6 +20,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             CameraAIStatusSensor(coordinator, entry),
+            CameraAIRuntimeConfigSensor(coordinator, entry),
             CameraAILastDetectionSensor(coordinator, entry),
             CameraAIDescriptionSensor(coordinator, entry),
             CameraAIPeopleSensor(coordinator, entry),
@@ -65,7 +66,35 @@ class CameraAIStatusSensor(CameraAIEntity, SensorEntity):
         return True
 
 
-class CameraAILastDetectionSensor(CameraAIEntity, SensorEntity):
+class CameraAIRuntimeConfigSensor(CameraAIEntity, SensorEntity):
+    """Current server runtime settings (from /api/config)."""
+
+    _attr_icon = "mdi:tune-variant"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_runtime_config"
+        self._attr_name = "Runtime config"
+
+    @property
+    def native_value(self) -> str:
+        cfg = (self.coordinator.data or {}).get("config") or {}
+        return cfg.get("model", "unknown")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        cfg = (self.coordinator.data or {}).get("config") or {}
+        keep_alive = cfg.get("keep_alive")
+        return {
+            "model": cfg.get("model"),
+            "confidence": cfg.get("conf"),
+            "device": cfg.get("device"),
+            "use_llm": cfg.get("use_llm"),
+            "llm_model": cfg.get("llm_model"),
+            "prompt": cfg.get("prompt"),
+            "keep_alive": keep_alive if keep_alive is not None else "default (5 min)",
+            "ollama_available": cfg.get("ollama_available"),
+        }
     """Most recent detection classes + confidence."""
 
     _attr_icon = "mdi:eye-outline"
