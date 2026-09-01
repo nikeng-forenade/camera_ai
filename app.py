@@ -313,9 +313,14 @@ def ollama_pull_status():
 @app.get("/api/ollama/models")
 def ollama_models_api():
     models = ollama_models()
-    names = sorted(m.get("name", "") for m in models)
+    # Endast vision-kapabla modeller i LLM-rullgardinen — annars kan man välja
+    # en textmodell (eller korrupt vision-modell) som ger 404/500 och gör att
+    # en annan modell laddas istället.
+    vision = [m for m in models if "vision" in (m.get("capabilities") or [])]
+    usable = vision or models  # fallback: visa alla om ingen har vision-metadata
+    names = sorted(m.get("name", "") for m in usable)
     sizes = {}
-    for m in models:
+    for m in usable:
         name = m.get("name", "")
         size = m.get("size") or 0
         sizes[name] = round(size / (1024 ** 3), 1)  # bytes -> GB
