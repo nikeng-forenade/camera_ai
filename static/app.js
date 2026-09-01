@@ -65,6 +65,46 @@ async function checkHa() {
 }
 checkHa();
 
+/* ---- LLM-minne status (keep_alive) ---- */
+const llmMemStatusEl = document.getElementById("llmMemStatus");
+
+async function checkConfig() {
+  try {
+    const res = await fetch("/api/config");
+    const data = await res.json();
+    llmMemStatusEl.classList.remove("ok", "warn", "err");
+    if (!data.ollama_available) {
+      llmMemStatusEl.classList.add("warn");
+      llmMemStatusEl.innerHTML = `<span class="dot"></span> LLM offline`;
+      return;
+    }
+    const ka = data.keep_alive;
+    let label;
+    let cls = "warn";
+    if (ka === "-1" || ka === -1) {
+      label = "LLM i minne (alltid)";
+      cls = "ok";
+    } else if (ka === "0" || ka === 0) {
+      label = "LLM urladdad";
+    } else if (ka === null || ka === undefined || ka === "") {
+      label = "LLM: default (5 min)";
+    } else {
+      const secs = parseInt(ka, 10);
+      label = `LLM i minne: ${Math.round(secs / 60)} min`;
+      cls = "ok";
+    }
+    llmMemStatusEl.classList.add(cls);
+    llmMemStatusEl.innerHTML = `<span class="dot"></span> ${label}`;
+  } catch {
+    llmMemStatusEl.classList.add("err");
+    llmMemStatusEl.innerHTML = `<span class="dot"></span> LLM-minne ?`;
+  }
+}
+checkConfig();
+
+/* Uppdatera statusarna var 15:e sekund */
+setInterval(() => { checkHealth(); checkHa(); checkConfig(); }, 15000);
+
 /* ---- Upload handling ---- */
 dropzone.addEventListener("click", () => fileInput.click());
 dropzone.addEventListener("keydown", (e) => {
