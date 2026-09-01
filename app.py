@@ -79,23 +79,35 @@ def _is_prompt_echo(text: str, prompt: str) -> bool:
     return bool(p and (p in t or t in p))
 
 
+_STOPWORDS = frozenset({
+    "en", "ett", "och", "att", "med", "på", "i", "för", "av", "som", "är",
+    "det", "den", "de", "till", "har", "man", "men", "inte", "eller", "om",
+    "vid", "från", "under", "över", "detta", "the", "a", "an", "and", "with",
+    "of", "in", "on", "for", "to", "is", "are",
+})
+
+
 def _is_low_quality(text: str) -> bool:
-    """True om LLM-svaret är repetitivt/skräp, t.ex. 'Topshop 1. Topshop 2. …'."""
+    """True om LLM-svaret är repetitivt/skräp, t.ex. 'Topshop 1. Topshop 2. …'.
+
+    Stoppord (och, en, på, the, …) räknas inte - annars fälls naturliga svar
+    felaktigt. Ett innehållsord som dominerar (t.ex. "topshop") = skräp.
+    """
     import re
 
     if not text:
         return True
-    words = re.findall(r"[a-zåäö0-9]+", text.lower())
+    words = [w for w in re.findall(r"[a-zåäö0-9]+", text.lower()) if w not in _STOPWORDS]
     if not words:
-        return True
-    if len(words) < 5:
+        return False
+    if len(words) < 3:
         return False
     freq: dict = {}
     for w in words:
         freq[w] = freq.get(w, 0) + 1
     top = max(freq.values())
-    # Ett enda ord som dominerar svaret -> repetitivt/skräp
-    return top > 5 or top >= len(words) // 2
+    # Ett innehållsord som dominerar svaret -> repetitivt/skräp
+    return top > 4 or top >= len(words) // 2
 
 
 # .env-nycklar som ska sparas vid POST /api/config (så inställningarna överlever omstart)
