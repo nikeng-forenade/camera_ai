@@ -229,12 +229,15 @@ def ollama_models_error() -> str | None:
 def resolve_ollama_model(preferred: str) -> str:
     """Pick a vision-capable Ollama model.
 
-    Returns the preferred model if installed, otherwise the first installed
-    model that supports 'vision' (e.g. qwen3.6, llava, llama3.2-vision).
+    Returns the preferred model if installed (matchar även 'moondream' mot
+    'moondream:latest'), otherwise the first installed model that supports
+    'vision' (e.g. qwen3.6, llava, llama3.2-vision).
     """
+    base = (preferred or "").split(":")[0]
     for m in ollama_models():
-        if m.get("name") == preferred:
-            return preferred
+        name = m.get("name", "")
+        if name == preferred or name.split(":")[0] == base:
+            return preferred or name
     for m in ollama_models():
         if "vision" in (m.get("capabilities") or []):
             return m["name"]
