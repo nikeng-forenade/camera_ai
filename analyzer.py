@@ -301,10 +301,17 @@ def describe_with_ollama(image_path: Path, model: str | None = None, prompt: str
         with urllib.request.urlopen(req, timeout=180) as resp:  # noqa: S310 - local Ollama
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        if exc.code == 404:
+        detail = ""
+        try:
+            body = exc.read().decode("utf-8", "replace")
+            detail = body[:200].strip()
+        except Exception:  # noqa: BLE001 - bästa möjliga
+            pass
+        if exc.code in (400, 404):
             raise RuntimeError(
-                f"No vision model available in Ollama. Pull one with: "
-                f"`ollama pull moondream` (small) or `ollama pull llava`"
+                f"Vision LLM error ({exc.code}): {detail or 'Bad Request'}. "
+                "Kontrollera att modellen är nedladdad (ollama list) och att "
+                "den stödjer bilder (vision)."
             ) from exc
         raise
     except urllib.error.URLError as exc:
