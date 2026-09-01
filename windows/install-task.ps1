@@ -112,12 +112,13 @@ if ($RunAsUser) {
     }
 }
 
-$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
 if (-not $NoAutoRestart) {
-    $settings.RestartCount = 3
-    $settings.RestartInterval = (New-TimeSpan -Minutes 1)
+    # Obs: RestartCount/RestartInterval MÅSTE skickas till New-ScheduledTaskSettingsSet,
+    # annars serialiseras intervallet felaktigt (00:01:00 istället för PT1M) och Task Scheduler avvisar XML:n.
+    $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     Write-Host "Automatisk omstart vid fel: 3 försök / 1 min."
 } else {
+    $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
     Write-Host "Automatisk omstart vid fel: av."
 }
 

@@ -215,9 +215,9 @@ if (-not $NoTask) {
     $action = New-ScheduledTaskAction -Execute $PyW -Argument "windows\camera_ai_app.py --server" -WorkingDirectory $AppDir
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
-    $settings.RestartCount = 3
-    $settings.RestartInterval = (New-TimeSpan -Minutes 1)
+    # Obs: RestartCount/RestartInterval MÅSTE skickas till New-ScheduledTaskSettingsSet,
+    # annars serialiseras intervallet felaktigt (00:01:00 istället för PT1M) och Task Scheduler avvisar XML:n.
+    $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     # Säkerställ att SYSTEM kan skriva i app-katalogen
     & icacls $AppDir /grant "SYSTEM:(OI)(CI)M" *> $null
     try {
