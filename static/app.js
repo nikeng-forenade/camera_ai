@@ -119,6 +119,8 @@ async function loadSettings() {
       confValue.textContent = parseFloat(cfg.conf).toFixed(2);
     }
     if (cfg.prompt) document.getElementById("prompt").value = cfg.prompt;
+    const kaEl = document.getElementById("keepAlive");
+    if (kaEl && cfg.keep_alive != null && cfg.keep_alive !== "") kaEl.value = String(cfg.keep_alive);
   } catch { /* server offline - behåll GUI:s standardvärden */ }
 }
 
@@ -127,6 +129,7 @@ async function saveSettings(auto) {
     model: document.getElementById("model").value,
     conf: parseFloat(confInput.value),
     prompt: document.getElementById("prompt").value,
+    keep_alive: document.getElementById("keepAlive").value,
   };
   if (!auto) saveMsg.textContent = "Sparar …";
   saveMsg.classList.remove("ok");
@@ -157,6 +160,7 @@ function scheduleSave() {
 }
 document.getElementById("prompt").addEventListener("input", scheduleSave);
 document.getElementById("model").addEventListener("change", scheduleSave);
+document.getElementById("keepAlive").addEventListener("change", scheduleSave);
 confInput.addEventListener("input", scheduleSave);
 
 loadSettings();

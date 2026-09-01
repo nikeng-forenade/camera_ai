@@ -47,7 +47,7 @@ RUNTIME = {
     "prompt": config.LLM_DEFAULT_PROMPT,
     # LLM i minne: None = Ollamas default (5 min), "-1" = behåll laddad,
     # "0" = ladda ur direkt, annars antal sekunder.
-    "keep_alive": None,
+    "keep_alive": config.OLLAMA_KEEP_ALIVE or None,
 }
 
 # In-memory analysis history for stats / web GUI (keeps the last N results)
@@ -105,6 +105,7 @@ _ENV_KEYS = {
     "device": "YOLO_DEVICE",
     "llm_model": "OLLAMA_MODEL",
     "prompt": "LLM_PROMPT",
+    "keep_alive": "OLLAMA_KEEP_ALIVE",
 }
 
 
@@ -156,6 +157,12 @@ async def lifespan(_: FastAPI):
         ha.connect()
     except Exception as exc:  # noqa: BLE001 - never crash the server on HA failure
         print(f"[ha] startup connect failed: {exc}")
+    # Applicera ev. sparad keep_alive från .env så GUI/HA-inställningen gäller
+    if RUNTIME.get("keep_alive") is not None:
+        try:
+            set_llm_keep_alive(str(RUNTIME["keep_alive"]))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[config] startup keep_alive apply failed: {exc}")
     yield
 
 

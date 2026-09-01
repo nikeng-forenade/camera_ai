@@ -56,6 +56,9 @@ YOLO_DEVICE = os.getenv("YOLO_DEVICE", "cpu")
 LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama").strip().lower()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "moondream")
+# Hur länge vision-LLM:en ska ligga kvar i minnet (-1 = alltid, 0 = ladda ur,
+# annars sekunder). Sätts via GUI/HA och sparas till .env.
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "")
 LLM_DEFAULT_PROMPT = os.getenv(
     "LLM_PROMPT",
     "Beskriv på svenska vad som händer på bilden med 1-2 naturliga meningar. "
