@@ -1,4 +1,4 @@
-# Camera AI - setup Ollama for Intel Arc B50 Pro (Vulkan) + pull moondream.
+﻿# Camera AI - setup Ollama for Intel Arc B50 Pro (Vulkan) + pull moondream.
 # Kor som admin (satter OLLAMA_VULKAN=1 globalt):
 #   powershell -ExecutionPolicy Bypass -File windows\setup-ollama.ps1
 $ErrorActionPreference = "Stop"

@@ -1,4 +1,4 @@
-# Camera AI - installera som schemalagd aktivitet (Task Scheduler), headless server.
+﻿# Camera AI - installera som schemalagd aktivitet (Task Scheduler), headless server.
 #
 # Enklaste sättet att köra Camera AI dygnet runt på en server utan extra
 # beroenden (NSSM behövs inte). Registrerar aktiviteten "CameraAI" som

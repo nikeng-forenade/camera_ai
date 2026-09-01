@@ -1,4 +1,4 @@
-# Camera AI - total installation och uppdatering (allt i ett).
+﻿# Camera AI - total installation och uppdatering (allt i ett).
 #
 # Första körningen installerar allt som behövs på servern:
 #   * hämtar senaste koden från GitHub som ZIP (ingen git krävs)
@@ -58,7 +58,7 @@ if (-not $SkipUpdate) {
     } catch {
         & curl.exe -L -o $Zip $ZipUrl   # fallback (finns på Windows 10+)
     }
-    if (Test-Path $Zip -and (Get-Item $Zip).Length -ge 1000) {
+    if ((Test-Path $Zip) -and ((Get-Item $Zip).Length -ge 1000)) {
         Expand-Archive -Path $Zip -DestinationPath $Staging -Force
         $RepoRoot = Get-ChildItem $Staging -Directory | Select-Object -First 1
         if ($RepoRoot) {

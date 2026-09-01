@@ -1,4 +1,4 @@
-# Camera AI - Windows-app setup (Intel Arc B50 Pro + Vulkan + GUI)
+﻿# Camera AI - Windows-app setup (Intel Arc B50 Pro + Vulkan + GUI)
 # Kör en gång efter clone. Kräver Python 3.12 (x64) och Git:
 #   powershell -ExecutionPolicy Bypass -File windows\setup.ps1
 param(

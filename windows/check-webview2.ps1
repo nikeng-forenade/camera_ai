@@ -1,4 +1,4 @@
-# Kolla om Microsoft Edge WebView2 Runtime finns (krav for pywebview)
+﻿# Kolla om Microsoft Edge WebView2 Runtime finns (krav for pywebview)
 $out = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\webview2_check.txt"))
 "" | Set-Content -Path $out -Encoding UTF8
 function Log($m) { $m | Add-Content -Path $out -Encoding UTF8 }

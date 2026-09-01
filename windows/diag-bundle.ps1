@@ -1,4 +1,4 @@
-# Camera AI - kontrollera vad som paketerades i dist\CameraAI\_internal
+﻿# Camera AI - kontrollera vad som paketerades i dist\CameraAI\_internal
 $out = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\bundle_check.txt"))
 "" | Set-Content -Path $out -Encoding UTF8
 function Log($m) { $m | Add-Content -Path $out -Encoding UTF8 }

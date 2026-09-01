@@ -1,4 +1,4 @@
-# Camera AI - diagnostik av den byggda EXE:n. Skriver resultat till diag_out.txt
+﻿# Camera AI - diagnostik av den byggda EXE:n. Skriver resultat till diag_out.txt
 #   powershell -NoProfile -ExecutionPolicy Bypass -File windows\diag-exe.ps1
 $ErrorActionPreference = "Stop"
 $out = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\diag_out.txt"))

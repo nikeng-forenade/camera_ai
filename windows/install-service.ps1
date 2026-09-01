@@ -1,4 +1,4 @@
-# Camera AI - kör som Windows-tjänst via NSSM (valfritt, headless).
+﻿# Camera AI - kör som Windows-tjänst via NSSM (valfritt, headless).
 # 1) Ladda ner https://nssm.cc (nssm.exe) och lägg den i PATH eller i denna mapp.
 # 2) Kör som admin:
 #    powershell -ExecutionPolicy Bypass -File windows\install-service.ps1

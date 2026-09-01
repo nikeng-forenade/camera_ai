@@ -1,4 +1,4 @@
-# Camera AI - smoke test av den byggda EXE:n.
+﻿# Camera AI - smoke test av den byggda EXE:n.
 #   powershell -ExecutionPolicy Bypass -File windows\test-exe.ps1
 param(
     [string]$Exe = ""

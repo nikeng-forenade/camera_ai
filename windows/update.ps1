@@ -1,4 +1,4 @@
-# Camera AI - Windows-app update (utan git).
+﻿# Camera AI - Windows-app update (utan git).
 # Laddar ner senaste koden som ZIP direkt från GitHub (ingen git krävs),
 # installerar ev. nya beroenden och startar om aktiviteten/tjänsten. Lokala
 # filer (.env, uploads/, media/, .venv, loggar och exporterade

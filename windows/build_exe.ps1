@@ -1,4 +1,4 @@
-# Camera AI - bygg en fristående Windows-exe (PyInstaller).
+﻿# Camera AI - bygg en fristående Windows-exe (PyInstaller).
 # Kör på Windows med Python 3.12 (repo klonat, setup.ps1 kört).
 # Bygget tar en stund och ger ca 1-2 GB.
 #
