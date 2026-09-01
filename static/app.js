@@ -125,13 +125,18 @@ async function loadSettings() {
   } catch { /* server offline - behåll GUI:s standardvärden */ }
 }
 
-/* Fyll LLM-rullgardinen med nedladdade Ollama-modeller */
+/* Fyll LLM-rullgardinen med nedladdade Ollama-modeller och välj den aktiva */
 async function loadLlmModelOptions() {
   try {
-    const res = await fetch("/api/ollama/models");
-    const data = await res.json();
+    const [resModels, resCfg] = await Promise.all([
+      fetch("/api/ollama/models"),
+      fetch("/api/config"),
+    ]);
+    const data = await resModels.json();
+    const cfg = await resCfg.json();
     const sel = document.getElementById("llmModel");
-    const current = sel.value || "moondream";
+    // Den konfigurerade modellen (från servern) ska alltid visas/varas vald
+    const current = String(cfg.llm_model || sel.value || "moondream");
     const models = [...new Set((data.models || []).map((m) => m.replace(/:latest$/, "")))];
     if (!models.includes(current)) models.unshift(current);
     sel.innerHTML = models.map((m) => `<option value="${m}">${m}</option>`).join("");
