@@ -206,6 +206,7 @@ async function saveSettings(auto) {
     // Uppdatera toppstatus direkt så LLM i toppen ändras på en gång
     checkHealth();
     checkConfig();
+    pollYoloDownload();
   } catch (e) {
     saveMsg.textContent = "❌ Kunde inte spara: " + e.message;
   }
@@ -230,6 +231,58 @@ confInput.addEventListener("input", scheduleSave);
 
 loadSettings();
 loadLlmModelOptions();
+
+/* ---- YOLO-modell: visa när viktfilen laddas ner ---- */
+const yoloDlEl = document.getElementById("yoloDlStatus");
+let yoloDlTimer = null;
+
+async function pollYoloDownload() {
+  clearTimeout(yoloDlTimer);
+  let st;
+  try {
+    const res = await fetch("/api/yolo/download/status");
+    st = await res.json();
+  } catch {
+    yoloDlTimer = setTimeout(pollYoloDownload, 5000);
+    return;
+  }
+  const sel = document.getElementById("model");
+  const selected = sel ? sel.value : "";
+  yoloDlEl.classList.remove("ok", "err", "warn");
+
+  if (st.state === "running") {
+    const p = Math.round(st.percent || 0);
+    yoloDlEl.hidden = false;
+    yoloDlEl.innerHTML =
+      `⬇️ Laddar ner <strong>${escapeHtml(st.model || "")}</strong> … ${p}%` +
+      `<span class="yolo-dl-bar"><span style="width:${p}%"></span></span>`;
+    yoloDlTimer = setTimeout(pollYoloDownload, 1200);
+  } else if (st.state === "completed") {
+    yoloDlEl.hidden = false;
+    yoloDlEl.classList.add("ok");
+    yoloDlEl.innerHTML = `✅ <strong>${escapeHtml(st.model || "")}</strong> nedladdad`;
+    yoloDlTimer = setTimeout(pollYoloDownload, 20000);
+  } else if (st.state === "failed") {
+    yoloDlEl.hidden = false;
+    yoloDlEl.classList.add("err");
+    yoloDlEl.innerHTML =
+      `❌ <strong>${escapeHtml(st.model || "")}</strong>: ${escapeHtml(st.error || "nedladdningen misslyckades")}`;
+    yoloDlTimer = setTimeout(pollYoloDownload, 6000);
+  } else {
+    // idle - visa bara om den valda modellen saknas lokalt
+    if (st.installed === false) {
+      yoloDlEl.hidden = false;
+      yoloDlEl.classList.add("warn");
+      yoloDlEl.innerHTML =
+        `⬇️ <strong>${escapeHtml(selected)}</strong> är inte nedladdad — hämtas automatiskt vid första användning`;
+    } else {
+      yoloDlEl.hidden = true;
+      yoloDlEl.innerHTML = "";
+    }
+    yoloDlTimer = setTimeout(pollYoloDownload, 4000);
+  }
+}
+pollYoloDownload();
 
 /* ---- Ollama-modeller: lista + ladda ner + status ---- */
 const RECOMMENDED_MODELS = [

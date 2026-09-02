@@ -16,6 +16,116 @@ from pathlib import Path
 import config
 
 
+# ---------------------------------------------------------------------------
+# YOLO-viktnedladdning med synlig status.
+#
+# När man väljer en modell vars .pt-vikt inte finns lokalt laddar Ultralytics
+# ner den automatiskt vid första YOLO()-anropet - men utan att visa något i
+# GUI:t. Här laddar vi ner vikten själva (med procent) till config.BASE_DIR så
+# att förloppet kan visas i webb-GUI:t. state: idle|running|completed|failed.
+# ---------------------------------------------------------------------------
+YOLO_DL: dict = {
+    "state": "idle",
+    "model": None,
+    "percent": 0,
+    "status": "",
+    "error": None,
+}
+_yolo_dl_lock = threading.Lock()
+
+
+def yolo_model_installed(model: str) -> bool:
+    """True om viktfilen redan finns lokalt (behöver inte laddas ner)."""
+    return bool(model) and Path(config.model_path(model)).exists()
+
+
+def start_yolo_model_download(model: str) -> bool:
+    """Starta nedladdning av en saknad YOLO-vikt i bakgrunden (icke-blockerande).
+
+    Returnerar True om en nedladdning startades, annars False (finns redan,
+    pågår redan eller ogiltig modell).
+    """
+    model = (model or "").strip()
+    if not model or yolo_model_installed(model):
+        return False
+    with _yolo_dl_lock:
+        if YOLO_DL["state"] == "running":
+            return YOLO_DL["model"] == model
+        YOLO_DL.update(
+            state="running",
+            model=model,
+            percent=0,
+            status=f"Laddar ner {Path(model).name} …",
+            error=None,
+        )
+    threading.Thread(target=_yolo_download_worker, args=(model,), daemon=True).start()
+    return True
+
+
+def ensure_yolo_model(model: str) -> str:
+    """Se till att viktfilen finns lokalt; laddar ner och väntar vid behov.
+
+    Returnerar sökvägen som YOLO ska ladda. Höjer RuntimeError om nedladdningen
+    misslyckas.
+    """
+    model = (model or "").strip()
+    if yolo_model_installed(model):
+        return config.model_path(model)
+    if YOLO_DL["state"] == "running" and YOLO_DL["model"] != model:
+        raise RuntimeError(
+            f"'{YOLO_DL['model']}' laddas ner just nu - försök igen om en stund."
+        )
+    start_yolo_model_download(model)
+    while not yolo_model_installed(model):
+        with _yolo_dl_lock:
+            state = dict(YOLO_DL)
+        if state["state"] == "failed":
+            raise RuntimeError(state.get("error") or f"Kunde inte ladda ner {model}.")
+        time.sleep(0.1)
+    return config.model_path(model)
+
+
+def _yolo_download_worker(model: str) -> None:
+    """Ladda ner modellvikten (med procent) till config.BASE_DIR/<filnamn>."""
+    import requests  # requirements.txt
+
+    name = Path(model).name
+    dest = config.BASE_DIR / name
+    tmp = dest.with_name(f".{name}.part")
+    try:
+        # Samma release-upplösning som ultralytics använder själv: fråga GitHub
+        # efter "latest"-releasen (innehåller både yolo11- och yolo26-vikter).
+        from ultralytics.utils.downloads import get_github_assets
+
+        tag, assets = get_github_assets("ultralytics/assets", "latest")
+        if name not in assets:
+            raise RuntimeError(f"'{name}' finns inte bland Ultralytics assets.")
+        url = f"https://github.com/ultralytics/assets/releases/download/{tag}/{name}"
+        YOLO_DL["status"] = f"Laddar ner {name} ({tag}) …"
+        with requests.get(url, stream=True, timeout=60) as resp:
+            resp.raise_for_status()
+            total = int(resp.headers.get("Content-Length") or 0)
+            got = 0
+            with open(tmp, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1 << 16):
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+                    got += len(chunk)
+                    if total:
+                        YOLO_DL["percent"] = min(99, round(got * 100 / total))
+        if total and got < total:
+            raise RuntimeError(f"Ofullständig nedladdning ({got}/{total} bytes).")
+        tmp.replace(dest)
+        YOLO_DL.update(state="completed", percent=100, status=f"{name} klar", error=None)
+    except Exception as exc:  # noqa: BLE001 - status visas i GUI:t
+        YOLO_DL.update(state="failed", error=str(exc), status=f"Fel vid nedladdning av {name}")
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 class YoloAnalyzer:
     """Thin wrapper around Ultralytics YOLO with lazy model loading."""
 
@@ -93,7 +203,10 @@ class YoloAnalyzer:
             if self._model is None or model != self.model_name or conf != self.conf:
                 from ultralytics import YOLO  # imported lazily so the server still boots without torch
 
-                self._model = YOLO(self._resolve_model(config.model_path(model)))
+                # Saknas viktfilen laddas den ner först (med synlig status i
+                # GUI:t) istället för att Ultralytics gör det tyst i bakgrunden.
+                pt_path = ensure_yolo_model(model)
+                self._model = YOLO(self._resolve_model(pt_path))
                 self.model_name = model
                 self.conf = conf
 

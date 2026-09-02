@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 import config
 from analyzer import (
+    YOLO_DL,
     YoloAnalyzer,
     active_ollama_model,
     categorize_detections,
@@ -30,7 +31,9 @@ from analyzer import (
     ollama_models,
     ollama_models_error,
     set_llm_keep_alive,
+    start_yolo_model_download,
     summarize_detections,
+    yolo_model_installed,
 )
 from ha_client import HAClient
 
@@ -215,6 +218,10 @@ def set_runtime_config(payload: _ConfigIn):
     analyzer.configure(
         model=RUNTIME["model"], conf=RUNTIME["conf"], device=RUNTIME["device"]
     )
+    # Väljs en ny YOLO-modell vars vikt saknas startas nedladdningen direkt,
+    # så att GUI:t kan visa förloppet (annars sker den tyst vid första analysen).
+    if changes.get("model"):
+        start_yolo_model_download(str(RUNTIME["model"]))
     # Applicera LLM keep_alive direkt (ladda / plocka ut modellen)
     if changes.get("keep_alive") is not None:
         try:
@@ -308,6 +315,19 @@ def start_ollama_pull(payload: _PullIn):
 @app.get("/api/ollama/pull/status")
 def ollama_pull_status():
     return dict(PULL)
+
+
+# ---------------------------------------------------------------------------
+# YOLO-modellvikt: nedladdningsstatus (GUI:t visar när .pt hämtas vid val)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/yolo/download/status")
+def yolo_download_status():
+    """Status för ev. pågående nedladdning av en YOLO-modellvikt."""
+    st = dict(YOLO_DL)
+    st["installed"] = yolo_model_installed(RUNTIME["model"])
+    return st
 
 
 @app.get("/api/ollama/models")
