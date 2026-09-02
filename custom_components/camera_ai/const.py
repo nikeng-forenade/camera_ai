@@ -3,7 +3,7 @@
 DOMAIN = "camera_ai"
 
 # Version som visas i HA (enheter) och ska matcha serverns config.VERSION
-VERSION = "0.3.8"
+VERSION = "0.3.9"
 
 CONF_MODEL = "model"
 CONF_CONFIDENCE = "confidence"
@@ -22,6 +22,11 @@ DEFAULT_MODELS = [
     "yolo11m.pt",
     "yolo11l.pt",
     "yolo11x.pt",
+    "yolo26n.pt",
+    "yolo26s.pt",
+    "yolo26m.pt",
+    "yolo26l.pt",
+    "yolo26x.pt",
 ]
 DEFAULT_MODEL = "yolo11s.pt"
 DEFAULT_CONFIDENCE = 0.30
