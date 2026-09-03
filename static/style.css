@@ -12,6 +12,18 @@
 
 * { box-sizing: border-box; }
 
+/* ---- Detektionslinje (ROI) i kamerakortet ---- */
+.roi-box { border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.roi-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.roi-head select { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.roi-preview { position: relative; display: inline-block; max-width: 100%; margin: 10px 0 4px; cursor: ns-resize; touch-action: none; user-select: none; }
+.roi-preview img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border); }
+.roi-line { position: absolute; left: 0; right: 0; height: 3px; background: #ff3b30; box-shadow: 0 0 4px rgba(255, 59, 48, 0.8); pointer-events: none; }
+.roi-line::after { content: ""; position: absolute; left: 0; right: 0; top: -5px; height: 13px; }
+.roi-badge { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,0.6); color: #ff3b30; font-size: 12px; padding: 2px 8px; border-radius: 10px; pointer-events: none; }
+.roi-slider { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.roi-slider input[type="range"] { flex: 1; min-width: 160px; }
+
 body {
   margin: 0;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;

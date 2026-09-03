@@ -41,6 +41,24 @@ YOLO_RUNNING = "running"
 YOLO_ERROR = "error"
 
 
+def _draw_roi_line(img, roi_cfg):
+    """Rita en vågrät detektionslinje på en BGR-bild (om aktiverad)."""
+    if not roi_cfg or not roi_cfg.get("roi_enabled"):
+        return img
+    h, w = img.shape[:2]
+    y = int(round(float(roi_cfg.get("roi_y", 0.5)) * h))
+    y = min(max(y, 0), h - 1)
+    side = str(roi_cfg.get("roi_side", "above"))
+    color = (255, 60, 60)  # BGR: röd-orange
+    cv2.line(img, (0, y), (w, y), color, 2, cv2.LINE_AA)
+    label = "Detektionslinje - kollar ovanfor" if side == "above" else "Detektionslinje - kollar nedanfor"
+    ty = y - 8 if y > 24 else y + 22
+    cv2.putText(
+        img, label, (10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA
+    )
+    return img
+
+
 class _FpsMeter:
     """Rullande FPS-mätare (EMA-fönster av tidsstämplar)."""
 
@@ -334,6 +352,10 @@ class CameraWorker:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
+            # Detektionslinje: kolla bara ena sidan av en vågrät linje
+            "roi_enabled": False,
+            "roi_y": 0.5,
+            "roi_side": "above",
         }
 
     @staticmethod
@@ -610,10 +632,15 @@ class CameraWorker:
                 else:
                     self.yolo_error = None
                     dets = res["detections"]
+                    # Detektionslinje: filtrera bort det som är på fel sida
+                    roi = self._roi_cfg()
+                    kept = dets
+                    if roi.get("roi_enabled"):
+                        kept = self._apply_roi(dets, roi, raw.shape[0])
                     with self._lock:
-                        self._boxes = dets
+                        self._boxes = kept
                         self._boxes_ts = now
-                        if dets:
+                        if kept:
                             self.last_detection_ts = now
                         # EMA för inferenstid
                         ms = float(res.get("inference_ms") or 0)
@@ -622,7 +649,18 @@ class CameraWorker:
                         )
                     self._ai_fps.tick()
                     # HA-event: nya detektioner (statiska objekt -> bara en händelse)
-                    self._eval_events(dets, res.get("annotated"), now)
+                    self._eval_events(
+                        kept,
+                        res.get("annotated"),
+                        raw,
+                        {
+                            "boxes": live["show_boxes"],
+                            "labels": live["show_labels"],
+                            "conf": live["show_conf"],
+                        },
+                        roi,
+                        now,
+                    )
 
             # --- JPEG-kodning (display-FPS) - alltid senaste raw + nuvarande boxes ---
             disp_interval = 1.0 / max(1.0, float(live["display_fps"]))
@@ -633,6 +671,7 @@ class CameraWorker:
             ):
                 with self._lock:
                     boxes = list(self._boxes)
+                roi = self._roi_cfg()
                 annotated = annotate_frame_bgr(
                     raw,
                     boxes,
@@ -642,6 +681,8 @@ class CameraWorker:
                         "conf": live["show_conf"],
                     },
                 )
+                if roi.get("roi_enabled"):
+                    _draw_roi_line(annotated, roi)
                 ok, buf = cv2.imencode(
                     ".jpg",
                     annotated,
@@ -713,6 +754,36 @@ class CameraWorker:
                 if k in self.camera and k != "password_configured":
                     self.camera[k] = v
 
+    def _roi_cfg(self) -> dict:
+        """Nuvarande detektionslinje (läses varje inferens – ingen omstart)."""
+        with self._lock:
+            return {
+                "roi_enabled": bool(self.camera.get("roi_enabled")),
+                "roi_y": float(self.camera.get("roi_y", 0.5)),
+                "roi_side": str(self.camera.get("roi_side", "above")),
+            }
+
+    def _apply_roi(self, dets: list, roi: dict, height: int) -> list:
+        """Behåll bara detektioner på vald sida om detektionslinjen.
+
+        Utgår från boxens mittpunkt (i pixel-koordinater). 'above' = mittpunkten
+        ovanför linjen (mindre y), 'below' = under linjen (större y).
+        """
+        if not roi.get("roi_enabled") or height <= 0 or not dets:
+            return dets
+        y = float(roi.get("roi_y", 0.5))
+        side = str(roi.get("roi_side", "above"))
+        out = []
+        for d in dets:
+            box = d.get("box")
+            if not box or len(box) < 4:
+                out.append(d)
+                continue
+            cy = (float(box[1]) + float(box[3])) / 2.0 / float(height)
+            if (cy < y) if side == "above" else (cy >= y):
+                out.append(d)
+        return out
+
     def update_detect(self, values: dict) -> None:
         with self._lock:
             for k, v in values.items():
@@ -777,7 +848,7 @@ class CameraWorker:
             except Exception as exc:  # noqa: BLE001
                 print(f"[event] clear misslyckades: {exc}")
 
-    def _eval_events(self, dets: list, annotated_bgr, now: float) -> None:
+    def _eval_events(self, dets: list, annotated_bgr, raw_bgr, draw, roi, now: float) -> None:
         """Kör event-trackern på senaste inferensen och publicerar nya händelser."""
         with self._lock:
             enabled = bool(self.events.get("enabled"))
@@ -810,11 +881,19 @@ class CameraWorker:
         ev_dets = [d for d in dets if d.get("class") in fired]
         summary = self._event_summary(ev_dets)
         jpeg = None
-        if annotated_bgr is not None:
-            with self._lock:
-                q = int(self.live.get("jpeg_quality", 80))
+        with self._lock:
+            q = int(self.live.get("jpeg_quality", 80))
+        # Med detektionslinje ritas bara godkända boxar (annars skulle
+        # bortfiltrerade objekt synas på händelsebilden).
+        img = None
+        if roi.get("roi_enabled") and raw_bgr is not None:
+            img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
+            _draw_roi_line(img, roi)
+        elif annotated_bgr is not None:
+            img = annotated_bgr
+        if img is not None:
             ok, buf = cv2.imencode(
-                ".jpg", annotated_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), q]
+                ".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), q]
             )
             if ok:
                 jpeg = buf.tobytes()
@@ -870,6 +949,10 @@ class CameraWorker:
             "reconnect": bool(c.get("reconnect")),
             "reconnect_delay": int(c.get("reconnect_delay", 5)),
             "autostart": bool(c.get("autostart")),
+            # Detektionslinje
+            "roi_enabled": bool(c.get("roi_enabled")),
+            "roi_y": float(c.get("roi_y", 0.5)),
+            "roi_side": str(c.get("roi_side", "above")),
         }
 
     def latest_jpeg(self):
@@ -975,6 +1058,7 @@ class CameraWorker:
 _CAMERA_FIELDS = (
     "enabled", "name", "host", "user", "password", "path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
+    "roi_enabled", "roi_y", "roi_side",
 )
 
 
@@ -1022,6 +1106,10 @@ class CameraPool:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
+            # Detektionslinje
+            "roi_enabled": False,
+            "roi_y": 0.5,
+            "roi_side": "above",
         }
 
     def _save(self) -> None:

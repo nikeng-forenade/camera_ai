@@ -920,6 +920,9 @@ loadStats();
   });
 
   /* ---- Inställningar: kameror (flera) ---- */
+  function roiPercent() {
+    return $id("camRoiY") ? (parseInt($id("camRoiY").value, 10) || 0) : 0;
+  }
   function cameraFormValues() {
     return {
       enabled: $id("camEnabled").checked,
@@ -930,7 +933,41 @@ loadStats();
       reconnect: $id("camReconnect").checked,
       reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
       autostart: $id("camAutostart").checked,
+      roi_enabled: $id("camRoiEnabled") ? $id("camRoiEnabled").checked : false,
+      roi_y: Math.min(100, Math.max(0, roiPercent())) / 100,
+      roi_side: ($id("camRoiSide") ? $id("camRoiSide").value : "above"),
     };
+  }
+  function setRoiPct(pct) {
+    pct = Math.min(100, Math.max(0, pct));
+    const slider = $id("camRoiY"), line = $id("camRoiLine"), val = $id("camRoiYVal"), badge = $id("camRoiBadge");
+    if (slider) slider.value = Math.round(pct);
+    if (line) line.style.top = pct + "%";
+    if (val) val.textContent = Math.round(pct) + " %";
+    if (badge) badge.textContent = Math.round(pct) + " %";
+  }
+  function roiPreviewVisible() {
+    const on = !!( $id("camRoiEnabled") && $id("camRoiEnabled").checked );
+    const pv = $id("roiPreview");
+    if (pv) pv.hidden = !on;
+    return on;
+  }
+  function loadRoiPreview(camId) {
+    const img = $id("camRoiImg"), pv = $id("roiPreview");
+    if (!img || !pv || !camId) return;
+    pv.hidden = false;
+    img.onload = () => { if (pv) pv.hidden = false; };
+    img.onerror = () => {
+      if (pv) pv.hidden = true;
+      const hint = $id("roiHint");
+      if (hint) hint.textContent = "Ingen bild än – kameran måste vara aktiverad och ha fått en frame. Ställ in linjen med reglaget så länge.";
+    };
+    img.src = "/api/live/" + encodeURIComponent(camId) + "/snapshot.jpg?ts=" + Date.now();
+  }
+  function applyRoiFromCam(c) {
+    setRoiPct((c && typeof c.roi_y === "number" ? c.roi_y : 0.5) * 100);
+    if ($id("camRoiSide")) $id("camRoiSide").value = (c && c.roi_side === "below") ? "below" : "above";
+    if ($id("camRoiEnabled")) $id("camRoiEnabled").checked = !!(c && c.roi_enabled);
   }
   function fillCameraForm(c) {
     if (!c) {
@@ -945,6 +982,9 @@ loadStats();
       if ($id("camReconnectDelay")) $id("camReconnectDelay").value = 5;
       setChecked("camAutostart", true);
       if ($id("camPassHint")) $id("camPassHint").textContent = "";
+      applyRoiFromCam(null);
+      const pv = $id("roiPreview");
+      if (pv) pv.hidden = true;
       return;
     }
     editingId = c.id || null;
@@ -961,6 +1001,13 @@ loadStats();
       $id("camPassHint").textContent = c.password_configured
         ? "🔒 Lösenord konfigurerat (tomt = behåll)."
         : (c.full_url_configured ? "Full RTSP-URL används." : "");
+    }
+    applyRoiFromCam(c);
+    if (c.roi_enabled && c.id) {
+      loadRoiPreview(c.id);
+    } else {
+      const pv = $id("roiPreview");
+      if (pv) pv.hidden = true;
     }
   }
   async function loadCameras() {
@@ -1077,6 +1124,45 @@ loadStats();
         setMsg(out, "❌ " + e.message, false);
       }
       btn.disabled = false;
+    });
+  }
+
+  /* ---- Inställningar: detektionslinje (ROI) ---- */
+  const roiPreviewEl = $id("roiPreview");
+  if ($id("camRoiEnabled")) {
+    $id("camRoiEnabled").addEventListener("change", () => {
+      if (roiPreviewVisible()) {
+        if (editingId) loadRoiPreview(editingId);
+      } else {
+        const pv = $id("roiPreview");
+        if (pv) pv.hidden = true;
+      }
+    });
+  }
+  if ($id("camRoiY")) {
+    $id("camRoiY").addEventListener("input", () => setRoiPct(roiPercent()));
+  }
+  if (roiPreviewEl) {
+    function roiDragTo(e) {
+      const r = roiPreviewEl.getBoundingClientRect();
+      if (!r.height) return;
+      const y = (e.clientY - r.top) / r.height;
+      setRoiPct(y * 100);
+    }
+    roiPreviewEl.addEventListener("pointerdown", (e) => {
+      try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+      roiDragTo(e);
+      e.preventDefault();
+    });
+    roiPreviewEl.addEventListener("pointermove", (e) => {
+      if (roiPreviewEl.hasPointerCapture && roiPreviewEl.hasPointerCapture(e.pointerId)) {
+        roiDragTo(e);
+      }
+    });
+    roiPreviewEl.addEventListener("pointerup", (e) => {
+      if (roiPreviewEl.releasePointerCapture) {
+        try { roiPreviewEl.releasePointerCapture(e.pointerId); } catch (err) { /* ok */ }
+      }
     });
   }
 

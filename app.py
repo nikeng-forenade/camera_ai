@@ -753,6 +753,10 @@ class _CameraIn(BaseModel):
     reconnect: bool | None = None
     reconnect_delay: int | None = None
     autostart: bool | None = None
+    # Detektionslinje (ROI)
+    roi_enabled: bool | None = None
+    roi_y: float | None = None
+    roi_side: str | None = None
 
 
 def _resolve_camera(camera: str | None):
@@ -776,6 +780,25 @@ def _cam_errors(name: str | None = None, host: str | None = None,
             rd = 0
         if not 1 <= rd <= 300:
             errors.append("Återanslutningsintervall måste vara 1–300 sekunder.")
+    return errors
+
+
+def _roi_normalize(body: dict) -> list:
+    """Validera och normalisera detektionslinjens fält (roi_*)."""
+    errors: list[str] = []
+    if "roi_enabled" in body:
+        body["roi_enabled"] = bool(body["roi_enabled"])
+    if "roi_y" in body and body.get("roi_y") is not None:
+        try:
+            y = float(body["roi_y"])
+        except (TypeError, ValueError):
+            y = float("nan")
+        if not (0.0 <= y <= 1.0):
+            errors.append("Linjens höjd måste vara mellan 0 och 1 (andel av bildhöjden).")
+        else:
+            body["roi_y"] = round(y, 3)
+    if "roi_side" in body and body.get("roi_side") not in ("above", "below"):
+        errors.append("Linjesidan måste vara 'above' (ovanför) eller 'below' (nedanför).")
     return errors
 
 
@@ -805,6 +828,7 @@ def camera_add(payload: _CameraIn):
                        rd=body.get("reconnect_delay"))
     if not body.get("host") and not body.get("full_url"):
         errs.append("Ange kamera-IP (eller full RTSP-URL).")
+    errs += _roi_normalize(body)
     if errs:
         return JSONResponse({"ok": False, "errors": errs}, status_code=400)
     w = pool.add(body)
@@ -829,6 +853,9 @@ def camera_update(camera_id: str, payload: _CameraIn):
         return JSONResponse({"ok": False, "errors": errs}, status_code=400)
     if body.get("password") in (None, ""):
         body.pop("password", None)
+    errs += _roi_normalize(body)
+    if errs:
+        return JSONResponse({"ok": False, "errors": errs}, status_code=400)
     updated = pool.update(camera_id, body)
     return {"ok": True, "camera": updated.public_cfg(), "runtime": updated.status()}
 

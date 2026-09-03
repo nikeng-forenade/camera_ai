@@ -233,6 +233,30 @@
             <input type="checkbox" id="camAutostart" /> Auto-start vid appstart
           </label>
         </div>
+
+        <!-- Detektionslinje (ROI): kolla bara ena sidan av en vågrät linje -->
+        <div class="roi-box" id="roiBox">
+          <div class="roi-head">
+            <label class="chk">
+              <input type="checkbox" id="camRoiEnabled" /> 🎯 Detektionslinje – kolla bara ena sidan
+            </label>
+            <select id="camRoiSide">
+              <option value="above">Kolla OVANFÖR linjen</option>
+              <option value="below">Kolla NEDANFÖR linjen</option>
+            </select>
+          </div>
+          <div class="roi-preview" id="roiPreview" hidden>
+            <img id="camRoiImg" alt="Kamera-förhandsvisning" />
+            <div class="roi-line" id="camRoiLine"></div>
+            <div class="roi-badge" id="camRoiBadge">50 %</div>
+          </div>
+          <label class="roi-slider">Linjens höjd (0 = överst, 100 = nederst)
+            <input type="range" id="camRoiY" min="0" max="100" step="1" value="50" />
+            <span id="camRoiYVal">50 %</span>
+          </label>
+          <p class="hint" id="roiHint">Aktivera och dra linjen på bilden (eller använd reglaget). Det som är på vald sida om linjen räknas/triggar och ritas – resten ignoreras. Gäller hela kedjan (GUI, räkningar, HA-event och snapshots). Spara kameran för att tillämpa.</p>
+        </div>
+
         <p class="hint">Live-video körs kontinuerligt så länge en kamera är aktiverad – även utan öppen webbläsare (YOLO + HA-event fortsätter). Sub-stream rekommenderas. Lösenord skickas aldrig tillbaka; tomt fält vid spara behåller det befintliga.</p>
         <span id="camTestResult" class="save-msg"></span>
         <div class="cam-actions">
