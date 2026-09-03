@@ -8,6 +8,6 @@
   "issue_tracker": "https://github.com/nikeng-forenade/camera_ai/issues",
   "requirements": ["httpx>=0.27"],
   "homeassistant": "2024.6.0",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "iot_class": "local_polling"
 }

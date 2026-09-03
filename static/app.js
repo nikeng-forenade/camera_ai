@@ -949,11 +949,28 @@ loadStats();
       badge.style.top = "calc(" + pct + "% - 10px)";
     }
   }
-  function roiPreviewVisible() {
-    const on = !!( $id("camRoiEnabled") && $id("camRoiEnabled").checked );
+  function roiLineVisible(on) {
+    const line = $id("camRoiLine"), badge = $id("camRoiBadge");
+    const disp = on ? "" : "none";
+    if (line) line.style.display = disp;
+    if (badge) badge.style.display = disp;
+  }
+  function hideRoiPreview() {
     const pv = $id("roiPreview");
-    if (pv) pv.hidden = !on;
-    return on;
+    if (pv) pv.hidden = true;
+    const img = $id("camRoiImg");
+    if (img) img.removeAttribute("src");
+  }
+  function refreshRoiPreview(c) {
+    const pv = $id("roiPreview");
+    if (pv) pv.hidden = false;
+    roiLineVisible(!!(c && c.roi_enabled));
+    if (c && c.id) {
+      loadRoiPreview(c.id);
+    } else {
+      const img = $id("camRoiImg");
+      if (img) img.removeAttribute("src");
+    }
   }
   function loadRoiPreview(camId) {
     const img = $id("camRoiImg"), pv = $id("roiPreview");
@@ -963,9 +980,10 @@ loadStats();
     img.onerror = () => {
       if (pv) pv.hidden = true;
       const hint = $id("roiHint");
-      if (hint) hint.textContent = "Ingen bild än – kameran måste vara aktiverad och ha fått en frame. Ställ in linjen med reglaget så länge.";
+      if (hint) hint.textContent = "Ingen bild än – kameran måste vara aktiverad och igång (▶ Starta ström på Dashboard). Du kan ändå ställa linjen med reglaget.";
     };
-    img.src = "/api/live/" + encodeURIComponent(camId) + "/snapshot.jpg?ts=" + Date.now();
+    // clean=1 = rå bild utan serverritade boxar/linje – bara din linje ovanpå
+    img.src = "/api/live/" + encodeURIComponent(camId) + "/snapshot.jpg?clean=1&ts=" + Date.now();
   }
   function applyRoiFromCam(c) {
     setRoiPct((c && typeof c.roi_y === "number" ? c.roi_y : 0.5) * 100);
@@ -986,8 +1004,7 @@ loadStats();
       setChecked("camAutostart", true);
       if ($id("camPassHint")) $id("camPassHint").textContent = "";
       applyRoiFromCam(null);
-      const pv = $id("roiPreview");
-      if (pv) pv.hidden = true;
+      hideRoiPreview();
       return;
     }
     editingId = c.id || null;
@@ -1006,12 +1023,7 @@ loadStats();
         : (c.full_url_configured ? "Full RTSP-URL används." : "");
     }
     applyRoiFromCam(c);
-    if (c.roi_enabled && c.id) {
-      loadRoiPreview(c.id);
-    } else {
-      const pv = $id("roiPreview");
-      if (pv) pv.hidden = true;
-    }
+    refreshRoiPreview(c);
   }
   async function loadCameras() {
     let data;
@@ -1134,12 +1146,9 @@ loadStats();
   const roiPreviewEl = $id("roiPreview");
   if ($id("camRoiEnabled")) {
     $id("camRoiEnabled").addEventListener("change", () => {
-      if (roiPreviewVisible()) {
-        if (editingId) loadRoiPreview(editingId);
-      } else {
-        const pv = $id("roiPreview");
-        if (pv) pv.hidden = true;
-      }
+      const on = $id("camRoiEnabled").checked;
+      roiLineVisible(on);
+      if (on && editingId) loadRoiPreview(editingId);
     });
   }
   if ($id("camRoiY")) {

@@ -961,6 +961,17 @@ class CameraWorker:
         with self._lock:
             return self._jpeg, self._jpeg_v
 
+    def raw_jpeg(self, quality: int = 80) -> bytes | None:
+        """Senaste råa frame:n som JPEG (utan boxar/linje) – för förhandsvisning."""
+        with self._lock:
+            raw = self._raw_frame
+        if raw is None:
+            return None
+        ok, buf = cv2.imencode(
+            ".jpg", raw, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)]
+        )
+        return buf.tobytes() if ok else None
+
     def detections_now(self) -> tuple[list, float]:
         with self._lock:
             return list(self._boxes), self._boxes_ts

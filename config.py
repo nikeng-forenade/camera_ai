@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.12.2"
+VERSION = "0.12.3"
 
 
 def model_path(name: str) -> str:

@@ -952,8 +952,9 @@ def live_stream(camera: str = ""):
 
 
 @app.get("/api/live/{camera}/snapshot.jpg")
-def live_snapshot(camera: str = ""):
-    """Stillbild (senaste annoterade frame:en) som JPEG.
+def live_snapshot(camera: str = "", clean: bool = False):
+    """Stillbild som JPEG. ``clean=1`` ger rå bild utan boxar/linje (för
+    förhandsvisning när man sätter detektionslinjen), annars senaste annoterade.
 
     Används av HA/HACS som en vanlig bild-URL per kamera - enklare än att
     streama MJPEG. 404 tills kameran har producerat en första bild.
@@ -961,6 +962,15 @@ def live_snapshot(camera: str = ""):
     w = _resolve_camera(camera)
     if w is None:
         raise HTTPException(404, "Ingen kamera konfigurerad.")
+    if clean:
+        data = w.raw_jpeg()
+        if not data:
+            raise HTTPException(404, "Ingen bild ännu - vänta på första frame:en.")
+        return Response(
+            content=data,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-cache"},
+        )
     data, _v = w.latest_jpeg()
     if not data:
         raise HTTPException(404, "Ingen bild ännu - vänta på första frame:en.")
