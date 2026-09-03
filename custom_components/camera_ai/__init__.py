@@ -27,6 +27,10 @@ from pathlib import Path
 
 import httpx
 
+from homeassistant.components.frontend import (
+    async_register_built_in_panel,
+    async_remove_panel,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
@@ -60,13 +64,13 @@ def _async_register_panel(hass: HomeAssistant, url: str) -> None:
     Får ALDRIG fälla integrationens uppstart – misslyckas panelen loggas det bara.
     """
     try:
-        frontend = hass.components.frontend
-        try:
-            frontend.async_remove_panel(_PANEL_PATH)  # ersätt ev. gammal/trasig
-        except Exception:  # noqa: BLE001
-            pass
-        frontend.async_register_built_in_panel(
-            component_name="custom",
+        # hass.components är borttaget i nyare HA → anropa frontend-funktionerna
+        # direkt. component_name="iframe" = HA:s inbyggda iframe-panel som tar
+        # config.url (ha-panel-iframe).
+        async_remove_panel(hass, _PANEL_PATH, warn_if_unknown=False)
+        async_register_built_in_panel(
+            hass,
+            "iframe",
             sidebar_title="Camera AI",
             sidebar_icon="mdi:cctv",
             frontend_url_path=_PANEL_PATH,
@@ -78,9 +82,8 @@ def _async_register_panel(hass: HomeAssistant, url: str) -> None:
 
 
 def _async_remove_panel(hass: HomeAssistant) -> None:
-    frontend = hass.components.frontend
     try:
-        frontend.async_remove_panel(_PANEL_PATH)
+        async_remove_panel(hass, _PANEL_PATH, warn_if_unknown=False)
     except Exception:  # noqa: BLE001 – paneler får inte krascha avladdning
         pass
 
