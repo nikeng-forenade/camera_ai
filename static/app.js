@@ -1035,6 +1035,8 @@ loadStats();
     setZoneKind(filterKind);
     zoneRender();
     renderLine();
+    const sb = $id("btnZoneStart");
+    if (sb) sb.disabled = !editingId;
   }
   function hideRoiPreview() {
     const img = $id("camRoiImg");
@@ -1372,6 +1374,27 @@ loadStats();
   }
   if ($id("btnZoneClear")) {
     $id("btnZoneClear").addEventListener("click", () => { zonePts = []; zoneRender(); });
+  }
+  function zoneStartStream() {
+    if (!editingId) return;
+    const btn = $id("btnZoneStart");
+    if (btn) { btn.disabled = true; btn.textContent = "Startar…"; }
+    (async () => {
+      try {
+        await fetchJson("/api/cameras/" + encodeURIComponent(editingId) + "/stream/start", { method: "POST" });
+      } catch (e) {
+        try { await fetchJson("/api/cameras/" + encodeURIComponent(editingId) + "/start", { method: "POST" }); } catch (e2) { /* ok */ }
+      }
+      if (btn) { btn.disabled = false; btn.textContent = "▶ Starta ström"; }
+      setTimeout(() => loadRoiPreview(editingId), 900);
+    })();
+  }
+  if ($id("btnZoneStart")) {
+    $id("btnZoneStart").addEventListener("click", zoneStartStream);
+    $id("btnZoneStart").disabled = !editingId;
+  }
+  if ($id("btnZoneRefresh")) {
+    $id("btnZoneRefresh").addEventListener("click", () => { if (editingId) loadRoiPreview(editingId); });
   }
 
   /* ---- Inställningar: spara detektering ---- */

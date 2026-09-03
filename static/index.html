@@ -251,7 +251,8 @@
             <div class="roi-preview" id="roiPreview">
               <div class="roi-empty" id="roiEmpty">
                 <div class="roi-empty-ic">📷</div>
-                <div class="roi-empty-tx">Starta strömmen (▶ på Dashboard) så visas bilden här.<br />Filtret kan ändå ritas på den tomma rutan.</div>
+                <div class="roi-empty-tx">Starta strömmen så visas bilden här – sedan ritar du direkt på den.</div>
+                <button id="btnZoneStart" class="btn" type="button">▶ Starta ström</button>
               </div>
               <img id="camRoiImg" alt="Kamera-förhandsvisning" />
               <svg id="camZoneSvg" class="roi-zone-svg" preserveAspectRatio="none"></svg>
@@ -259,6 +260,7 @@
                 <div class="roi-line" id="camZoneLine"></div>
                 <div class="roi-badge" id="camZoneBadge">50 %</div>
               </div>
+              <button id="btnZoneRefresh" class="roi-refresh" type="button" title="Uppdatera bild">↻</button>
             </div>
 
             <div class="zone-side">

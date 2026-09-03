@@ -66,6 +66,9 @@
 .roi-linebar .roi-line { position: absolute; left: 0; right: 0; height: 3px; background: #ff3b30; box-shadow: 0 0 6px rgba(255, 59, 48, 0.8); }
 .roi-linebar .roi-badge { position: absolute; left: 6px; transform: translateY(-110%); padding: 2px 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.65); color: #ff3b30; font-size: 12px; }
 .roi-zone-svg .roi-zone-poly.draft { fill: rgba(255, 255, 255, 0.08); stroke: #d7dee6; stroke-dasharray: 6 4; }
+.roi-refresh { position: absolute; top: 8px; right: 8px; z-index: 6; background: rgba(0, 0, 0, 0.55); color: #fff; border: 1px solid var(--border); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 16px; line-height: 1; }
+.roi-refresh:hover { background: #1f6feb; }
+.roi-empty .btn { margin-top: 2px; }
 
 body {
   margin: 0;
