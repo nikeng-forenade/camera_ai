@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.9.1"
+VERSION = "0.10.0"
 
 
 def model_path(name: str) -> str:
@@ -178,6 +178,9 @@ YOLO_IMG_SIZE = _env_int("YOLO_IMG_SIZE", 640)
 
 # Live-stream (MJPEG till webbläsare)
 LIVE_STREAM_ENABLED = _env_bool("LIVE_STREAM_ENABLED", True)
+# Starta strömmar (video till GUI) automatiskt vid appstart? Default: av - då
+# körs YOLO + HA-event ändå, och man startar strömmen manuellt per kamera.
+LIVE_STREAM_AUTOSTART = _env_bool("LIVE_STREAM_AUTOSTART", False)
 LIVE_STREAM_FPS = _env_int("LIVE_STREAM_FPS", 10, lo=1, hi=30)
 LIVE_JPEG_QUALITY = _env_int("LIVE_JPEG_QUALITY", 80, lo=20, hi=100)
 # Visa/dölj detektionsöverlagring (ändras live från GUI)

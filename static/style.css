@@ -346,6 +346,11 @@ main { max-width: 1240px; }
   object-fit: contain;
   background: #000;
 }
+/* Ingen ström: dölj bilden helt (annars visas en ful bruten ikon) */
+.live-viewer img:not([src]),
+.live-viewer img[src=""] {
+  display: none;
+}
 .live-overlay { position: absolute; top: 8px; left: 10px; color: #fff; text-shadow: 0 1px 3px #000; font-size: 12px; pointer-events: none; }
 
 .live-controls {

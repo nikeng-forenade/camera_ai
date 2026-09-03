@@ -248,6 +248,16 @@ async def lifespan(_: FastAPI):
         pool.load()
         pool.on_event(_live_event_publish)
         pool.start_all()
+        # Ström (video till GUI) ska vara AV vid uppstart - men YOLO + HA-event
+        # fortsätter. Starta manuellt, eller sätt LIVE_STREAM_AUTOSTART=true.
+        if not config.LIVE_STREAM_AUTOSTART:
+            for _w in pool.all():
+                try:
+                    if _w.running:
+                        _w.update_live({"enabled": False})
+                except Exception:  # noqa: BLE001 - en kamera ska inte stoppa resten
+                    pass
+            print("[camera] live-strömmar av vid uppstart (detektering körs)")
         print(f"[camera] {pool.count()} kameror i registret - aktiverade startade")
     except Exception as exc:  # noqa: BLE001 - API:t ska starta ändå
         print(f"[camera] worker start misslyckades: {exc}")
