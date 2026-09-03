@@ -226,6 +226,13 @@ class YoloAnalyzer:
         folder — a plain ``.pt`` file doesn't accept an OpenVINO device string
         in ultralytics (it errors with "Invalid CUDA device"). The exported
         folder is cached on disk, so the export only runs once per model.
+
+        Modellen exporteras med DYNAMISK inputstorlek (``dynamic=True``) så att
+        man kan växla bildstorlek (t.ex. 480 ↔ 640) utan att inferensen
+        kraschar med formfel – en statisk export är låst till en enda storlek
+        och då försvinner detektionerna när man kör en annan imgsz. Äldre
+        statiska exporter ogiltigförklaras automatiskt via en markörfil och
+        exporteras om en gång.
         """
         if not self.device.startswith("openvino:"):
             return model
@@ -233,11 +240,36 @@ class YoloAnalyzer:
         if path.suffix.lower() != ".pt":
             return model  # already a non-.pt artifact (e.g. an exported folder)
         from ultralytics import YOLO  # lazy import, mirrors _ensure_model
+        import shutil
 
         ov_dir = path.with_name(path.stem + "_openvino_model")
-        if not ov_dir.exists():
-            print(f"[analyzer] exporting {model} to OpenVINO (one-time)…")
-            YOLO(model).export(format="openvino", device="cpu", verbose=False)
+        marker = ov_dir / ".cameraai_dynamic"
+        try:
+            stale = ov_dir.exists() and not marker.exists()
+        except OSError:
+            stale = False
+        if not ov_dir.exists() or stale:
+            if stale:
+                print(f"[analyzer] exporterar om {model} med dynamisk storlek…")
+                shutil.rmtree(ov_dir, ignore_errors=True)
+            else:
+                print(f"[analyzer] exporting {model} to OpenVINO (one-time, dynamic)…")
+            try:
+                YOLO(model).export(
+                    format="openvino", device="cpu", verbose=False, dynamic=True
+                )
+            except Exception as exc:  # noqa: BLE001 - dynamic misslyckades → statisk 640
+                print(
+                    f"[analyzer] dynamisk OpenVINO-export misslyckades ({exc}) – "
+                    "försöker med statisk 640"
+                )
+                shutil.rmtree(ov_dir, ignore_errors=True)
+                YOLO(model).export(format="openvino", device="cpu", verbose=False)
+            try:
+                ov_dir.mkdir(parents=True, exist_ok=True)
+                marker.write_text("1", encoding="utf-8")
+            except OSError:
+                pass
         return str(ov_dir)
 
     def _infer_device(self) -> str:
