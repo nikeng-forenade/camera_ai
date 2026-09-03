@@ -181,6 +181,26 @@ def annotate_frame_bgr(frame, detections, draw=None):
                 )
     return out
 
+# COCO-klasser (YOLO11/YOLO26 är tränade på COCO). Används för att visa
+# "vilka typer YOLO kan detektera" i GUI:t innan modellen laddats (annars
+# hämtas namnen direkt från den laddade modellen).
+COCO_CLASSES: tuple[str, ...] = (
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train",
+    "truck", "boat", "traffic light", "fire hydrant", "stop sign",
+    "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag",
+    "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite",
+    "baseball bat", "baseball glove", "skateboard", "surfboard",
+    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon",
+    "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot",
+    "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant",
+    "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote",
+    "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+    "hair drier", "toothbrush",
+)
+
+
 class YoloAnalyzer:
     """Thin wrapper around Ultralytics YOLO with lazy model loading."""
 
@@ -197,6 +217,20 @@ class YoloAnalyzer:
         self._lock = threading.Lock()  # guards model (re)load under concurrency
         self._infer_lock = threading.Lock()  # serialiserar faktiska predictions
         self.last_device: str | None = None  # faktisk device senaste inferensen
+
+    def available_classes(self) -> list[str]:
+        """Alla klasser den aktuella modellen kan detektera.
+
+        Hämtas från den laddade YOLO-modellens egna namn. Innan en modell
+        laddats returneras COCO-listan (yolo11/yolo26 är COCO-tränade).
+        """
+        model = self._model
+        names = getattr(model, "names", None)
+        if names:
+            vals = [str(n).strip() for n in names.values() if str(n).strip()]
+            if vals:
+                return sorted(set(vals), key=str.lower)
+        return list(COCO_CLASSES)
 
     @staticmethod
     def _normalize_device(device: str) -> str:

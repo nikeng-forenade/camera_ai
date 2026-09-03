@@ -841,6 +841,17 @@ def cameras_list():
     return {"cameras": pool.camera_list()}
 
 
+@app.get("/api/yolo/classes")
+def yolo_classes():
+    """Alla klasser YOLO kan detektera (för kryssrutor i Inställningar)."""
+    try:
+        classes = analyzer.available_classes()
+    except Exception:  # noqa: BLE001
+        from analyzer import COCO_CLASSES  # noqa: PLC0415
+        classes = list(COCO_CLASSES)
+    return {"classes": classes, "model": getattr(analyzer, "model_name", None)}
+
+
 @app.post("/api/cameras")
 def camera_add(payload: _CameraIn):
     """Lägg till en ny kamera (startas direkt om enabled)."""

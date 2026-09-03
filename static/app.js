@@ -577,6 +577,7 @@ loadStats();
   const liveBadgeText = $id("liveBadgeText");
   const liveSub = $id("liveSub");
   const statusTable = $id("statusTable");
+  const allCamsTable = $id("allCamsTable");
   const detNowList = $id("detNowList");
   const detNowAge = $id("detNowAge");
   const gpuWarnCard = $id("gpuWarnCard");
@@ -640,6 +641,7 @@ loadStats();
     }
     const st = cams.find((c) => c.camera_id === activeCam) || cams[0];
     renderStatus(st);
+    renderAllCams(cams);
   }
 
   // Kameraväljaren (Dashboard): byt aktiv kamera
@@ -817,6 +819,64 @@ loadStats();
     if ($id("liveConf")) $id("liveConf").checked = s.show_conf !== false;
   }
 
+  function fmtClock(ts) {
+    if (!ts) return "—";
+    return new Date(ts * 1000).toLocaleTimeString("sv-SE");
+  }
+
+  // Översikt: ALLA kameror med ren status (ingen video). Rad = klickbar.
+  function renderAllCams(cams) {
+    const tbody = allCamsTable ? allCamsTable.querySelector("tbody") : null;
+    if (!tbody) return;
+    if (!cams || !cams.length) {
+      tbody.innerHTML = `<tr><td colspan="12" class="empty">Inga kameror konfigurerade.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = cams.map((c) => {
+      const camTxt = CAMERA_LABELS[c.camera_state] || c.camera_state || "—";
+      const camCls = c.camera_state === "online" ? "metric-ok"
+        : (c.camera_state === "reconnecting" || c.camera_state === "connecting") ? "metric-warn"
+        : (c.camera_state === "disabled") ? "muted" : "metric-err";
+      const yTxt = YOLO_LABELS[c.yolo_state] || c.yolo_state || "—";
+      const yCls = c.yolo_state === "running" ? "metric-ok" : c.yolo_state === "error" ? "metric-err" : "metric-warn";
+      const counts = c.detection_counts || {};
+      const nowTxt = Object.keys(counts).length
+        ? Object.entries(counts).map(([k, v]) => escapeHtml(k) + (v > 1 ? " ×" + v : "")).join(" · ")
+        : "—";
+      const evTxt = c.last_event
+        ? escapeHtml(c.last_event) + (c.last_event_ts ? " · " + fmtClock(c.last_event_ts) : "")
+        : "—";
+      const device = (c.actual_device || c.configured_device || "—") + (c.gpu_fallback ? " ⚠" : "");
+      const td = (txt, extra) => `<td class="${extra || ""}">${txt}</td>`;
+      return `<tr data-cam="${escapeHtml(c.camera_id)}" class="allcams-row">
+        <td><strong>${escapeHtml(c.camera_name || c.camera_id)}</strong>${c.camera_enabled ? "" : " <span class=\"muted\">(av)</span>"}</td>
+        ${td(camTxt, camCls)}
+        ${td(yTxt, yCls)}
+        ${td(escapeHtml(c.model || "—"))}
+        ${td(escapeHtml(device))}
+        ${td((c.inference_ms || 0).toFixed(1) + " ms")}
+        ${td((c.ai_fps || 0).toFixed(1))}
+        ${td(escapeHtml(c.resolution || "—"))}
+        ${td(nowTxt)}
+        ${td(fmtClock(c.last_detection_ts))}
+        ${td(evTxt)}
+        ${td((c.uptime || 0) + " s")}
+      </tr>`;
+    }).join("");
+    tbody.querySelectorAll("tr.allcams-row").forEach((tr) => {
+      tr.addEventListener("click", () => {
+        const id = tr.dataset.cam;
+        if (!id) return;
+        activeCam = id;
+        localStorage.setItem("camAiActive", activeCam);
+        if (camSelect) camSelect.value = activeCam;
+        pollStatus();
+      });
+    });
+  }
+  const btnRefreshAllCams = $id("btnRefreshAllCams");
+  if (btnRefreshAllCams) btnRefreshAllCams.addEventListener("click", () => pollStatus());
+
   async function saveSettingsJson(payload) {
     const res = await fetch("/api/settings", {
       method: "PUT",
@@ -903,7 +963,7 @@ loadStats();
     const ev = s.events;
     if (ev) {
       setChecked("evEnabled", ev.enabled);
-      if ($id("evClasses")) $id("evClasses").value = ev.classes || "";
+      await loadEvClasses(ev.classes || "");
       if ($id("evClearAfter")) $id("evClearAfter").value = (ev.clear_after != null) ? ev.clear_after : 5;
       if ($id("evHold")) $id("evHold").value = (ev.hold != null) ? ev.hold : 10;
       if ($id("evMinInterval")) $id("evMinInterval").value = (ev.min_interval != null) ? ev.min_interval : 5;
@@ -1470,6 +1530,44 @@ loadStats();
     });
   }
 
+  // ---- Klasser som skapar händelser: kryssrutor (alla YOLO-klasser) ----
+  // Fallback om /api/yolo/classes inte svarar (COCO = vad yolo11/yolo26 kan).
+  const _EV_COCO = ["person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"];
+  const _EV_SV = { person: "person", bicycle: "cykel", car: "bil", motorcycle: "motorcykel", airplane: "flygplan", bus: "buss", train: "tåg", truck: "lastbil", boat: "båt", cat: "katt", dog: "hund", bird: "fågel", horse: "häst", sheep: "får", cow: "ko", elephant: "elefant", bear: "björn", zebra: "zebra", giraffe: "giraff" };
+  function evLabelName(cls) {
+    return _EV_SV[cls] ? (cls + " (" + _EV_SV[cls] + ")") : cls;
+  }
+  async function loadEvClasses(csv) {
+    let all = [];
+    try {
+      const r = await fetchJson("/api/yolo/classes");
+      all = (r && r.classes) || [];
+    } catch (e) { /* backend nere – använd inbyggd lista */ }
+    if (!Array.isArray(all) || !all.length) all = _EV_COCO.slice();
+    const sel = new Set(String(csv || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+    const wrap = $id("evClassWrap");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    all.forEach((cls) => {
+      const lab = document.createElement("label");
+      lab.className = "ev-cls";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = cls;
+      cb.checked = sel.has(String(cls).toLowerCase());
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(" " + evLabelName(cls)));
+      wrap.appendChild(lab);
+    });
+  }
+  function evCsv() {
+    const wrap = $id("evClassWrap");
+    if (!wrap) return "";
+    const out = [];
+    wrap.querySelectorAll("input[type=checkbox]:checked").forEach((cb) => out.push(String(cb.value).trim().toLowerCase()));
+    return out.sort().join(",");
+  }
+
   /* ---- Inställningar: HA-event ---- */
   if ($id("btnSaveEvents")) {
     $id("btnSaveEvents").addEventListener("click", async () => {
@@ -1478,7 +1576,7 @@ loadStats();
       const body = {
         events: {
           enabled: $id("evEnabled").checked,
-          classes: ($id("evClasses").value || "").trim(),
+          classes: evCsv(),
           clear_after: parseFloat($id("evClearAfter").value) || 5,
           hold: parseFloat($id("evHold").value) || 10,
           min_interval: parseFloat($id("evMinInterval").value) || 5,

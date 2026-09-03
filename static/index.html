@@ -80,6 +80,29 @@
           </div>
         </div>
       </div>
+
+      <!-- Alla kameror: ren status, ingen video -->
+      <div class="card allcams-card">
+        <div class="stats-head">
+          <h2>📋 Alla kameror – status</h2>
+          <button id="btnRefreshAllCams" class="btn" type="button">↻ Uppdatera</button>
+        </div>
+        <div class="table-scroll">
+          <table class="allcams-table" id="allCamsTable">
+            <thead>
+              <tr>
+                <th>Kamera</th><th>Status</th><th>YOLO</th><th>Modell</th>
+                <th>Enhet</th><th>Inferens</th><th>AI FPS</th><th>Upplösning</th>
+                <th>Detekterar nu</th><th>Senaste detektion</th><th>HA-event</th><th>Upptid</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="12" class="empty">Laddar…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint">Klicka på en rad för att välja kameran i live-vyn ovan. Ingen video här – bara status.</p>
+      </div>
     </section>
 
     <!-- ============================ ANALYS ============================ -->
@@ -380,10 +403,13 @@
           <label class="chk">
             <input type="checkbox" id="evEnabled" /> Skicka event till Home Assistant (MQTT/REST)
           </label>
-          <label>Klasser (kommaseparerat)
-            <input type="text" id="evClasses" placeholder="person, car, cat, dog" />
-            <span class="hint">Endast dessa objekt skapar händelser. En bil som står parkerad på uppfarten ger bara EN händelse (när den dyker upp) – inte hela tiden.</span>
-          </label>
+          <div class="wide">
+            <span class="ev-cls-title">Klasser att övervaka (tom = alla)</span>
+            <div class="ev-classes" id="evClassWrap">
+              <span class="hint">Laddar YOLO-klasser…</span>
+            </div>
+            <span class="hint">Bara dessa klasser visas, räknas och skapar händelser – allt annat ignoreras. En parkerad bil ger bara EN händelse (när den dyker upp). Lämna tomt = alla klasser övervakas.</span>
+          </div>
           <label>Vila innan återaktivering (s)
             <input type="number" id="evClearAfter" min="1" max="120" value="5" />
             <span class="hint">Hur länge objektet måste vara borta innan en ny händelse kan skapas. Statiska objekt som aldrig försvinner ger bara en händelse.</span>

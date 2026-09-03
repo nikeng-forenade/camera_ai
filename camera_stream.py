@@ -658,6 +658,12 @@ class CameraWorker:
                 else:
                     self.yolo_error = None
                     dets = res["detections"]
+                    # Klassfilter: bara listade klasser ska visas/räknas/skickas.
+                    # (Tom lista = alla klasser.) Annars räknas t.ex. falsklarm
+                    # som "train" ändå som fordon i HA/räknarna.
+                    allowed = self._ev_classes
+                    if allowed:
+                        dets = [d for d in dets if d.get("class") in allowed]
                     # Detektionslinje: filtrera bort det som är på fel sida
                     roi = self._roi_cfg()
                     kept = dets
