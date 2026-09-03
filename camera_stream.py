@@ -42,52 +42,38 @@ YOLO_ERROR = "error"
 
 
 def _draw_roi_line(img, roi_cfg):
-    """Rita en detektionszon/linje på en BGR-bild om aktiverad.
+    """Rita detektionsöverlägg: vågrät linje och/eller zonpolygoner.
 
-    ``roi_cfg['legacy_line']`` = en gammal vågrät linje → ritas som en enda
-    linje (ovanför/nedanför). Annars ritas en polygon (ruta/zon) av punkter.
+    Inga text-etiketter – bara linjen/polygonerna så bilden blir ren.
+    ``roi_cfg`` = {"line": {"enabled","roi_y","roi_side"},
+    "zones": {"enabled","polys","mode"}} – båda kan vara på samtidigt.
     """
-    if not roi_cfg or not roi_cfg.get("roi_enabled"):
+    if not roi_cfg:
         return img
     h, w = img.shape[:2]
-    if roi_cfg.get("legacy_line"):
-        y = int(round(float(roi_cfg.get("roi_y", 0.5)) * h))
+    # --- Vågrät linje ---
+    line = roi_cfg.get("line") or {}
+    if line.get("enabled"):
+        y = int(round(float(line.get("roi_y", 0.5)) * h))
         y = min(max(y, 0), h - 1)
-        side = str(roi_cfg.get("roi_side", "above"))
-        color = (255, 60, 60)  # BGR röd-orange
-        cv2.line(img, (0, y), (w, y), color, 2, cv2.LINE_AA)
-        label = "Linje: kollar ovanfor" if side == "above" else "Linje: kollar nedanfor"
-        ty = y - 8 if y > 24 else y + 22
-        cv2.putText(img, label, (10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
-        return img
-    polys = roi_cfg.get("polys") or []
-    if not polys and roi_cfg.get("points"):
-        polys = [roi_cfg["points"]]  # äldre enstaka-zon-format
-    if not polys:
-        return img
-    import numpy as np
+        cv2.line(img, (0, y), (w, y), (255, 60, 60), 2, cv2.LINE_AA)  # BGR röd
+    # --- Zonpolygoner ---
+    zones = roi_cfg.get("zones") or {}
+    polys = zones.get("polys") or []
+    if zones.get("enabled") and polys:
+        import numpy as np
 
-    inside = str(roi_cfg.get("mode", "inside")) != "outside"
-    color = (80, 230, 120) if inside else (255, 130, 60)  # BGR grön / orange
-    label = "Zoner: kolla inuti" if inside else "Zoner: overvaka INTE dessa"
-    first = None
-    for raw_p in polys:
-        if len(raw_p) < 3:
-            continue
-        poly = np.array(
-            [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in raw_p], np.int32
-        ).reshape(-1, 1, 2)
-        cv2.polylines(img, [poly], True, color, 2, cv2.LINE_AA)
-        for p in poly.reshape(-1, 2):
-            cv2.circle(img, (int(p[0]), int(p[1])), 4, color, -1, cv2.LINE_AA)
-        if first is None:
-            first = poly
-    if first is not None:
-        x0, y0 = int(first[0][0][0]), int(first[0][0][1])
-        ty = max(14, min(y0 - 6, h - 10))
-        cv2.putText(
-            img, label, (x0, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA
-        )
+        inside = str(zones.get("mode", "inside")) != "outside"
+        color = (80, 230, 120) if inside else (255, 130, 60)  # BGR grön / orange
+        for raw_p in polys:
+            if len(raw_p) < 3:
+                continue
+            poly = np.array(
+                [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in raw_p], np.int32
+            ).reshape(-1, 1, 2)
+            cv2.polylines(img, [poly], True, color, 2, cv2.LINE_AA)
+            for p in poly.reshape(-1, 2):
+                cv2.circle(img, (int(p[0]), int(p[1])), 4, color, -1, cv2.LINE_AA)
     return img
 
 
@@ -674,11 +660,15 @@ class CameraWorker:
                     allowed = self._ev_classes
                     if allowed:
                         dets = [d for d in dets if d.get("class") in allowed]
-                    # Detektionslinje: filtrera bort det som är på fel sida
+                    # Filter: linje (ovanför/nedanför) OCH/ELLER zoner – oberoende.
+                    # Är båda på måste detektionen klara BÅDA (t.ex. nedanför
+                    # linjen OCH inte i en "övervaka INTE"-zon).
                     roi = self._roi_cfg()
                     kept = dets
-                    if roi.get("roi_enabled"):
-                        kept = self._apply_roi(dets, roi, raw.shape[1], raw.shape[0])
+                    if roi["line"]["enabled"]:
+                        kept = self._apply_line(kept, roi["line"], raw.shape[1], raw.shape[0])
+                    if roi["zones"]["enabled"]:
+                        kept = self._apply_zones(kept, roi["zones"], raw.shape[1], raw.shape[0])
                     with self._lock:
                         self._boxes = kept
                         self._boxes_ts = now
@@ -724,8 +714,7 @@ class CameraWorker:
                         "conf": live["show_conf"],
                     },
                 )
-                if roi.get("roi_enabled"):
-                    _draw_roi_line(annotated, roi)
+                _draw_roi_line(annotated, roi)  # ritar linje och/eller zoner
                 ok, buf = cv2.imencode(
                     ".jpg",
                     annotated,
@@ -798,38 +787,30 @@ class CameraWorker:
                     self.camera[k] = v
 
     def _roi_cfg(self) -> dict:
-        """Nuvarande detektionsfiltrering (linje ELLER en/flera polygon-zoner).
+        """Nuvarande detektionsfiltrering – linje OCH/ELLER zoner (oberoende).
 
-        Läses varje inferens – ingen omstart. En aktiv zon (zone_enabled +
-        minst en polygon med ≥3 punkter) vinner över en gammal vågrät linje
-        (roi_enabled/roi_y/roi_side). legacy_line=True = rita som EN linje.
-
-        Flera zoner: mode 'inside' = detektionen ligger i NÅGON polygon;
-        'outside' = den ligger INTE i någon polygon (zonerna = "inte övervaka").
+        Läses varje inferens – ingen omstart. Linjefilter
+        (roi_enabled/roi_y/roi_side) = "bevaka bara ovanför/nedanför linjen".
+        Zonfilter (zone_enabled + zone_polys/zone_mode) = union: INUTI = i
+        någon zon, UTANFÖR = inte i någon ("övervaka INTE dessa"). Båda kan
+        vara på samtidigt – en detektion måste då klara BÅDA.
         """
         with self._lock:
             c = self.camera
+            ry = min(1.0, max(0.0, float(c.get("roi_y", 0.5))))
+            line = {
+                "enabled": bool(c.get("roi_enabled")),
+                "roi_y": ry,
+                "roi_side": str(c.get("roi_side", "above")),
+            }
             mode = str(c.get("zone_mode", "inside"))
-            enabled = bool(c.get("zone_enabled"))
-            polys = self._zone_polys_from_cfg(c) if enabled else []
-            has_zone = enabled and len(polys) >= 1
-            legacy_line = False
-            if not has_zone and bool(c.get("roi_enabled")):
-                legacy_line = True
-                ry = min(1.0, max(0.0, float(c.get("roi_y", 0.5))))
-                if str(c.get("roi_side", "above")) == "above":
-                    polys = [[[0.0, 0.0], [1.0, 0.0], [1.0, ry], [0.0, ry]]]
-                else:
-                    polys = [[[0.0, ry], [1.0, ry], [1.0, 1.0], [0.0, 1.0]]]
-                mode = "inside"
-        return {
-            "roi_enabled": has_zone or legacy_line,
-            "polys": polys,
-            "mode": mode if mode in ("inside", "outside") else "inside",
-            "legacy_line": legacy_line,
-            "roi_y": float(c.get("roi_y", 0.5)),
-            "roi_side": str(c.get("roi_side", "above")),
-        }
+            polys = self._zone_polys_from_cfg(c)
+            zones = {
+                "enabled": bool(c.get("zone_enabled")) and len(polys) >= 1,
+                "polys": polys,
+                "mode": mode if mode in ("inside", "outside") else "inside",
+            }
+        return {"line": line, "zones": zones}
 
     @staticmethod
     def _norm_poly(raw) -> list:
@@ -877,17 +858,11 @@ class CameraWorker:
             j = i
         return inside
 
-    def _apply_roi(self, dets: list, roi: dict, width: int, height: int) -> list:
-        """Behåll bara detektioner i (eller utanför) zonerna.
-
-        Polygonpunkterna är normaliserade 0–1; boxarna är i pixlar. Använder
-        boxens mittpunkt. mode='inside' = mittpunkten ligger i NÅGON polygon;
-        'outside' = den ligger inte i NÅGON polygon (zonerna = inte övervaka).
-        """
-        polys = roi.get("polys") or []
-        if not roi.get("roi_enabled") or not polys or not dets or width <= 0 or height <= 0:
+    def _keep_in_polys(self, dets: list, polys: list, inside_mode: bool, width: int, height: int) -> list:
+        """Behåll detektioner vars box-mittpunkt är i någon polygon (inside_mode)
+        respektive inte i någon. Polygoner normaliserade 0–1, boxar i pixlar."""
+        if not polys or not dets or width <= 0 or height <= 0:
             return dets
-        inside_mode = roi.get("mode", "inside") != "outside"
         out = []
         for d in dets:
             box = d.get("box")
@@ -900,6 +875,22 @@ class CameraWorker:
             if in_any == inside_mode:
                 out.append(d)
         return out
+
+    def _apply_line(self, dets: list, line: dict, width: int, height: int) -> list:
+        """Behåll bara detektioner ovanför/nedanför linjen (ovanför/nedanför)."""
+        ry = float(line.get("roi_y", 0.5))
+        if str(line.get("roi_side", "above")) == "above":
+            poly = [[0.0, 0.0], [1.0, 0.0], [1.0, ry], [0.0, ry]]
+        else:
+            poly = [[0.0, ry], [1.0, ry], [1.0, 1.0], [0.0, 1.0]]
+        return self._keep_in_polys(dets, [poly], True, width, height)
+
+    def _apply_zones(self, dets: list, zones: dict, width: int, height: int) -> list:
+        """Behåll enligt zonerna (union): INUTI = i någon, UTANFÖR = inte i någon."""
+        if not zones.get("enabled"):
+            return dets
+        inside_mode = zones.get("mode", "inside") != "outside"
+        return self._keep_in_polys(dets, zones.get("polys") or [], inside_mode, width, height)
 
     def update_detect(self, values: dict) -> None:
         with self._lock:
@@ -1000,10 +991,11 @@ class CameraWorker:
         jpeg = None
         with self._lock:
             q = int(self.live.get("jpeg_quality", 80))
-        # Med detektionslinje ritas bara godkända boxar (annars skulle
+        # Med detektionsfilter ritas bara godkända boxar (annars skulle
         # bortfiltrerade objekt synas på händelsebilden).
         img = None
-        if roi.get("roi_enabled") and raw_bgr is not None:
+        has_roi = bool(roi.get("line", {}).get("enabled") or roi.get("zones", {}).get("enabled"))
+        if has_roi and raw_bgr is not None:
             img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
             _draw_roi_line(img, roi)
         elif annotated_bgr is not None:

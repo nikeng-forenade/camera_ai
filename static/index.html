@@ -260,10 +260,9 @@
         <!-- Detektionsfilter: enkel linje ELLER ruta/zon (punkter) -->
         <div class="zone-box" id="roiBox">
           <div class="zone-bar">
-            <label class="zone-title">
-              <input type="checkbox" id="camZoneEnabled" />
-              <span>🎯 Detektionsfilter</span>
-            </label>
+            <span class="zone-title">🎯 Detektionsfilter
+              <span class="zone-sub">linje &amp; zoner kan vara på samtidigt</span>
+            </span>
             <div class="zone-kind" id="zoneKind">
               <button type="button" class="zk" id="camKindLine" data-kind="line">➖ Linje</button>
               <button type="button" class="zk active" id="camKindPoly" data-kind="polygon">▭ Zoner</button>
@@ -288,6 +287,7 @@
 
             <div class="zone-side">
               <div class="zone-ctl" id="zonePolyCtl">
+                <label class="chk zone-enable"><input type="checkbox" id="camZoneEnabled" /> Aktivera zonfilter</label>
                 <div class="zone-mode">
                   <span class="zone-mode-label">Kolla</span>
                   <select id="camZoneMode">
@@ -303,6 +303,7 @@
                 <div class="zone-tip"><b>Klicka/dra</b> = lägg till en zon (flera) · <b>dra hörn</b> = ändra storlek · <b>dra inuti</b> = flytta · <b>✕</b> = ta bort zon.</div>
               </div>
               <div class="zone-ctl" id="zoneLineCtl" hidden>
+                <label class="chk zone-enable"><input type="checkbox" id="camLineEnabled" /> Aktivera linjefilter</label>
                 <div class="zone-mode">
                   <span class="zone-mode-label">Kolla</span>
                   <select id="camZoneSide">
