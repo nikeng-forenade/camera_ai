@@ -49,6 +49,12 @@ class CameraAIClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def cameras_status(self) -> dict:
+        """Löpande status för serverns kameror (live: state, detections, fps)."""
+        resp = await self._session.get(f"{self.url}/api/cameras/status", timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+
     async def analyze_file(
         self,
         image_path: Path,

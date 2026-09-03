@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import CameraAIEntity
+from .entity import CameraAIEntity, live_camera
 
 
 async def async_setup_entry(
@@ -21,7 +21,7 @@ async def async_setup_entry(
 
 
 class CameraAIMotionSensor(CameraAIEntity, BinarySensorEntity):
-    """ON when people/cars/animals were detected in the last analysis."""
+    """ON när person/bil/djur detekteras på live-kameran (eller senaste analysen)."""
 
     _attr_device_class = BinarySensorDeviceClass.MOTION
     _attr_icon = "mdi:motion-sensor"
@@ -33,7 +33,20 @@ class CameraAIMotionSensor(CameraAIEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
+        cam = live_camera(self.coordinator.data or {})
+        if cam is not None:
+            return bool(cam.get("detections"))
         result = (self.coordinator.data or {}).get("result")
-        if not result:
-            return False
-        return bool(result.get("detections"))
+        return bool((result or {}).get("detections"))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        cam = live_camera(self.coordinator.data or {})
+        if cam is None:
+            return {}
+        return {
+            "camera_id": cam.get("camera_id"),
+            "camera": cam.get("camera_name"),
+            "camera_state": cam.get("camera_state"),
+            "detection_counts": cam.get("detection_counts") or {},
+        }

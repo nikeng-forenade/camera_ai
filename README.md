@@ -28,7 +28,7 @@ Reolink → RTSP sub → Camera worker → YOLO (AI FPS) → MJPEG → Dashboard
 - **Vision-LLM (Ollama) på Arc** via Vulkan (`OLLAMA_VULKAN=1`).
 - **Home Assistant** — MQTT auto-discovery (binary_sensor, sensor, image) + REST.
 - **Larmstyrd LLM-laddning** — LLM laddas när HA-larmet är skarpt, laddas ur när det är av (frigör VRAM).
-- **HACS-integration** — välj modell/konfidens direkt från HA:s UI.
+- **HACS-integration (v0.8)** — välj modell/konfidens direkt från HA:s UI, plus entiteter (kamera-status, motion, senaste detektion, personer/bilar/djur) som följer serverns **live-status** via polling av `/api/cameras/status`.
 
 ## Installation (Windows)
 

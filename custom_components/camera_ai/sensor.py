@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import CameraAIEntity
+from .entity import CameraAIEntity, detection_counts, live_camera
 
 
 async def async_setup_entry(
@@ -32,7 +32,24 @@ async def async_setup_entry(
 
 
 def _counts(coordinator) -> dict:
+    """people/vehicles/animals - live-kamera om möjligt, annars senaste analys."""
+    cam = live_camera(coordinator.data or {})
+    if cam is not None:
+        return detection_counts(cam)
     return ((coordinator.data or {}).get("result") or {}).get("counts") or {}
+
+
+def _detections(coordinator) -> tuple:
+    """Returnerar (detections, camera_id, camera_name) från live om möjligt."""
+    cam = live_camera(coordinator.data or {})
+    if cam is not None:
+        return (
+            (cam.get("detections") or []),
+            cam.get("camera_id"),
+            cam.get("camera_name"),
+        )
+    result = (coordinator.data or {}).get("result") or {}
+    return (result.get("detections") or []), None, None
 
 
 class CameraAIStatusSensor(CameraAIEntity, SensorEntity):
@@ -95,6 +112,9 @@ class CameraAIRuntimeConfigSensor(CameraAIEntity, SensorEntity):
             "keep_alive": keep_alive if keep_alive is not None else "default (5 min)",
             "ollama_available": cfg.get("ollama_available"),
         }
+
+
+class CameraAILastDetectionSensor(CameraAIEntity, SensorEntity):
     """Most recent detection classes + confidence."""
 
     _attr_icon = "mdi:eye-outline"
@@ -106,31 +126,36 @@ class CameraAIRuntimeConfigSensor(CameraAIEntity, SensorEntity):
 
     @property
     def native_value(self) -> str:
-        result = (self.coordinator.data or {}).get("result")
-        if not result:
-            return "unknown"
-        dets = result.get("detections") or []
+        dets, _, _ = _detections(self.coordinator)
         if not dets:
             return "Inget"
         return ", ".join(d["class"] for d in dets)
 
     @property
     def extra_state_attributes(self) -> dict:
-        result = (self.coordinator.data or {}).get("result") or {}
-        dets = result.get("detections") or []
-        counts = result.get("counts") or {}
-        return {
+        dets, cam_id, cam_name = _detections(self.coordinator)
+        counts = _counts(self.coordinator)
+        cam = live_camera(self.coordinator.data or {})
+        attrs: dict = {
             "count": len(dets),
+            "classes": [d["class"] for d in dets],
+            "confidence": {d["class"]: d["confidence"] for d in dets},
             "people": counts.get("people", 0),
             "animals": counts.get("animals", 0),
             "vehicles": counts.get("vehicles", 0),
-            "colors": counts.get("colors") or [],
-            "classes": [d["class"] for d in dets],
-            "confidence": {d["class"]: d["confidence"] for d in dets},
-            "summary": result.get("summary"),
-            "model": result.get("model"),
-            "inference_ms": result.get("inference_ms"),
         }
+        if cam_id:
+            attrs["camera_id"] = cam_id
+            attrs["camera"] = cam_name
+        if cam:
+            attrs["camera_state"] = cam.get("camera_state")
+            attrs["last_detection_ts"] = cam.get("last_detection_ts")
+        result = (self.coordinator.data or {}).get("result") or {}
+        if result:
+            attrs["summary"] = result.get("summary")
+            attrs["model"] = result.get("model")
+            attrs["inference_ms"] = result.get("inference_ms")
+        return attrs
 
 
 class CameraAIDescriptionSensor(CameraAIEntity, SensorEntity):

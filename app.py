@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import httpx
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -893,6 +893,26 @@ def live_stream(camera: str = ""):
         _mjpeg_gen(),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/live/{camera}/snapshot.jpg")
+def live_snapshot(camera: str = ""):
+    """Stillbild (senaste annoterade frame:en) som JPEG.
+
+    Används av HA/HACS som en vanlig bild-URL per kamera - enklare än att
+    streama MJPEG. 404 tills kameran har producerat en första bild.
+    """
+    w = _resolve_camera(camera)
+    if w is None:
+        raise HTTPException(404, "Ingen kamera konfigurerad.")
+    data, _v = w.latest_jpeg()
+    if not data:
+        raise HTTPException(404, "Ingen bild ännu - vänta på första frame:en.")
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-cache"},
     )
 
 

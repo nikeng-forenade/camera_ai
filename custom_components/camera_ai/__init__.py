@@ -44,20 +44,22 @@ class CameraAICoordinator(DataUpdateCoordinator[dict]):
 
     def __init__(self, hass: HomeAssistant, client: CameraAIClient) -> None:
         super().__init__(
-            hass, _LOGGER, name=DOMAIN, update_interval=timedelta(seconds=30)
+            hass, _LOGGER, name=DOMAIN, update_interval=timedelta(seconds=10)
         )
         self.client = client
 
     async def _async_update_data(self) -> dict:
         try:
-            health, cfg = await asyncio.gather(
-                self.client.health(), self.client.get_config()
+            health, cfg, cam_st = await asyncio.gather(
+                self.client.health(), self.client.get_config(), self.client.cameras_status()
             )
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(f"Camera AI unreachable: {err}") from err
         data = dict(self.data or {})
         data["health"] = health
         data["config"] = cfg
+        data["cameras"] = cam_st.get("cameras") or []
+        data["camera_default"] = cam_st.get("default")
         return data
 
 
