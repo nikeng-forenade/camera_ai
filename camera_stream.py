@@ -1159,6 +1159,17 @@ class CameraPool:
             w.stop()
         return w
 
+    def set_stream(self, cid: str, on: bool) -> CameraWorker | None:
+        """Sätt live-ström (MJPEG till GUI) på/av för en kamera.
+
+        Worker + YOLO + HA-event fortsätter oavsett - det här styr bara om
+        videon kodas/skickas till GUI/API.
+        """
+        w = self.get(cid)
+        if w is not None:
+            w.update_live({"enabled": bool(on)})
+        return w
+
     def start_all(self) -> None:
         """Starta aktiverade kameror (kontinuerligt, oavsett webbläsare)."""
         for w in self.all():

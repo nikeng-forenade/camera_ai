@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VERSION
+from .entity import live_camera
 
 
 async def async_setup_entry(
@@ -22,7 +23,7 @@ async def async_setup_entry(
 
 
 class CameraAICamera(CoordinatorEntity, Camera):
-    """Proxies the annotated image served by the Camera AI server."""
+    """Proxies the live annotated frame served by the Camera AI server."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:cctv"
@@ -45,6 +46,15 @@ class CameraAICamera(CoordinatorEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
+        # 1) Live-bild: senaste annoterade frame från servern (per kamera)
+        cam = live_camera(self.coordinator.data or {})
+        if cam and cam.get("camera_id"):
+            cam_id = str(cam["camera_id"])
+            try:
+                return await self._client.fetch_image(f"/api/live/{cam_id}/snapshot.jpg")
+            except Exception:  # noqa: BLE001 - fallback till senaste analysen
+                pass
+        # 2) Fallback: senaste manuella analysbilden (från en analyse-service)
         url = (self.coordinator.data or {}).get("annotated_url")
         if not url:
             return None

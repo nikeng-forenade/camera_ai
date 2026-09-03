@@ -846,6 +846,24 @@ def camera_stop_id(camera_id: str):
     return w.status()
 
 
+@app.post("/api/cameras/{camera_id}/stream/start")
+def camera_stream_start(camera_id: str):
+    """Starta GUI-strömmen. Worker + YOLO + HA-event fortsätter ändå."""
+    w = pool.set_stream(camera_id, True)
+    if w is None:
+        raise HTTPException(404, f"Kameran '{camera_id}' finns inte.")
+    return w.status()
+
+
+@app.post("/api/cameras/{camera_id}/stream/stop")
+def camera_stream_stop(camera_id: str):
+    """Stoppa GUI-strömmen (videon). YOLO + HA-event fortsätter på servern."""
+    w = pool.set_stream(camera_id, False)
+    if w is None:
+        raise HTTPException(404, f"Kameran '{camera_id}' finns inte.")
+    return w.status()
+
+
 @app.post("/api/cameras/start")
 def camera_start():
     """Starta första kameran (bakåtkompatibilitet)."""

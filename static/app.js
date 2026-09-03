@@ -584,6 +584,7 @@ loadStats();
   const gpuWarnActual = $id("gpuWarnActual");
   const btnStreamToggle = $id("btnStreamToggle");
   const streamHint = $id("streamHint");
+  const liveOverlay = $id("liveOverlay");
   const camSelect = $id("camSelect");
   const camEditSelect = $id("camEditSelect");
   let activeCam = localStorage.getItem("camAiActive") || "";
@@ -673,11 +674,17 @@ loadStats();
       if (gpuWarnCard) gpuWarnCard.hidden = true;
       return;
     }
-    // Live-bild: sätt MJPEG-källan en gång per kamera (id)
+    // Live-bild: visa bara när strömmen är på. Status syns alltid i sidopanel.
     const camId = s.camera_id;
-    if (liveImg && liveImg.dataset.src !== camId) {
-      liveImg.dataset.src = camId;
-      liveImg.src = "/api/live/" + encodeURIComponent(camId);
+    const showVideo = !!(s.camera_enabled && s.live_enabled && s.camera_state !== "disabled");
+    if (liveImg) {
+      if (showVideo && liveImg.dataset.src !== camId) {
+        liveImg.dataset.src = camId;
+        liveImg.src = "/api/live/" + encodeURIComponent(camId);
+      } else if (!showVideo && liveImg.dataset.src) {
+        liveImg.dataset.src = "";
+        liveImg.removeAttribute("src");
+      }
     }
 
     // Badge + subtext
@@ -699,16 +706,41 @@ loadStats();
         : (s.camera_detail || "");
     }
 
-    // Start/Stopp-knapp
+    // Start/Stopp-knapp: "ström" = bara videon till GUI. Worker + YOLO +
+    // HA-event fortsätter alltid på servern så länge kameran är aktiverad.
     if (btnStreamToggle) {
       btnStreamToggle.disabled = false;
-      if (!s.camera_enabled) { btnStreamToggle.textContent = "⚙️ Konfigurera kamera"; btnStreamToggle.dataset.action = "settings"; }
-      else if (s.camera_state === "online" || s.camera_state === "connecting" || s.camera_state === "reconnecting") {
-        btnStreamToggle.textContent = "⏹ Stoppa ström"; btnStreamToggle.dataset.action = "stop";
-      } else { btnStreamToggle.textContent = "▶ Starta ström"; btnStreamToggle.dataset.action = "start"; }
+      if (!s.camera_enabled) {
+        btnStreamToggle.textContent = "⚙️ Konfigurera kamera";
+        btnStreamToggle.dataset.action = "settings";
+      } else if (s.camera_state === "disabled") {
+        btnStreamToggle.textContent = "▶ Starta kamera";
+        btnStreamToggle.dataset.action = "worker_start";
+      } else if (s.live_enabled) {
+        btnStreamToggle.textContent = "⏹ Stoppa ström";
+        btnStreamToggle.dataset.action = "stream_stop";
+      } else {
+        btnStreamToggle.textContent = "▶ Starta ström";
+        btnStreamToggle.dataset.action = "stream_start";
+      }
     }
     if (streamHint) {
-      streamHint.textContent = !s.camera_enabled ? "Kameran är inte aktiverad ännu." : "";
+      if (!s.camera_enabled) {
+        streamHint.textContent = "Kameran är inte aktiverad ännu.";
+      } else if (s.stream_active && !s.live_enabled) {
+        streamHint.textContent = "Ström stoppad – YOLO + HA-event fortsätter på servern.";
+      } else {
+        streamHint.textContent = "";
+      }
+    }
+    if (liveOverlay) {
+      if (s.camera_state === "disabled") {
+        liveOverlay.textContent = "● Kameran stoppad – starta kameran";
+      } else if (s.live_enabled === false) {
+        liveOverlay.textContent = "● Ström stoppad – YOLO + HA-event körs vidare";
+      } else {
+        liveOverlay.textContent = "";
+      }
     }
 
     // Status-/metrictabell
@@ -799,12 +831,17 @@ loadStats();
   /* ---- Stream start/stopp ---- */
   if (btnStreamToggle) {
     btnStreamToggle.addEventListener("click", async () => {
-      const action = btnStreamToggle.dataset.action || "start";
+      const action = btnStreamToggle.dataset.action || "worker_start";
       if (action === "settings") { showView("settings"); return; }
       btnStreamToggle.disabled = true;
       try {
         const camId = activeCam ? encodeURIComponent(activeCam) : "";
-        await fetchJson("/api/cameras/" + camId + "/" + action, { method: "POST" });
+        const path = action === "worker_start"
+          ? ("/api/cameras/" + camId + "/start")
+          : action === "stream_start"
+          ? ("/api/cameras/" + camId + "/stream/start")
+          : ("/api/cameras/" + camId + "/stream/stop");
+        await fetchJson(path, { method: "POST" });
         if (streamHint) streamHint.textContent = "";
       } catch (e) {
         if (streamHint) streamHint.textContent = "Fel: " + e.message;
