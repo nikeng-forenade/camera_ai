@@ -1301,8 +1301,19 @@ class CameraPool:
 
         was_running = w.running
         enabled = values.get("enabled", w.camera.get("enabled", False))
+        # Starta bara om RTSP-anslutningen om något som faktiskt påverkar den
+        # ändrats – annars tappar man strömmen i onödan vid varje "Spara".
         restart_keys = ("host", "user", "password", "path", "full_url")
-        needs_restart = any(k in values for k in restart_keys)
+        needs_restart = False
+        for k in restart_keys:
+            if k in values:
+                new_v = values[k]
+                old_v = w.camera.get(k)
+                if k == "password":
+                    if new_v and str(new_v) != str(old_v or ""):
+                        needs_restart = True
+                elif str(new_v) != str(old_v or ""):
+                    needs_restart = True
         w.update_camera(values)
 
         if not enabled:
@@ -1310,7 +1321,7 @@ class CameraPool:
         else:
             if not w.running:
                 w.start()
-            elif needs_restart or (was_running and "name" in values):
+            elif needs_restart:
                 w.restart()
         self._save()
         return w
