@@ -1257,6 +1257,16 @@ loadStats();
     zonePts = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
     zoneRender();
   }
+  function zoneDefaultBox(cx, cy) {
+    // Enkel klick → skapa en färdig ruta runt klickstället (dra sedan hörn/inuti)
+    const half = 0.18;
+    const x1 = Math.min(1, Math.max(0, cx - half));
+    const x2 = Math.min(1, Math.max(0, cx + half));
+    const y1 = Math.min(1, Math.max(0, cy - half));
+    const y2 = Math.min(1, Math.max(0, cy + half));
+    zonePts = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+    zoneRender();
+  }
   function drawRectPreview(sx, sy, cx, cy) {
     const svg = $id("camZoneSvg");
     if (!svg) return;
@@ -1353,7 +1363,16 @@ loadStats();
     const endOp = (e) => {
       if (zoneOp && zoneOp.type === "rect") {
         const end = roiPosOf(e);
-        if (end) zoneRect([[zoneOp.sx, zoneOp.sy], [end[0], zoneOp.sy], [end[0], end[1]], [zoneOp.sx, end[1]]]);
+        if (end) {
+          const w = Math.abs(end[0] - zoneOp.sx);
+          const h = Math.abs(end[1] - zoneOp.sy);
+          if (w < 0.02 && h < 0.02) {
+            // Enkel klick → skapa en färdig ruta som du sedan drar hörn/inuti på
+            zoneDefaultBox(zoneOp.sx, zoneOp.sy);
+          } else {
+            zoneRect([[zoneOp.sx, zoneOp.sy], [end[0], zoneOp.sy], [end[0], end[1]], [zoneOp.sx, end[1]]]);
+          }
+        }
       }
       clearDraft();
       zoneOp = null;
