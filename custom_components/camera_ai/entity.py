@@ -45,7 +45,6 @@ def camera_device_info(entry: ConfigEntry, cam: dict) -> dict:
         "manufacturer": "Camera AI",
         "model": "Live-kamera",
         "sw_version": VERSION,
-        "via_device": (DOMAIN, entry.entry_id),
     }
 
 
