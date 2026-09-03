@@ -944,7 +944,10 @@ loadStats();
     if (slider) slider.value = Math.round(pct);
     if (line) line.style.top = pct + "%";
     if (val) val.textContent = Math.round(pct) + " %";
-    if (badge) badge.textContent = Math.round(pct) + " %";
+    if (badge) {
+      badge.textContent = Math.round(pct) + " %";
+      badge.style.top = "calc(" + pct + "% - 10px)";
+    }
   }
   function roiPreviewVisible() {
     const on = !!( $id("camRoiEnabled") && $id("camRoiEnabled").checked );

@@ -662,13 +662,14 @@ class CameraWorker:
                         now,
                     )
 
-            # --- JPEG-kodning (display-FPS) - alltid senaste raw + nuvarande boxes ---
-            disp_interval = 1.0 / max(1.0, float(live["display_fps"]))
-            if (
-                live["enabled"]
-                and (now - last_disp) >= disp_interval
-                and raw_ts != disp_ran_for_ts
-            ):
+            # --- JPEG-cache: alltid senaste raw + nuvarande boxes ---
+            # När strömmen (MJPEG till GUI) är på kodas i display-FPS. Är den av
+            # kodas ändå en snapshot ~var 2:e sekund så att /snapshot.jpg,
+            # HA-bilden och förhandsvisningen för detektionslinjen fungerar.
+            disp_interval = (
+                1.0 / max(1.0, float(live["display_fps"])) if live["enabled"] else 2.0
+            )
+            if (now - last_disp) >= disp_interval and raw_ts != disp_ran_for_ts:
                 with self._lock:
                     boxes = list(self._boxes)
                 roi = self._roi_cfg()
