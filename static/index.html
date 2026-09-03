@@ -235,26 +235,40 @@
         </div>
 
         <!-- Detektionszon (polygon med punkter/hörn) -->
-        <div class="roi-box" id="roiBox">
-          <div class="roi-head">
-            <label class="chk">
-              <input type="checkbox" id="camZoneEnabled" /> 🎯 Detektionszon – rita själv med punkter
+        <div class="zone-box" id="roiBox">
+          <div class="zone-bar">
+            <label class="zone-title">
+              <input type="checkbox" id="camZoneEnabled" />
+              <span>🎯 Detektionszon</span>
             </label>
-            <select id="camZoneMode">
-              <option value="inside">Kolla INUTI zonen</option>
-              <option value="outside">Kolla UTANFÖR zonen</option>
-            </select>
+            <div class="zone-mode">
+              <span class="zone-mode-label">Kolla</span>
+              <select id="camZoneMode">
+                <option value="inside">INUTI zonen</option>
+                <option value="outside">UTANFÖR zonen</option>
+              </select>
+            </div>
           </div>
-          <div class="roi-preview" id="roiPreview">
-            <img id="camRoiImg" alt="Kamera-förhandsvisning" />
-            <svg id="camZoneSvg" class="roi-zone-svg" preserveAspectRatio="none"></svg>
+
+          <div class="zone-stage">
+            <div class="roi-preview" id="roiPreview">
+              <div class="roi-empty" id="roiEmpty">
+                <div class="roi-empty-ic">📷</div>
+                <div class="roi-empty-tx">Starta strömmen (▶ på Dashboard) så visas bilden här.<br />Zonen kan ändå ritas på den tomma rutan.</div>
+              </div>
+              <img id="camRoiImg" alt="Kamera-förhandsvisning" />
+              <svg id="camZoneSvg" class="roi-zone-svg" preserveAspectRatio="none"></svg>
+            </div>
+
+            <div class="zone-side">
+              <div class="zone-actions">
+                <button id="btnZoneUndo" class="btn" type="button">↩ Ångra</button>
+                <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa</button>
+              </div>
+              <div><span class="zone-chip" id="camZoneCount"></span></div>
+              <div class="zone-tip" id="roiHint"><b>Klicka</b> i bilden = nytt hörn · <b>dra</b> en punkt = flytta · <b>dubbelklicka</b> = ta bort. Minst 3 hörn = aktiv zon.</div>
+            </div>
           </div>
-          <div class="roi-actions">
-            <button id="btnZoneUndo" class="btn" type="button">↩ Ångra sista punkten</button>
-            <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa zon</button>
-            <span id="camZoneCount" class="save-msg"></span>
-          </div>
-          <p class="hint" id="roiHint">Slå på strömmen (▶ på Dashboard) så syns bilden. <b>Klicka i bilden</b> för att lägga hörn, <b>dra i en punkt</b> för att flytta den, dubbelklicka på en punkt för att ta bort den. Minst 3 punkter = zon. Välj inuti/utanför och spara kameran – det som är utanför zonen räknas inte, ritas inte och triggar inga HA-event.</p>
         </div>
 
         <p class="hint">Live-video körs kontinuerligt så länge en kamera är aktiverad – även utan öppen webbläsare (YOLO + HA-event fortsätter). Sub-stream rekommenderas. Lösenord skickas aldrig tillbaka; tomt fält vid spara behåller det befintliga.</p>

@@ -993,10 +993,8 @@ loadStats();
     zoneRender();
   }
   function hideRoiPreview() {
-    const pv = $id("roiPreview");
-    if (pv) pv.hidden = true;
     const img = $id("camRoiImg");
-    if (img) img.removeAttribute("src");
+    if (img) img.removeAttribute("src"); // tom-plats-hållaren visas
   }
   function refreshRoiPreview(c) {
     const pv = $id("roiPreview");
@@ -1013,11 +1011,9 @@ loadStats();
     const img = $id("camRoiImg"), pv = $id("roiPreview");
     if (!img || !pv || !camId) return;
     pv.hidden = false;
-    img.onload = () => { if (pv) pv.hidden = false; };
+    img.onload = () => { /* bilden visas – tom-rutan döljs av CSS */ };
     img.onerror = () => {
-      if (pv) pv.hidden = true;
-      const hint = $id("roiHint");
-      if (hint) hint.textContent = "Ingen bild än – kameran måste vara aktiverad och igång (▶ Starta ström på Dashboard). Du kan ändå rita zonen på den tomma rutan.";
+      if (img) img.removeAttribute("src"); // tom-plats-hållaren visas
     };
     // clean=1 = rå bild utan serverritade boxar/zon – bara din zon ovanpå
     img.src = "/api/live/" + encodeURIComponent(camId) + "/snapshot.jpg?clean=1&ts=" + Date.now();
