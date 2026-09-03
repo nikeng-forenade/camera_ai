@@ -96,30 +96,33 @@ class CameraAIOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        if user_input is not None:
-            url = str(user_input.get(CONF_URL)).strip().rstrip("/")
-            panel = bool(user_input.get("panel_enabled", True))
-            data = {**self.config_entry.data, CONF_URL: url}
-            options = {"panel_enabled": panel}
-            self.hass.config_entries.async_update_entry(
-                self.config_entry, data=data, options=options
-            )
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            return self.async_create_entry(title="", data=options)
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_URL,
-                        default=self.config_entry.data.get(CONF_URL, ""),
-                    ): str,
-                    vol.Optional(
-                        "panel_enabled",
-                        default=self.config_entry.options.get("panel_enabled", True),
-                    ): bool,
-                }
-            ),
+    def _schema(self) -> vol.Schema:
+        return vol.Schema(
+            {
+                vol.Required(
+                    CONF_URL,
+                    default=self.config_entry.data.get(CONF_URL, ""),
+                ): str,
+                vol.Optional(
+                    "panel_enabled",
+                    default=bool(self.config_entry.options.get("panel_enabled", True)),
+                ): bool,
+            }
         )
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        try:
+            if user_input is not None:
+                url = str(user_input.get(CONF_URL)).strip().rstrip("/")
+                panel = bool(user_input.get("panel_enabled", True))
+                data = {**self.config_entry.data, CONF_URL: url}
+                options = {"panel_enabled": panel}
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=data, options=options
+                )
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                return self.async_create_entry(title="", data=options)
+            return self.async_show_form(step_id="init", data_schema=self._schema())
+        except Exception as exc:  # noqa: BLE001 – logga så vi ser orsaken till 500
+            _LOGGER.exception("Fel i Camera AI-alternativ: %s", exc)
+            return self.async_show_form(step_id="init", data_schema=self._schema())
