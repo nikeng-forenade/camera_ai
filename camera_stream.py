@@ -42,19 +42,33 @@ YOLO_ERROR = "error"
 
 
 def _draw_roi_line(img, roi_cfg):
-    """Rita en vågrät detektionslinje på en BGR-bild (om aktiverad)."""
+    """Rita en detektionszon (polygon av punkter) på en BGR-bild om aktiverad.
+
+    Gamla vågräta linjer omvandlas i ``_roi_cfg`` till en fyrkantszon, så här
+    ritas bara polygoner.
+    """
     if not roi_cfg or not roi_cfg.get("roi_enabled"):
         return img
+    pts = roi_cfg.get("points") or []
+    if len(pts) < 3:
+        return img
+    import numpy as np
+
     h, w = img.shape[:2]
-    y = int(round(float(roi_cfg.get("roi_y", 0.5)) * h))
-    y = min(max(y, 0), h - 1)
-    side = str(roi_cfg.get("roi_side", "above"))
-    color = (255, 60, 60)  # BGR: röd-orange
-    cv2.line(img, (0, y), (w, y), color, 2, cv2.LINE_AA)
-    label = "Detektionslinje - kollar ovanfor" if side == "above" else "Detektionslinje - kollar nedanfor"
-    ty = y - 8 if y > 24 else y + 22
+    poly = np.array(
+        [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in pts], np.int32
+    ).reshape(-1, 1, 2)
+    inside = str(roi_cfg.get("mode", "inside")) != "outside"
+    color = (80, 230, 120) if inside else (255, 130, 60)  # BGR grön / orange
+    cv2.polylines(img, [poly], True, color, 2, cv2.LINE_AA)
+    # markera hörnen med små punkter
+    for p in poly.reshape(-1, 2):
+        cv2.circle(img, (int(p[0]), int(p[1])), 4, color, -1, cv2.LINE_AA)
+    label = "Zon: kolla inuti" if inside else "Zon: kolla utanfor"
+    x0, y0 = int(poly[0][0][0]), int(poly[0][0][1])
+    ty = max(14, min(y0 - 6, h - 10))
     cv2.putText(
-        img, label, (10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA
+        img, label, (x0, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA
     )
     return img
 
@@ -352,10 +366,13 @@ class CameraWorker:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
-            # Detektionslinje: kolla bara ena sidan av en vågrät linje
+            # Detektionszon (polygon av punkter); gamla linjer (roi_*) stöds fortfarande
             "roi_enabled": False,
             "roi_y": 0.5,
             "roi_side": "above",
+            "zone_enabled": False,
+            "zone_points": [],
+            "zone_mode": "inside",
         }
 
     @staticmethod
@@ -636,7 +653,7 @@ class CameraWorker:
                     roi = self._roi_cfg()
                     kept = dets
                     if roi.get("roi_enabled"):
-                        kept = self._apply_roi(dets, roi, raw.shape[0])
+                        kept = self._apply_roi(dets, roi, raw.shape[1], raw.shape[0])
                     with self._lock:
                         self._boxes = kept
                         self._boxes_ts = now
@@ -756,32 +773,78 @@ class CameraWorker:
                     self.camera[k] = v
 
     def _roi_cfg(self) -> dict:
-        """Nuvarande detektionslinje (läses varje inferens – ingen omstart)."""
-        with self._lock:
-            return {
-                "roi_enabled": bool(self.camera.get("roi_enabled")),
-                "roi_y": float(self.camera.get("roi_y", 0.5)),
-                "roi_side": str(self.camera.get("roi_side", "above")),
-            }
+        """Nuvarande detektionszon (polygon av normaliserade punkter).
 
-    def _apply_roi(self, dets: list, roi: dict, height: int) -> list:
-        """Behåll bara detektioner på vald sida om detektionslinjen.
-
-        Utgår från boxens mittpunkt (i pixel-koordinater). 'above' = mittpunkten
-        ovanför linjen (mindre y), 'below' = under linjen (större y).
+        Läses varje inferens – ingen omstart. Bakåtkompat: en gammal vågrät
+        linje (roi_enabled/roi_y/roi_side) omvandlas till en fyrkantszon.
         """
-        if not roi.get("roi_enabled") or height <= 0 or not dets:
+        with self._lock:
+            c = self.camera
+            points: list = []
+            mode = str(c.get("zone_mode", "inside"))
+            enabled = bool(c.get("zone_enabled"))
+            raw = c.get("zone_points") or []
+            if enabled and isinstance(raw, list):
+                for p in raw:
+                    try:
+                        points.append([float(p[0]), float(p[1])])
+                    except (TypeError, ValueError, IndexError):
+                        continue
+            # Bakåtkompat: gammal linje → fyrkantszon
+            if (not enabled or len(points) < 3) and bool(c.get("roi_enabled")):
+                ry = min(1.0, max(0.0, float(c.get("roi_y", 0.5))))
+                if str(c.get("roi_side", "above")) == "above":
+                    points = [[0.0, 0.0], [1.0, 0.0], [1.0, ry], [0.0, ry]]
+                else:
+                    points = [[0.0, ry], [1.0, ry], [1.0, 1.0], [0.0, 1.0]]
+                mode = "inside"
+                enabled = True
+        return {
+            "roi_enabled": enabled and len(points) >= 3,
+            "points": points,
+            "mode": mode if mode in ("inside", "outside") else "inside",
+            # legacy-fält (för ev. utritning/logg)
+            "roi_y": float(c.get("roi_y", 0.5)),
+            "roi_side": str(c.get("roi_side", "above")),
+        }
+
+    @staticmethod
+    def _point_in_poly(px: float, py: float, poly: list) -> bool:
+        """Ray-casting point-in-polygon på normaliserade koordinater."""
+        inside = False
+        n = len(poly)
+        j = n - 1
+        for i in range(n):
+            xi, yi = poly[i]
+            xj, yj = poly[j]
+            if ((yi > py) != (yj > py)) and (
+                px < (xj - xi) * (py - yi) / ((yj - yi) or 1e-9) + xi
+            ):
+                inside = not inside
+            j = i
+        return inside
+
+    def _apply_roi(self, dets: list, roi: dict, width: int, height: int) -> list:
+        """Behåll bara detektioner i (eller utanför) zonen.
+
+        Polygonpunkterna är normaliserade 0–1; boxarna är i pixlar. Använder
+        boxens mittpunkt. mode='inside' = mittpunkten ligger i polygonen;
+        'outside' = den gör det inte.
+        """
+        points = roi.get("points") or []
+        if not roi.get("roi_enabled") or len(points) < 3 or not dets or width <= 0 or height <= 0:
             return dets
-        y = float(roi.get("roi_y", 0.5))
-        side = str(roi.get("roi_side", "above"))
+        inside_mode = roi.get("mode", "inside") != "outside"
         out = []
         for d in dets:
             box = d.get("box")
             if not box or len(box) < 4:
                 out.append(d)
                 continue
-            cy = (float(box[1]) + float(box[3])) / 2.0 / float(height)
-            if (cy < y) if side == "above" else (cy >= y):
+            cx = ((float(box[0]) + float(box[2])) / 2.0) / float(width)
+            cy = ((float(box[1]) + float(box[3])) / 2.0) / float(height)
+            in_zone = self._point_in_poly(cx, cy, points)
+            if in_zone == inside_mode:
                 out.append(d)
         return out
 
@@ -950,10 +1013,13 @@ class CameraWorker:
             "reconnect": bool(c.get("reconnect")),
             "reconnect_delay": int(c.get("reconnect_delay", 5)),
             "autostart": bool(c.get("autostart")),
-            # Detektionslinje
+            # Detektionszon
             "roi_enabled": bool(c.get("roi_enabled")),
             "roi_y": float(c.get("roi_y", 0.5)),
             "roi_side": str(c.get("roi_side", "above")),
+            "zone_enabled": bool(c.get("zone_enabled")),
+            "zone_points": c.get("zone_points") or [],
+            "zone_mode": str(c.get("zone_mode", "inside")),
         }
 
     def latest_jpeg(self):
@@ -1071,6 +1137,7 @@ _CAMERA_FIELDS = (
     "enabled", "name", "host", "user", "password", "path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
     "roi_enabled", "roi_y", "roi_side",
+    "zone_enabled", "zone_points", "zone_mode",
 )
 
 
@@ -1118,10 +1185,13 @@ class CameraPool:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
-            # Detektionslinje
+            # Detektionszon
             "roi_enabled": False,
             "roi_y": 0.5,
             "roi_side": "above",
+            "zone_enabled": False,
+            "zone_points": [],
+            "zone_mode": "inside",
         }
 
     def _save(self) -> None:

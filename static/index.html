@@ -234,27 +234,27 @@
           </label>
         </div>
 
-        <!-- Detektionslinje (ROI): kolla bara ena sidan av en vågrät linje -->
+        <!-- Detektionszon (polygon med punkter/hörn) -->
         <div class="roi-box" id="roiBox">
           <div class="roi-head">
             <label class="chk">
-              <input type="checkbox" id="camRoiEnabled" /> 🎯 Detektionslinje – kolla bara ena sidan
+              <input type="checkbox" id="camZoneEnabled" /> 🎯 Detektionszon – rita själv med punkter
             </label>
-            <select id="camRoiSide">
-              <option value="above">Kolla OVANFÖR linjen</option>
-              <option value="below">Kolla NEDANFÖR linjen</option>
+            <select id="camZoneMode">
+              <option value="inside">Kolla INUTI zonen</option>
+              <option value="outside">Kolla UTANFÖR zonen</option>
             </select>
           </div>
-          <div class="roi-preview" id="roiPreview" hidden>
+          <div class="roi-preview" id="roiPreview">
             <img id="camRoiImg" alt="Kamera-förhandsvisning" />
-            <div class="roi-line" id="camRoiLine"></div>
-            <div class="roi-badge" id="camRoiBadge">50 %</div>
+            <svg id="camZoneSvg" class="roi-zone-svg" preserveAspectRatio="none"></svg>
           </div>
-          <label class="roi-slider">Linjens höjd (0 = överst, 100 = nederst)
-            <input type="range" id="camRoiY" min="0" max="100" step="1" value="50" />
-            <span id="camRoiYVal">50 %</span>
-          </label>
-          <p class="hint" id="roiHint">Så här: slå på strömmen för kameran (▶ Starta ström på Dashboard) så syns bilden här. Bocka i <b>Detektionslinje</b>, dra sedan linjen upp/ner på bilden (eller använd reglaget) och välj ovanför/nedanför. Spara kameran. Det på fel sida om linjen räknas inte, ritas inte och triggar inga HA-event.</p>
+          <div class="roi-actions">
+            <button id="btnZoneUndo" class="btn" type="button">↩ Ångra sista punkten</button>
+            <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa zon</button>
+            <span id="camZoneCount" class="save-msg"></span>
+          </div>
+          <p class="hint" id="roiHint">Slå på strömmen (▶ på Dashboard) så syns bilden. <b>Klicka i bilden</b> för att lägga hörn, <b>dra i en punkt</b> för att flytta den, dubbelklicka på en punkt för att ta bort den. Minst 3 punkter = zon. Välj inuti/utanför och spara kameran – det som är utanför zonen räknas inte, ritas inte och triggar inga HA-event.</p>
         </div>
 
         <p class="hint">Live-video körs kontinuerligt så länge en kamera är aktiverad – även utan öppen webbläsare (YOLO + HA-event fortsätter). Sub-stream rekommenderas. Lösenord skickas aldrig tillbaka; tomt fält vid spara behåller det befintliga.</p>

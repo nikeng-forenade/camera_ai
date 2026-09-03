@@ -753,10 +753,14 @@ class _CameraIn(BaseModel):
     reconnect: bool | None = None
     reconnect_delay: int | None = None
     autostart: bool | None = None
-    # Detektionslinje (ROI)
+    # Detektionslinje (ROI) – äldre, omvandlas till zon
     roi_enabled: bool | None = None
     roi_y: float | None = None
     roi_side: str | None = None
+    # Detektionszon (polygon av normaliserade punkter)
+    zone_enabled: bool | None = None
+    zone_points: list | None = None
+    zone_mode: str | None = None
 
 
 def _resolve_camera(camera: str | None):
@@ -799,6 +803,26 @@ def _roi_normalize(body: dict) -> list:
             body["roi_y"] = round(y, 3)
     if "roi_side" in body and body.get("roi_side") not in ("above", "below"):
         errors.append("Linjesidan måste vara 'above' (ovanför) eller 'below' (nedanför).")
+    # Detektionszon (polygon)
+    if "zone_enabled" in body:
+        body["zone_enabled"] = bool(body["zone_enabled"])
+    if "zone_mode" in body and body.get("zone_mode") not in ("inside", "outside"):
+        errors.append("Zonläget måste vara 'inside' (inuti) eller 'outside' (utanför).")
+    if "zone_points" in body and body.get("zone_points") is not None:
+        pts = []
+        for p in body["zone_points"]:
+            try:
+                x, y = float(p[0]), float(p[1])
+            except (TypeError, ValueError, IndexError):
+                errors.append("Varje zonpunkt måste vara [x, y] med värden 0–1.")
+                continue
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                errors.append("Zonpunkter måste ligga mellan 0 och 1.")
+                continue
+            pts.append([round(x, 3), round(y, 3)])
+        body["zone_points"] = pts
+        if body.get("zone_enabled") and len(pts) < 3:
+            errors.append("Zonen behöver minst 3 punkter för att vara aktiv.")
     return errors
 
 

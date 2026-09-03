@@ -127,7 +127,7 @@ class HAClient:
             "name": "Camera AI",
             "manufacturer": "Camera AI",
             "model": "Reolink + YOLO + LLM",
-            "sw_version": "0.12.3",
+            "sw_version": "0.13.0",
         }
         configs = {
             f"{prefix}/binary_sensor/camera_ai_{cam}/config": {
