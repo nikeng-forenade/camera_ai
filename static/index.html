@@ -38,6 +38,10 @@
           <div class="card live-card">
             <div class="live-head">
               <span class="live-badge"><span class="live-dot" id="liveDot"></span><span id="liveBadgeText">LIVE</span></span>
+              <span class="live-cam-select">
+                <label for="camSelect">Kamera</label>
+                <select id="camSelect"><option value="">Laddar…</option></select>
+              </span>
               <span class="live-sub" id="liveSub"></span>
             </div>
             <div class="live-viewer">
@@ -186,15 +190,18 @@
         </div>
       </section>
 
-      <!-- Kamera -->
+      <!-- Kameror (flera) -->
       <section class="card">
         <div class="stats-head">
-          <h2>📷 Kamera (Reolink RTSP)</h2>
-          <button id="btnTestCam" class="btn" type="button">🧪 Testa anslutning</button>
+          <h2>📷 Kameror (Reolink RTSP)</h2>
+          <button id="btnAddCamera" class="btn" type="button">➕ Lägg till kamera</button>
         </div>
         <div class="settings-grid">
+          <label class="wide">Redigera kamera
+            <select id="camEditSelect"><option value="">Laddar…</option></select>
+          </label>
           <label class="chk">
-            <input type="checkbox" id="camEnabled" /> Kamera aktiverad
+            <input type="checkbox" id="camEnabled" /> Aktiverad (kör kontinuerligt på servern)
           </label>
           <label>Kameranamn
             <input type="text" id="camName" placeholder="Garden" />
@@ -222,10 +229,12 @@
             <input type="checkbox" id="camAutostart" /> Auto-start vid appstart
           </label>
         </div>
-        <p class="hint">Sub-stream rekommenderas för kontinuerlig detektering. Lösenord skickas aldrig tillbaka till webbläsaren — tomt fält vid spara behåller det befintliga.</p>
+        <p class="hint">Live-video körs kontinuerligt så länge en kamera är aktiverad – även utan öppen webbläsare (YOLO + HA-event fortsätter). Sub-stream rekommenderas. Lösenord skickas aldrig tillbaka; tomt fält vid spara behåller det befintliga.</p>
         <span id="camTestResult" class="save-msg"></span>
-        <div class="save-bar">
-          <button id="btnSaveCamera" class="btn" type="button">💾 Spara kamera &amp; starta om ström</button>
+        <div class="cam-actions">
+          <button id="btnSaveCamera" class="btn" type="button">💾 Spara kamera</button>
+          <button id="btnDeleteCamera" class="btn danger" type="button">🗑 Ta bort</button>
+          <button id="btnTestCam" class="btn" type="button">🧪 Testa anslutning</button>
           <span id="camSaveMsg" class="save-msg"></span>
         </div>
       </section>
@@ -325,6 +334,58 @@
         <div class="save-bar">
           <button id="btnSaveEvents" class="btn" type="button">💾 Spara event</button>
           <span id="evSaveMsg" class="save-msg"></span>
+        </div>
+      </section>
+
+      <!-- Home Assistant (aktiveras från GUI) -->
+      <section class="card">
+        <div class="stats-head">
+          <h2>🏠 Home Assistant</h2>
+          <button id="btnTestHa" class="btn" type="button">🧪 Testa anslutning</button>
+        </div>
+        <p class="save-msg" id="haStatusTxt">…</p>
+        <div class="settings-grid">
+          <label class="chk">
+            <input type="checkbox" id="haEnabled" /> Home Assistant aktiverad
+          </label>
+          <label>Transport
+            <select id="haTransport">
+              <option value="mqtt">MQTT + auto-discovery (rekommenderat)</option>
+              <option value="rest">REST (long-lived token)</option>
+            </select>
+          </label>
+          <label>Enhets-id (HA_CAMERA_ID)
+            <input type="text" id="haCameraId" placeholder="cam1" />
+          </label>
+          <label>MQTT-broker (host)
+            <input type="text" id="haMqttHost" placeholder="192.168.1.10" />
+          </label>
+          <label>MQTT-port
+            <input type="number" id="haMqttPort" min="1" max="65535" value="1883" />
+          </label>
+          <label>MQTT-användare
+            <input type="text" id="haMqttUser" />
+          </label>
+          <label>MQTT-lösenord
+            <input type="password" id="haMqttPass" autocomplete="new-password" placeholder="••••••••" />
+            <span id="haMqttPassHint" class="hint"></span>
+          </label>
+          <label>REST-URL (alternativ)
+            <input type="text" id="haRestUrl" placeholder="http://homeassistant.local:8123" />
+          </label>
+          <label>REST-token (long-lived)
+            <input type="password" id="haRestToken" autocomplete="new-password" placeholder="••••••••" />
+            <span id="haRestTokenHint" class="hint"></span>
+          </label>
+          <label>Discovery-prefix
+            <input type="text" id="haPrefix" placeholder="homeassistant" />
+          </label>
+        </div>
+        <p class="hint">Aktivera HA här – inget behov av att redigera .env för det. Spara återansluter direkt (utan omstart). Se README för entiteterna som skapas.</p>
+        <span id="haTestResult" class="save-msg"></span>
+        <div class="save-bar">
+          <button id="btnSaveHa" class="btn" type="button">💾 Spara &amp; återanslut</button>
+          <span id="haSaveMsg" class="save-msg"></span>
         </div>
       </section>
     </section>

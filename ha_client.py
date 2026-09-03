@@ -63,6 +63,28 @@ class HAClient:
         if self.cfg.HA_TRANSPORT == "mqtt":
             self._connect_mqtt()
 
+    def reconnect(self) -> None:
+        """Koppla från ev. gammal MQTT-klient och återanslut med nuvarande config.
+
+        Anropas när HA-inställningar ändrats från GUI:t. Uppdaterar även
+        camera_id/topics om HA_CAMERA_ID ändrats. Vid avstängd HA kopplas bara
+        från (ingen återanslutning).
+        """
+        old = self._mqtt
+        self._mqtt = None
+        if old is not None:
+            try:
+                old.loop_stop()
+            except Exception:  # noqa: BLE001 - bästa möjliga
+                pass
+            try:
+                old.disconnect()
+            except Exception:  # noqa: BLE001 - bästa möjliga
+                pass
+        self.camera_id = self.cfg.HA_CAMERA_ID
+        self._base = f"camera_ai/{self.camera_id}"
+        self.connect()
+
     def _connect_mqtt(self) -> None:
         import paho.mqtt.client as mqtt
 
@@ -105,7 +127,7 @@ class HAClient:
             "name": "Camera AI",
             "manufacturer": "Camera AI",
             "model": "Reolink + YOLO + LLM",
-            "sw_version": "0.6.0",
+            "sw_version": "0.7.0",
         }
         configs = {
             f"{prefix}/binary_sensor/camera_ai_{cam}/config": {

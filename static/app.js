@@ -584,6 +584,10 @@ loadStats();
   const gpuWarnActual = $id("gpuWarnActual");
   const btnStreamToggle = $id("btnStreamToggle");
   const streamHint = $id("streamHint");
+  const camSelect = $id("camSelect");
+  const camEditSelect = $id("camEditSelect");
+  let activeCam = localStorage.getItem("camAiActive") || "";
+  let editingId = null;   // kamera som redigeras i Inställningar (null = lägg till)
 
   const CAMERA_LABELS = { disabled: "Inaktiv", connecting: "Ansluter…", online: "Online", reconnecting: "Återansluter…", offline: "Offline", error: "Fel" };
   const YOLO_LABELS = { stopped: "Stoppad", loading: "Laddar modell…", running: "Kör", error: "Fel" };
@@ -605,16 +609,46 @@ loadStats();
     el.textContent = text;
   }
 
-  /* ---- Dashboard status ---- */
+  /* ---- Dashboard status (alla kameror) ---- */
   async function pollStatus() {
-    let s;
+    let data;
     try {
-      s = await fetchJson("/api/cameras/status");
+      data = await fetchJson("/api/cameras/status");
     } catch (e) {
       if (statusTable) statusTable.innerHTML = `<tr><td colspan="2" class="metric-err">Backend nås inte – försöker igen…</td></tr>`;
       return;
     }
-    renderStatus(s);
+    const cams = data.cameras || [];
+    // Välj aktiv kamera (första om ingen vald)
+    if (!cams.length) {
+      activeCam = "";
+      if (camSelect) camSelect.innerHTML = `<option value="">Inga kameror</option>`;
+      renderStatus(null);
+      return;
+    }
+    if (!cams.some((c) => c.camera_id === activeCam)) {
+      activeCam = cams[0].camera_id;
+    }
+    // Håll dropdown (Dashboard) synkad utan att avbryta användarens val
+    if (camSelect) {
+      const html = cams.map((c) =>
+        `<option value="${escapeHtml(c.camera_id)}">${escapeHtml(c.camera_name)}</option>`
+      ).join("");
+      if (camSelect.innerHTML !== html) camSelect.innerHTML = html;
+      if (camSelect.value !== activeCam) camSelect.value = activeCam;
+    }
+    const st = cams.find((c) => c.camera_id === activeCam) || cams[0];
+    renderStatus(st);
+  }
+
+  // Kameraväljaren (Dashboard): byt aktiv kamera
+  if (camSelect) {
+    camSelect.addEventListener("change", () => {
+      activeCam = camSelect.value || "";
+      localStorage.setItem("camAiActive", activeCam);
+      if (liveImg) { liveImg.dataset.src = ""; liveImg.removeAttribute("src"); }
+      pollStatus();
+    });
   }
 
   function stateClass(state) {
@@ -622,18 +656,35 @@ loadStats();
   }
 
   function renderStatus(s) {
-    // Live-bild: sätt MJPEG-källan en gång per kamera
-    const name = (s.camera_name || "default").trim() || "default";
-    if (liveImg && (!liveImg.dataset.src || liveImg.dataset.src !== name)) {
-      liveImg.dataset.src = name;
-      liveImg.src = "/api/live/" + encodeURIComponent(name);
+    // Ingen kamera: tydlig tom-vy
+    if (!s || !s.camera_id) {
+      if (liveImg) liveImg.removeAttribute("src");
+      if (liveBadgeText) liveBadgeText.textContent = "INGEN KAMERA";
+      if (liveDot && liveDot.parentElement) {
+        liveDot.parentElement.classList.remove("online", "reconnecting", "connecting", "disabled", "offline", "error");
+        liveDot.parentElement.classList.add("disabled");
+      }
+      if (liveSub) liveSub.textContent = "Lägg till en kamera under Inställningar → Kameror.";
+      if (btnStreamToggle) { btnStreamToggle.textContent = "⚙️ Lägg till kamera"; btnStreamToggle.dataset.action = "settings"; }
+      if (streamHint) streamHint.textContent = "";
+      if (statusTable) statusTable.innerHTML = `<tr><td colspan="2" class="metric-warn">Inga kameror konfigurerade ännu.</td></tr>`;
+      if (detNowList) detNowList.innerHTML = `<li class="empty-li"><span class="empty">—</span></li>`;
+      if (detNowAge) detNowAge.textContent = "";
+      if (gpuWarnCard) gpuWarnCard.hidden = true;
+      return;
+    }
+    // Live-bild: sätt MJPEG-källan en gång per kamera (id)
+    const camId = s.camera_id;
+    if (liveImg && liveImg.dataset.src !== camId) {
+      liveImg.dataset.src = camId;
+      liveImg.src = "/api/live/" + encodeURIComponent(camId);
     }
 
     // Badge + subtext
     let badgeText = "LIVE";
     let stCls = "online";
     if (!s.camera_enabled) { badgeText = "INAKTIV"; stCls = "disabled"; }
-    else if (s.camera_state === "online") { badgeText = "LIVE " + name; stCls = "online"; }
+    else if (s.camera_state === "online") { badgeText = "LIVE " + (s.camera_name || ""); stCls = "online"; }
     else if (s.camera_state === "reconnecting") { badgeText = "ÅTERANSLUTER"; stCls = "reconnecting"; }
     else if (s.camera_state === "connecting") { badgeText = "ANSLUTER"; stCls = "connecting"; }
     else { badgeText = "OFFLINE"; stCls = "offline"; }
@@ -752,7 +803,8 @@ loadStats();
       if (action === "settings") { showView("settings"); return; }
       btnStreamToggle.disabled = true;
       try {
-        await fetchJson("/api/cameras/" + action, { method: "POST" });
+        const camId = activeCam ? encodeURIComponent(activeCam) : "";
+        await fetchJson("/api/cameras/" + camId + "/" + action, { method: "POST" });
         if (streamHint) streamHint.textContent = "";
       } catch (e) {
         if (streamHint) streamHint.textContent = "Fel: " + e.message;
@@ -796,23 +848,7 @@ loadStats();
     try {
       s = await fetchJson("/api/settings");
     } catch (e) { return; } // backend offline – behåll standardvärden
-    const cam = s.camera, det = s.detect, liv = s.live;
-    if (cam) {
-      setChecked("camEnabled", cam.enabled);
-      if ($id("camName")) $id("camName").value = cam.name || "";
-      if ($id("camHost")) $id("camHost").value = cam.host || "";
-      if ($id("camUser")) $id("camUser").value = cam.user || "";
-      if ($id("camPass")) { $id("camPass").value = ""; }
-      if ($id("camPassHint")) {
-        $id("camPassHint").textContent = cam.password_configured
-          ? "🔒 Lösenord är konfigurerat (tomt fält = behåll)."
-          : (cam.full_url_configured ? "Full RTSP-URL används." : "");
-      }
-      if ($id("camPath")) $id("camPath").value = cam.path || "/Preview_01_sub";
-      setChecked("camReconnect", cam.reconnect);
-      if ($id("camReconnectDelay")) $id("camReconnectDelay").value = (cam.reconnect_delay != null) ? cam.reconnect_delay : 5;
-      setChecked("camAutostart", cam.autostart);
-    }
+    const det = s.detect, liv = s.live;
     if (det) {
       setChecked("detYolo", det.yolo_enabled !== false);
       if ($id("detAiFps")) { const v = Math.round(det.ai_fps || 4); $id("detAiFps").value = v; if ($id("detAiFpsVal")) $id("detAiFpsVal").textContent = v; }
@@ -836,7 +872,8 @@ loadStats();
       if ($id("evMinInterval")) $id("evMinInterval").value = (ev.min_interval != null) ? ev.min_interval : 5;
       if ($id("evStartupGrace")) $id("evStartupGrace").value = (ev.startup_grace != null) ? ev.startup_grace : 5;
     }
-    renderStatus(s.runtime || {});
+    renderStatus(s.runtime || null);
+    loadCameras();
   }
 
   // Slider-textvärden
@@ -845,47 +882,140 @@ loadStats();
     if (el && val) el.addEventListener("input", () => { val.textContent = el.value; });
   });
 
-  /* ---- Inställningar: spara kamera ---- */
+  /* ---- Inställningar: kameror (flera) ---- */
+  function cameraFormValues() {
+    return {
+      enabled: $id("camEnabled").checked,
+      name: ($id("camName").value || "").trim(),
+      host: ($id("camHost").value || "").trim(),
+      user: $id("camUser").value || "",
+      path: ($id("camPath").value || "").trim(),
+      reconnect: $id("camReconnect").checked,
+      reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
+      autostart: $id("camAutostart").checked,
+    };
+  }
+  function fillCameraForm(c) {
+    if (!c) {
+      editingId = null;
+      setChecked("camEnabled", false);
+      if ($id("camName")) $id("camName").value = "";
+      if ($id("camHost")) $id("camHost").value = "";
+      if ($id("camUser")) $id("camUser").value = "";
+      if ($id("camPass")) $id("camPass").value = "";
+      if ($id("camPath")) $id("camPath").value = "/Preview_01_sub";
+      setChecked("camReconnect", true);
+      if ($id("camReconnectDelay")) $id("camReconnectDelay").value = 5;
+      setChecked("camAutostart", true);
+      if ($id("camPassHint")) $id("camPassHint").textContent = "";
+      return;
+    }
+    editingId = c.id || null;
+    setChecked("camEnabled", c.enabled);
+    if ($id("camName")) $id("camName").value = c.name || "";
+    if ($id("camHost")) $id("camHost").value = c.host || "";
+    if ($id("camUser")) $id("camUser").value = c.user || "";
+    if ($id("camPass")) $id("camPass").value = "";
+    if ($id("camPath")) $id("camPath").value = c.path || "/Preview_01_sub";
+    setChecked("camReconnect", c.reconnect !== false);
+    if ($id("camReconnectDelay")) $id("camReconnectDelay").value = (c.reconnect_delay != null) ? c.reconnect_delay : 5;
+    setChecked("camAutostart", c.autostart !== false);
+    if ($id("camPassHint")) {
+      $id("camPassHint").textContent = c.password_configured
+        ? "🔒 Lösenord konfigurerat (tomt = behåll)."
+        : (c.full_url_configured ? "Full RTSP-URL används." : "");
+    }
+  }
+  async function loadCameras() {
+    let data;
+    try { data = await fetchJson("/api/cameras/list"); } catch (e) { return; }
+    const cams = data.cameras || [];
+    if (!camEditSelect) return;
+    const html = cams.map((c) =>
+      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`
+    ).join("");
+    camEditSelect.innerHTML = html || `<option value="">Inga kameror – klicka ”Lägg till kamera”</option>`;
+    if (editingId && cams.some((c) => c.id === editingId)) {
+      camEditSelect.value = editingId;
+      fillCameraForm(cams.find((c) => c.id === editingId));
+    } else if (cams.length) {
+      camEditSelect.value = cams[0].id;
+      fillCameraForm(cams[0]);
+    } else {
+      fillCameraForm(null);
+    }
+  }
+  if (camEditSelect) {
+    camEditSelect.addEventListener("change", () => {
+      const sel = camEditSelect.value;
+      if (!sel) { fillCameraForm(null); return; }
+      fetchJson("/api/cameras/list").then((data) => {
+        const c = (data.cameras || []).find((x) => x.id === sel);
+        if (c) fillCameraForm(c);
+      }).catch(() => {});
+    });
+  }
+  if ($id("btnAddCamera")) {
+    $id("btnAddCamera").addEventListener("click", () => {
+      if (camEditSelect) camEditSelect.value = "";
+      fillCameraForm(null);
+      const out = $id("camSaveMsg");
+      if (out) { out.textContent = "Fyll i och spara – kameran startas direkt om den aktiveras."; out.classList.remove("ok"); }
+    });
+  }
   if ($id("btnSaveCamera")) {
     $id("btnSaveCamera").addEventListener("click", async () => {
       const out = $id("camSaveMsg");
       setMsg(out, "Sparar…", false);
-      const body = {
-        camera: {
-          enabled: $id("camEnabled").checked,
-          name: ($id("camName").value || "").trim(),
-          host: ($id("camHost").value || "").trim(),
-          user: $id("camUser").value || "",
-          password: $id("camPass").value || "",   // tom = behåll befintligt
-          path: ($id("camPath").value || "").trim(),
-          reconnect: $id("camReconnect").checked,
-          reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
-          autostart: $id("camAutostart").checked,
-        },
-      };
+      const body = cameraFormValues();
+      const pw = $id("camPass") ? $id("camPass").value : "";
+      if (pw) body.password = pw;   // tomt = behåll befintligt
       try {
-        const res = await saveSettingsJson(body);
-        setMsg(out, "✓ Sparat – strömmen startas om…", true);
-        loadSettingsPage();
+        if (editingId) {
+          await fetchJson("/api/cameras/" + encodeURIComponent(editingId), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        } else {
+          await fetchJson("/api/cameras", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        }
+        setMsg(out, editingId ? "✓ Kameran sparad (strömmen startas om vid behov)" : "✓ Kameran tillagd och startad", true);
+        await loadCameras();
         pollStatus();
-        if (res.requires && res.requires.length) console.info("[settings] requires:", res.requires);
       } catch (e) {
         setMsg(out, "❌ " + e.message, false);
       }
     });
   }
-
-  /* ---- Inställningar: testa kamera ---- */
+  if ($id("btnDeleteCamera")) {
+    $id("btnDeleteCamera").addEventListener("click", async () => {
+      if (!editingId) return;
+      if (!confirm("Ta bort kameran? Dess ström stoppas.")) return;
+      try {
+        await fetchJson("/api/cameras/" + encodeURIComponent(editingId), { method: "DELETE" });
+        setMsg($id("camSaveMsg"), "✓ Kameran togs bort", true);
+        editingId = null;
+        await loadCameras();
+        pollStatus();
+      } catch (e) {
+        setMsg($id("camSaveMsg"), "❌ " + e.message, false);
+      }
+    });
+  }
   if ($id("btnTestCam")) {
     $id("btnTestCam").addEventListener("click", async () => {
       const btn = $id("btnTestCam"), out = $id("camTestResult");
       btn.disabled = true;
       setMsg(out, "Testar anslutning…", false);
       const body = {};
-      if (($id("camHost").value || "").trim()) body.host = $id("camHost").value.trim();
-      if ($id("camUser").value) body.user = $id("camUser").value;
-      if ($id("camPass").value) body.password = $id("camPass").value;
-      if (($id("camPath").value || "").trim()) body.path = $id("camPath").value.trim();
+      if (editingId) body.camera_id = editingId;
+      const pw = $id("camPass") ? $id("camPass").value : "";
+      if (pw) body.password = pw;
       try {
         const r = await fetchJson("/api/camera/test", {
           method: "POST",
@@ -991,8 +1121,90 @@ loadStats();
     });
   }
 
+  /* ---- Inställningar: Home Assistant (aktiveras från GUI) ---- */
+  async function loadHaPage() {
+    try {
+      const cfg = await fetchJson("/api/ha/config");
+      if ($id("haEnabled")) $id("haEnabled").checked = !!cfg.enabled;
+      if ($id("haTransport")) $id("haTransport").value = cfg.transport || "mqtt";
+      if ($id("haCameraId")) $id("haCameraId").value = cfg.camera_id || "cam1";
+      if ($id("haMqttHost")) $id("haMqttHost").value = cfg.mqtt_host || "";
+      if ($id("haMqttPort")) $id("haMqttPort").value = (cfg.mqtt_port != null) ? cfg.mqtt_port : 1883;
+      if ($id("haMqttUser")) $id("haMqttUser").value = cfg.mqtt_user || "";
+      if ($id("haMqttPass")) $id("haMqttPass").value = "";
+      if ($id("haMqttPassHint")) $id("haMqttPassHint").textContent = cfg.mqtt_pass_configured ? "🔒 Lösenord konfigurerat (tomt = behåll)." : "";
+      if ($id("haRestUrl")) $id("haRestUrl").value = cfg.rest_url || "";
+      if ($id("haRestToken")) $id("haRestToken").value = "";
+      if ($id("haRestTokenHint")) $id("haRestTokenHint").textContent = cfg.rest_token_configured ? "🔒 Token konfigurerad (tomt = behåll)." : "";
+      if ($id("haPrefix")) $id("haPrefix").value = cfg.discovery_prefix || "homeassistant";
+      if ($id("haStatusTxt")) {
+        const st = cfg.status || {};
+        const el = $id("haStatusTxt");
+        el.classList.remove("ok", "warn", "err");
+        if (!st.enabled) {
+          el.classList.add("warn");
+          el.textContent = "● Home Assistant avstängd";
+        } else if (st.connected) {
+          el.classList.add("ok");
+          el.textContent = "● Ansluten (" + (st.transport || "?") + ")";
+        } else {
+          el.classList.add("err");
+          el.textContent = "● Konfigurerad men inte ansluten";
+        }
+      }
+    } catch (e) { /* backend offline */ }
+  }
+  if ($id("btnSaveHa")) {
+    $id("btnSaveHa").addEventListener("click", async () => {
+      const out = $id("haSaveMsg");
+      setMsg(out, "Sparar…", false);
+      const body = {
+        enabled: $id("haEnabled").checked,
+        transport: $id("haTransport").value,
+        camera_id: ($id("haCameraId").value || "cam1").trim(),
+        mqtt_host: $id("haMqttHost").value.trim(),
+        mqtt_port: parseInt($id("haMqttPort").value, 10) || 1883,
+        mqtt_user: $id("haMqttUser").value,
+        rest_url: $id("haRestUrl").value.trim(),
+        discovery_prefix: ($id("haPrefix").value || "homeassistant").trim(),
+      };
+      const mp = $id("haMqttPass").value, rt = $id("haRestToken").value;
+      if (mp) body.mqtt_pass = mp;
+      if (rt) body.rest_token = rt;
+      try {
+        await fetchJson("/api/ha/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        setMsg(out, "✓ Sparat och återanslutet", true);
+        await loadHaPage();
+        checkHa();
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+  if ($id("btnTestHa")) {
+    $id("btnTestHa").addEventListener("click", async () => {
+      const btn = $id("btnTestHa"), out = $id("haTestResult");
+      btn.disabled = true;
+      setMsg(out, "Testar…", false);
+      try {
+        const r = await fetchJson("/api/ha/test", { method: "POST" });
+        out.textContent = r.ok ? "● Ansluten ✓" : ("● Inte ansluten – " + (r.error || "kontrollera inställningarna"));
+        out.classList.toggle("ok", !!r.ok);
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+      btn.disabled = false;
+    });
+  }
+
   // Start
   loadSettingsPage();
+  loadCameras();
+  loadHaPage();
   pollStatus();
   setInterval(pollStatus, 1000);
 })();

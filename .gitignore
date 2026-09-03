@@ -4,6 +4,7 @@ __pycache__/
 venv/
 uploads/
 media/
+data/
 *.pt
 .env
 .DS_Store

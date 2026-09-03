@@ -101,7 +101,7 @@ if (-not $SkipUpdate) {
         $RepoRoot = Get-ChildItem $Staging -Directory | Select-Object -First 1
         if ($RepoRoot) {
             robocopy $RepoRoot.FullName $AppDir /E `
-                /XD .venv uploads media __pycache__ build dist .git `
+                /XD .venv uploads media data __pycache__ build dist .git `
                 /XF .env *.log *_openvino_model `
                 /NFL /NDL /NJH /NJS /NP | Out-Null
             if ($LASTEXITCODE -le 7) {

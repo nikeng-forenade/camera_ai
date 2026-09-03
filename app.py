@@ -35,12 +35,36 @@ from analyzer import (
     summarize_detections,
     yolo_model_installed,
 )
-from camera_stream import CameraWorker, test_rtsp
+from camera_stream import CameraPool, CameraWorker, test_rtsp
 from ha_client import HAClient
 
 analyzer = YoloAnalyzer()
 ha = HAClient(config)
-cam = CameraWorker(analyzer)  # live-kamera: RTSP -> YOLO -> Dashboard
+pool = CameraPool(analyzer)  # flera live-kameror: RTSP -> YOLO -> Dashboard
+
+
+# Vilka .env-nycklar (globala inställningar) som ska skrivas tillbaka till
+# config-modulen så att ny-/kommande kameror får samma runtime-värden.
+_BOOL_ENV = {
+    "LIVE_STREAM_ENABLED", "LIVE_SHOW_BOXES", "LIVE_SHOW_LABELS",
+    "LIVE_SHOW_CONF", "LIVE_EVENT_ENABLED",
+}
+
+
+def _sync_config_attrs(env_write: dict) -> None:
+    """Sätt tillbaka sparade globala värden på config-modulen (runtime)."""
+    for key, val in env_write.items():
+        if not hasattr(config, key):
+            continue
+        try:
+            if key in _BOOL_ENV:
+                setattr(config, key, str(val).strip().lower() in ("1", "true", "yes", "on"))
+            elif isinstance(getattr(config, key), int):
+                setattr(config, key, int(float(val)))
+            else:
+                setattr(config, key, float(val))
+        except (TypeError, ValueError):
+            pass
 
 
 def _live_event_publish(payload: dict) -> None:
@@ -217,23 +241,21 @@ async def lifespan(_: FastAPI):
             set_llm_keep_alive(str(RUNTIME["keep_alive"]))
         except Exception as exc:  # noqa: BLE001
             print(f"[config] startup keep_alive apply failed: {exc}")
-    # Live->HA-event (nya detektioner) publiceras via befintlig HA-klient
+    # Ladda kameraregister (data/cameras.json) + starta aktiverade kameror.
+    # Live-kamerorna kör kontinuerligt på servern oavsett om en webbläsare är
+    # öppen - HA-event och YOLO fortsätter ändå.
     try:
-        cam.on_event(_live_event_publish)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[camera] event-callback registrering misslyckades: {exc}")
-    # Live-kamera-worker (startar även utan konfigurerad kamera - visar bara
-    # tydlig 'inaktiverad'-placeholder. Kraschar aldrig servern.)
-    try:
-        cam.start()
-        print("[camera] worker startad")
+        pool.load()
+        pool.on_event(_live_event_publish)
+        pool.start_all()
+        print(f"[camera] {pool.count()} kameror i registret - aktiverade startade")
     except Exception as exc:  # noqa: BLE001 - API:t ska starta ändå
         print(f"[camera] worker start misslyckades: {exc}")
     yield
     # Graceful shutdown: stoppa trådar + frigör RTSP
     try:
-        cam.stop()
-        print("[camera] worker stoppad")
+        pool.stop_all()
+        print("[camera] workers stoppade")
     except Exception as exc:  # noqa: BLE001
         print(f"[camera] worker stop misslyckades: {exc}")
 
@@ -531,7 +553,16 @@ def index():
 
 @app.get("/api/health")
 def health():
-    s = cam.status()
+    w = pool.default()
+    if w is not None:
+        s = w.status()
+    else:
+        s = {
+            "camera_enabled": False,
+            "camera_state": "disabled",
+            "yolo_state": "stopped",
+            "actual_device": analyzer.last_device or config.YOLO_DEVICE,
+        }
     return {
         "ok": True,
         "version": config.VERSION,
@@ -544,16 +575,126 @@ def health():
             else None
         ),
         "ha_enabled": ha.available(),
-        "camera_enabled": s["camera_enabled"],
-        "camera_state": s["camera_state"],
-        "yolo_state": s["yolo_state"],
-        "actual_device": s["actual_device"],
+        "cameras": pool.count(),
+        "camera_enabled": s.get("camera_enabled", False),
+        "camera_state": s.get("camera_state", "disabled"),
+        "yolo_state": s.get("yolo_state", "stopped"),
+        "actual_device": s.get("actual_device"),
     }
 
 
 @app.get("/api/ha/status")
 def ha_status():
     return ha.status()
+
+
+class _HaSettingsIn(BaseModel):
+    enabled: bool | None = None
+    transport: str | None = None
+    camera_id: str | None = None
+    discovery_prefix: str | None = None
+    mqtt_host: str | None = None
+    mqtt_port: int | None = None
+    mqtt_user: str | None = None
+    mqtt_pass: str | None = None
+    rest_url: str | None = None
+    rest_token: str | None = None
+
+
+_HA_MAP = {
+    "enabled": ("HA_ENABLED", "bool"),
+    "transport": ("HA_TRANSPORT", "str"),
+    "camera_id": ("HA_CAMERA_ID", "str"),
+    "discovery_prefix": ("HA_DISCOVERY_PREFIX", "str"),
+    "mqtt_host": ("HA_MQTT_HOST", "str"),
+    "mqtt_port": ("HA_MQTT_PORT", "int"),
+    "mqtt_user": ("HA_MQTT_USER", "str"),
+    "mqtt_pass": ("HA_MQTT_PASS", "str"),
+    "rest_url": ("HA_REST_URL", "str"),
+    "rest_token": ("HA_REST_TOKEN", "str"),
+}
+
+
+def _ha_config_public() -> dict:
+    return {
+        "enabled": bool(config.HA_ENABLED),
+        "transport": config.HA_TRANSPORT,
+        "camera_id": config.HA_CAMERA_ID,
+        "discovery_prefix": config.HA_DISCOVERY_PREFIX,
+        "mqtt_host": config.HA_MQTT_HOST,
+        "mqtt_port": int(config.HA_MQTT_PORT),
+        "mqtt_user": config.HA_MQTT_USER,
+        "mqtt_pass_configured": bool(config.HA_MQTT_PASS),
+        "rest_url": config.HA_REST_URL,
+        "rest_token_configured": bool(config.HA_REST_TOKEN),
+        "status": ha.status(),
+    }
+
+
+def _apply_ha_runtime(values: dict) -> list:
+    """Applicera HA-inställningar direkt (runtime) + spara till .env + återanslut."""
+    errors: list[str] = []
+    env_write: dict[str, str] = {}
+    for logical, val in values.items():
+        if logical not in _HA_MAP or val is None:
+            continue
+        attr, typ = _HA_MAP[logical]
+        try:
+            if typ == "bool":
+                v = val if isinstance(val, bool) else str(val).strip().lower() in ("1", "true", "yes", "on")
+                setattr(config, attr, v)
+                env_write[attr] = "true" if v else "false"
+            elif typ == "int":
+                v = int(val)
+                setattr(config, attr, v)
+                env_write[attr] = str(v)
+            else:
+                v = str(val).strip()
+                setattr(config, attr, v)
+                env_write[attr] = v
+        except (TypeError, ValueError):
+            errors.append(f"Ogiltigt värde för '{logical}'.")
+    if env_write:
+        if not config.persist_env(env_write):
+            errors.append("Kunde inte spara HA-inställningarna till .env.")
+        else:
+            print(f"[ha] sparade till .env: {', '.join(env_write)}")
+    try:
+        ha.reconnect()  # återanslut (eller koppla från om HA avstängt)
+    except Exception as exc:  # noqa: BLE001 - visa fel men spara ändå
+        errors.append(f"Kunde inte ansluta till HA: {exc}")
+    return errors
+
+
+@app.get("/api/ha/config")
+def ha_config_get():
+    """HA-konfiguration (inga hemligheter - bara *_configured-flaggor)."""
+    return _ha_config_public()
+
+
+@app.put("/api/ha/config")
+def ha_config_put(payload: _HaSettingsIn):
+    body = payload.model_dump(exclude_unset=True, exclude_none=True)
+    if body.get("transport") not in (None, "mqtt", "rest"):
+        return JSONResponse(
+            {"ok": False, "errors": ["Transporten måste vara 'mqtt' eller 'rest'."]},
+            status_code=400,
+        )
+    errs = _apply_ha_runtime(body)
+    if errs:
+        return JSONResponse({"ok": False, "errors": errs}, status_code=400)
+    return {"ok": True, "config": _ha_config_public()}
+
+
+@app.post("/api/ha/test")
+def ha_test():
+    """Testa HA-anslutningen (startar om MQTT-klienten med nuvarande config)."""
+    try:
+        ha.reconnect()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "status": ha.status(), "error": str(exc)}
+    st = ha.status()
+    return {"ok": bool(st.get("connected")), "status": st}
 
 
 # ---------------------------------------------------------------------------
@@ -582,36 +723,162 @@ class _SettingsIn(BaseModel):
     events: dict | None = None
 
 
+class _CameraTestIn(BaseModel):
+    camera_id: str | None = None
+    host: str | None = None
+    user: str | None = None
+    password: str | None = None
+    path: str | None = None
+    full_url: str | None = None
+
+
+class _CameraIn(BaseModel):
+    enabled: bool | None = None
+    name: str | None = None
+    host: str | None = None
+    user: str | None = None
+    password: str | None = None
+    path: str | None = None
+    full_url: str | None = None
+    reconnect: bool | None = None
+    reconnect_delay: int | None = None
+    autostart: bool | None = None
+
+
+def _resolve_camera(camera: str | None):
+    """Resolve en kamera via id/namn (tomt -> första i registret)."""
+    if camera and str(camera).strip():
+        return pool.get(str(camera))
+    return pool.default()
+
+
+def _cam_errors(name: str | None = None, host: str | None = None,
+                full_url: str | None = None, rd: int | None = None) -> list:
+    errors: list[str] = []
+    if name is not None and not str(name).strip():
+        errors.append("Kameranamnet får inte vara tomt.")
+    if host is not None and not str(host).strip() and not str(full_url or "").strip():
+        errors.append("Ange kamera-IP (eller full RTSP-URL).")
+    if rd is not None:
+        try:
+            rd = int(rd)
+        except (TypeError, ValueError):
+            rd = 0
+        if not 1 <= rd <= 300:
+            errors.append("Återanslutningsintervall måste vara 1–300 sekunder.")
+    return errors
+
+
 @app.get("/api/cameras/status")
 def cameras_status():
-    return cam.status()
+    """Status för alla kameror (Dashboard-listning)."""
+    return {
+        "cameras": pool.statuses(),
+        "default": pool.ids()[0] if pool.ids() else None,
+    }
+
+
+@app.get("/api/cameras/list")
+def cameras_list():
+    """Konfigurationslista (inga hemligheter)."""
+    return {"cameras": pool.camera_list()}
+
+
+@app.post("/api/cameras")
+def camera_add(payload: _CameraIn):
+    """Lägg till en ny kamera (startas direkt om enabled)."""
+    body = payload.model_dump(exclude_unset=True, exclude_none=True)
+    if body.get("password") in (None, ""):
+        body.pop("password", None)
+    errs = _cam_errors(name=body.get("name"), host=body.get("host"),
+                       full_url=body.get("full_url"),
+                       rd=body.get("reconnect_delay"))
+    if not body.get("host") and not body.get("full_url"):
+        errs.append("Ange kamera-IP (eller full RTSP-URL).")
+    if errs:
+        return JSONResponse({"ok": False, "errors": errs}, status_code=400)
+    w = pool.add(body)
+    return {"ok": True, "camera": w.public_cfg(), "runtime": w.status()}
+
+
+@app.put("/api/cameras/{camera_id}")
+def camera_update(camera_id: str, payload: _CameraIn):
+    """Uppdatera en kamera (startar/stoppar/startar om vid behov)."""
+    w = pool.get(camera_id)
+    if w is None:
+        raise HTTPException(404, f"Kameran '{camera_id}' finns inte.")
+    body = payload.model_dump(exclude_unset=True, exclude_none=True)
+    existing = w.camera
+    errs = _cam_errors(
+        name=body.get("name"),
+        host=body.get("host") if "host" in body else None,
+        full_url=body.get("full_url") if "full_url" in body else str(existing.get("full_url") or ""),
+        rd=body.get("reconnect_delay"),
+    )
+    if errs:
+        return JSONResponse({"ok": False, "errors": errs}, status_code=400)
+    if body.get("password") in (None, ""):
+        body.pop("password", None)
+    updated = pool.update(camera_id, body)
+    return {"ok": True, "camera": updated.public_cfg(), "runtime": updated.status()}
+
+
+@app.delete("/api/cameras/{camera_id}")
+def camera_delete(camera_id: str):
+    if not pool.remove(camera_id):
+        raise HTTPException(404, f"Kameran '{camera_id}' finns inte.")
+    return {"ok": True, "cameras": pool.camera_list()}
+
+
+@app.post("/api/cameras/{camera_id}/start")
+def camera_start_id(camera_id: str):
+    w = pool.start(camera_id)
+    if w is None:
+        raise HTTPException(404, f"Kameran '{camera_id}' finns inte.")
+    return w.status()
+
+
+@app.post("/api/cameras/{camera_id}/stop")
+def camera_stop_id(camera_id: str):
+    w = pool.stop(camera_id)
+    if w is None:
+        raise HTTPException(404, f"Kameran '{camera_id}' finns inte.")
+    return w.status()
 
 
 @app.post("/api/cameras/start")
 def camera_start():
-    """Starta kameraworkern (kräver konfigurerad kamera för riktig bild)."""
-    cam.start()
-    return cam.status()
+    """Starta första kameran (bakåtkompatibilitet)."""
+    w = pool.default()
+    if w is not None:
+        w.start()
+    return cameras_status()
 
 
 @app.post("/api/cameras/stop")
 def camera_stop():
-    cam.stop()
-    return cam.status()
+    """Stoppa första kameran (bakåtkompatibilitet)."""
+    w = pool.default()
+    if w is not None:
+        w.stop()
+    return cameras_status()
 
 
 @app.get("/api/live/{camera}")
-def live_stream(camera: str = "default"):
-    """MJPEG-liveström (senaste annoterade bilden - ingen kö, låg latens).
+def live_stream(camera: str = ""):
+    """MJPEG-liveström för en kamera (senaste annoterade bilden, ingen kö).
 
-    Worker + YOLO körs på servern oavsett hur många webbläsare som tittar -
-    endpoints bara skickar senaste bilden. Vid frånkoppling skickas en tydlig
-    placeholder så GUI:t aldrig hänger.
+    Worker + YOLO körs på servern kontinuerligt - endpoints skickar bara den
+    senaste bilden till den som tittar just nu.
     """
+    w = _resolve_camera(camera)
+    if w is None:
+        raise HTTPException(404, "Ingen kamera konfigurerad.")
+
     async def _mjpeg_gen():
         last_v = -1
         while True:
-            data, v = cam.latest_jpeg()
+            data, v = w.latest_jpeg()
             if data is not None and v != last_v:
                 last_v = v
                 yield (
@@ -631,22 +898,29 @@ def live_stream(camera: str = "default"):
 
 @app.post("/api/camera/test")
 def camera_test(payload: _CameraTestIn | None = None):
-    """Testa RTSP-anslutningen. Stör inte en aktiv worker.
+    """Testa en RTSP-kamera. Stör inte aktiva workers.
 
-    Utan override: om kameran redan är online återanvänds dess status i stället
-    för att öppna en andra anslutning. Resultat: upplösning/FPS/kodek/latens.
+    Utan override: om kameran (eller default) redan är online återanvänds dess
+    status. Annars öppnas en separat testanslutning.
     """
     body = payload.model_dump(exclude_unset=True) if payload else {}
-    cfg = cam._cfg()["camera"]
-    s = cam.status()
-    if not body and s.get("stream_active"):
-        return {
-            "ok": True,
-            "using_live": True,
-            "resolution": s.get("resolution"),
-            "fps": s.get("source_fps"),
-            "codec": s.get("codec"),
-        }
+    if body.get("camera_id"):
+        w = pool.get(str(body["camera_id"]))
+    else:
+        w = pool.default()
+    if w is not None and not any(k in body for k in ("host", "user", "password", "path", "full_url")):
+        s = w.status()
+        if s.get("stream_active"):
+            return {
+                "ok": True,
+                "using_live": True,
+                "resolution": s.get("resolution"),
+                "fps": s.get("source_fps"),
+                "codec": s.get("codec"),
+            }
+        cfg = w.camera
+    else:
+        cfg = w.camera if w is not None else {}
     host = str(body.get("host") or cfg.get("host") or "")
     user = str(body.get("user") or cfg.get("user") or "")
     password = body["password"] if "password" in body else (cfg.get("password") or "")
@@ -657,25 +931,27 @@ def camera_test(payload: _CameraTestIn | None = None):
 
 @app.get("/api/settings")
 def get_settings():
-    """Nuvarande inställningar för live-kamera/YOLO/stream. Inga hemligheter."""
-    c = cam._cfg()
-    camc, det, liv, ev = c["camera"], c["detect"], c["live"], c["events"]
-    full_url = camc.get("full_url") or ""
+    """Nuvarande inställningar (globalt) + kameralista. Inga hemligheter."""
+    w = pool.default()
+    if w is not None:
+        g = w._cfg()
+        det, liv, ev = g["detect"], g["live"], g["events"]
+        camc = w.public_cfg()
+        rt = w.status()
+    else:
+        det = CameraWorker._detect_defaults()
+        liv = CameraWorker._live_defaults()
+        ev = CameraWorker._event_defaults()
+        camc = {
+            "id": None, "enabled": False, "name": "", "host": "", "user": "",
+            "path": "/Preview_01_sub", "password_configured": False,
+            "full_url_configured": False, "reconnect": True,
+            "reconnect_delay": int(config.CAMERA_RECONNECT_DELAY), "autostart": False,
+        }
+        rt = None
     return {
-        "camera": {
-            "enabled": bool(camc["enabled"]),
-            "name": camc["name"],
-            "host": camc.get("host") or "",
-            "user": camc.get("user") or "",
-            "path": camc.get("path") or "/Preview_01_sub",
-            "password_configured": bool(
-                (camc.get("password") or "") or ("@" in full_url)
-            ),
-            "full_url_configured": bool(full_url),
-            "reconnect": bool(camc["reconnect"]),
-            "reconnect_delay": int(camc["reconnect_delay"]),
-            "autostart": bool(camc["autostart"]),
-        },
+        "camera": camc,
+        "cameras": pool.camera_list(),
         "detect": {
             "yolo_enabled": bool(det["yolo_enabled"]),
             "model": RUNTIME["model"],
@@ -703,7 +979,7 @@ def get_settings():
             "min_interval": float(ev["min_interval"]),
             "startup_grace": float(ev["startup_grace"]),
         },
-        "runtime": cam.status(),
+        "runtime": rt,
     }
 
 
@@ -713,10 +989,21 @@ def update_settings(payload: _SettingsIn):
     användarvänliga felmeddelanden, inte HTTP 422. Lösenord skickas aldrig
     tillbaka i GET; tomt lösenordsfält vid PUT behåller det befintliga."""
     body = payload.model_dump(exclude_unset=True)
-    cur = cam._cfg()
-    cur_cam, cur_det, cur_live, cur_ev = (
-        cur["camera"], cur["detect"], cur["live"], cur["events"]
-    )
+    w = pool.default()
+    if w is not None:
+        cur = w._cfg()
+        cur_cam = dict(w.camera)
+        cur_det, cur_live, cur_ev = cur["detect"], cur["live"], cur["events"]
+    else:
+        cur_cam = {
+            "enabled": False, "name": "Kamera", "host": "", "user": "",
+            "password": "", "path": "/Preview_01_sub", "full_url": "",
+            "reconnect": True, "reconnect_delay": int(config.CAMERA_RECONNECT_DELAY),
+            "autostart": False,
+        }
+        cur_det = CameraWorker._detect_defaults()
+        cur_live = CameraWorker._live_defaults()
+        cur_ev = CameraWorker._event_defaults()
 
     errors: list[str] = []
     requires: list[str] = []
@@ -927,9 +1214,15 @@ def update_settings(payload: _SettingsIn):
         return JSONResponse({"ok": False, "errors": errors}, status_code=400)
 
     if pending_cam is not None:
-        cam.update_camera(pending_cam)
+        # Bakåtkompatibilitet: camera-gruppen i /api/settings styr första
+        # kameran (eller lägger till om ingen finns). Nytt GUI använder /api/cameras.
+        dw = pool.default()
+        if dw is not None:
+            pool.update(dw.camera_id, pending_cam)
+        else:
+            pool.add(pending_cam)
     if pending_det is not None:
-        cam.update_detect(pending_det)
+        pool.apply_all("detect", pending_det)
         # Model/conf/device -> delad analyzer (live + stillbilder)
         if "model" in body.get("detect", {}) or "conf" in body.get("detect", {}) or "device" in body.get("detect", {}):
             RUNTIME["model"] = body["detect"].get("model", RUNTIME["model"])
@@ -943,9 +1236,9 @@ def update_settings(payload: _SettingsIn):
             if "model" in body["detect"]:
                 start_yolo_model_download(str(RUNTIME["model"]))
     if pending_live is not None:
-        cam.update_live(pending_live)
+        pool.apply_all("live", pending_live)
     if pending_events is not None:
-        cam.update_events(pending_events)
+        pool.apply_all("events", pending_events)
 
     if env_write:
         if not config.persist_env(env_write):
@@ -955,14 +1248,15 @@ def update_settings(payload: _SettingsIn):
             )
         print(f"[settings] sparade till .env: {', '.join(env_write)}")
 
-    if "camera_restart" in requires:
-        cam.restart()
+    # Globala värden ska även synas för nya/kommande kameror (runtime)
+    _sync_config_attrs(env_write)
 
+    dw = pool.default()
     return {
         "ok": True,
         "saved": True,
         "requires": requires,
-        "runtime": cam.status(),
+        "runtime": dw.status() if dw is not None else None,
     }
 
 

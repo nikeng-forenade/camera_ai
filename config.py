@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 
 def model_path(name: str) -> str:
@@ -43,6 +43,11 @@ UPLOAD_DIR = Path(os.getenv("CAMERA_AI_UPLOAD_DIR", BASE_DIR / "uploads"))
 MEDIA_DIR = Path(os.getenv("CAMERA_AI_MEDIA_DIR", BASE_DIR / "media"))
 UPLOAD_DIR.mkdir(exist_ok=True)
 MEDIA_DIR.mkdir(exist_ok=True)
+# Lokal data (flera kameror etc.) - bevaras av install/update (exkluderas i
+# robocopy) och är aldrig en del av repot.
+DATA_DIR = Path(os.getenv("CAMERA_AI_DATA_DIR", BASE_DIR / "data"))
+DATA_DIR.mkdir(exist_ok=True)
+CAMERAS_FILE = DATA_DIR / "cameras.json"
 
 
 def _env_bool(key: str, default: bool = False) -> bool:

@@ -20,6 +20,9 @@ Reolink → RTSP sub → Camera worker → YOLO (AI FPS) → MJPEG → Dashboard
 
 - **Windows-app med GUI** — eget fönster + taskbar/tray-ikon (pywebview), eller headless som tjänst (NSSM).
 - **Live-Dashboard (v0.5)** — en RTSP-session per kamera, auto-återanslut, schemalagd YOLO (AI FPS), annoterad MJPEG-ström och runtime-status (faktisk enhet, inferens, FPS) direkt i webbläsaren.
+- **Flera kameror (v0.7)** — lägg till valfritt antal kameror med namn/RTSP direkt i GUI:t (register i `data/cameras.json`, bevaras vid uppdatering). Kameraväljare i Dashboard.
+- **Kontinuerlig live (v0.7)** — aktiverade kameror körs på servern dygnet runt (YOLO + HA-event fortsätter) även utan öppen webbläsare.
+- **Home Assistant från GUI (v0.7)** — aktivera/konfigurera HA (MQTT/REST, host, användare, token) under **Inställningar → Home Assistant**; spara återansluter direkt utan omstart.
 - **YOLO på Intel Arc** via OpenVINO (`openvino:GPU` → `intel:gpu`) med tydlig GPU-fallback till CPU (visas i Dashboard).
 - **GUI-first-inställningar** — kamera, AI FPS, bildstorlek, enhet, display-FPS, JPEG-kvalitet och överlagring (boxar/etiketter/konfidens) ändras från webb-GUI:t och sparas till `.env` utan omstart där det går. Lösenord skickas aldrig tillbaka till webbläsaren.
 - **Vision-LLM (Ollama) på Arc** via Vulkan (`OLLAMA_VULKAN=1`).
@@ -140,9 +143,12 @@ Assistant.
 | `LIVE_SHOW_BOXES/LABELS/CONF` | Visa/dölj överlagring | `true` |
 
 De live-relaterade nycklarna är **GUI-first**: de ändras normalt under
-**Inställningar → Kamera / Live-detektering / Live-ström** i webb-GUI:t och
-sparas till `.env` automatiskt. En gammal `.env` utan nycklarna fungerar —
-alla har defaultvärden (kamera är inaktiverad tills den konfigurerats).
+**Inställningar → Kameror / Live-detektering / Live-ström** i webb-GUI:t och
+sparas till `.env` automatiskt. Flera kameror hanteras via GUI:t och lagras i
+`data/cameras.json` (lokalt, bevaras vid uppdatering) – `CAMERA_*`-nycklarna
+används bara som seed för den första kameran om inget register finns. En gammal
+`.env` utan nycklarna fungerar – alla har defaultvärden (kamera är inaktiverad
+tills den konfigurerats).
 
 Om Ollama inte körs fungerar YOLO-detekteringen ändå — beskrivningen visar bara ett fel.
 
@@ -172,9 +178,10 @@ start-grace) eller i `.env` (`LIVE_EVENT_*`).
 
 Så här får du in det i HA:
 
-1. Sätt `HA_ENABLED=1`, `HA_TRANSPORT=mqtt` samt `HA_MQTT_HOST/USER/PASS`
-   (eller `rest` + `HA_REST_URL/TOKEN`) i `.env` och starta om.
-2. Aktivera live-kameran (RTSP) och slå på **HA-event** i GUI:t.
+1. Aktivera Home Assistant under **Inställningar → Home Assistant** i GUI:t
+   (eller sätt `HA_ENABLED=1`, `HA_TRANSPORT=mqtt` + `HA_MQTT_*` i `.env`).
+   Spara återansluter direkt.
+2. Aktivera en eller flera live-kameror (RTSP) och slå på **HA-event** i GUI:t.
 3. HA skapar då automatiskt (MQTT auto-discovery) entiteterna:
    - `binary_sensor.camera_ai_<id>_motion` – ON vid ny detektion
    - `sensor.camera_ai_<id>_last_detection` – klasser + konfidens

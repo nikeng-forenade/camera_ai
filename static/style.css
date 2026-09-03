@@ -396,3 +396,16 @@ main { max-width: 1240px; }
 }
 .settings-grid label:has(input[type="range"]) .hint { display: block; }
 
+/* Multi-kamera: väljare, actions, danger-knapp */
+.live-cam-select { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.live-cam-select label { color: var(--muted); font-size: 12.5px; }
+.live-cam-select select {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; font-size: 13px; max-width: 240px;
+}
+.cam-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.btn.danger { background: var(--red); color: #fff; }
+.btn.danger:hover { filter: brightness(1.1); }
+.settings-grid label.wide select { width: 100%; }
+

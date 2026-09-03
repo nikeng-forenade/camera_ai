@@ -9,6 +9,8 @@ statusfältet så GUI/API fungerar även utan kamera.
 """
 from __future__ import annotations
 
+import json
+import re
 import threading
 import time
 from collections import deque
@@ -18,6 +20,12 @@ import cv2  # finns via ultralytics (requirements: opencv-python)
 
 import config
 from analyzer import annotate_frame_bgr
+
+
+def _slugify(name: str) -> str:
+    """Gör ett kamera-namn till ett säkert id (t.ex. 'Garden 2' -> 'garden-2')."""
+    s = re.sub(r"[^a-z0-9åäö]+", "-", (name or "").lower()).strip("-")
+    return s or "kam"
 
 # Kamera-states (lättare att hantera i GUI/API än magiska strängar)
 CAM_DISABLED = "disabled"
@@ -253,7 +261,7 @@ class CameraWorker:
     dubbla anrop (ingen worker-/tråd-dubbling vid reconnect/refresh).
     """
 
-    def __init__(self, analyzer):
+    def __init__(self, analyzer, camera_id: str = "", camera_cfg: dict | None = None):
         self.analyzer = analyzer
         self._lock = threading.RLock()
         self._restart_lock = threading.Lock()  # skyddar mot samtidig restart
@@ -261,8 +269,18 @@ class CameraWorker:
         self._rtsp_thread: threading.Thread | None = None
         self._loop_thread: threading.Thread | None = None
 
-        # --- Konfiguration (från config/.env, uppdateras via API) ---
+        # --- Konfiguration (default från config/.env, kan överlagras per kamera) ---
         self.camera = self._camera_defaults()
+        if camera_cfg:
+            merged = dict(self.camera)
+            merged.update({k: v for k, v in camera_cfg.items() if k in self.camera})
+            self.camera = merged
+        name = str(self.camera.get("name") or "Kamera").strip()
+        if not name:
+            name = "Kamera"
+        self.camera["name"] = name
+        self.camera_id = (camera_id or _slugify(name) or "kam1").lower()
+        self.camera["id"] = self.camera_id
         self.detect = self._detect_defaults()
         self.live = self._live_defaults()
         self.events = self._event_defaults()
@@ -826,6 +844,34 @@ class CameraWorker:
             for d in ev_dets[:4]
         )
 
+    @property
+    def running(self) -> bool:
+        return self._running and not self._stop.is_set()
+
+    def record(self) -> dict:
+        """Hela kameraknfigurationen (inkl. lösenord - sparas bara lokalt)."""
+        with self._lock:
+            return dict(self.camera)
+
+    def public_cfg(self) -> dict:
+        """Kamera-konfiguration utan hemligheter (för GUI/API)."""
+        with self._lock:
+            c = dict(self.camera)
+        full = c.get("full_url") or ""
+        return {
+            "id": self.camera_id,
+            "enabled": bool(c.get("enabled")),
+            "name": c.get("name") or "",
+            "host": c.get("host") or "",
+            "user": c.get("user") or "",
+            "path": c.get("path") or "/Preview_01_sub",
+            "password_configured": bool((c.get("password") or "") or ("@" in full)),
+            "full_url_configured": bool(full),
+            "reconnect": bool(c.get("reconnect")),
+            "reconnect_delay": int(c.get("reconnect_delay", 5)),
+            "autostart": bool(c.get("autostart")),
+        }
+
     def latest_jpeg(self):
         """Returnera (jpeg-bytes, versionsnummer) för senaste annoterade bilden."""
         with self._lock:
@@ -874,6 +920,7 @@ class CameraWorker:
 
         fallback = _tier(configured_device) == "gpu" and _tier(actual_device) == "cpu"
         return {
+            "camera_id": self.camera_id,
             "camera_name": camera["name"],
             "camera_enabled": bool(camera["enabled"]),
             "camera_state": state,
@@ -918,3 +965,227 @@ class CameraWorker:
             "last_event_ts": self.last_event_ts,
             "event_count": self.event_count,
         }
+
+
+# ---------------------------------------------------------------------------
+# CameraPool: hanterar flera kameraworkers + lokalt register (data/cameras.json)
+# ---------------------------------------------------------------------------
+# Registret sparas i config.CAMERAS_FILE (data/cameras.json), som bevaras av
+# install/update (data/ exkluderas i robocopy). Fält = worker.camera.
+_CAMERA_FIELDS = (
+    "enabled", "name", "host", "user", "password", "path", "full_url",
+    "reconnect", "reconnect_delay", "autostart",
+)
+
+
+class CameraPool:
+    """Register + livscykel för N kameror (en CameraWorker per kamera)."""
+
+    def __init__(self, analyzer):
+        self.analyzer = analyzer
+        self._lock = threading.RLock()
+        self._workers: dict[str, CameraWorker] = {}
+        self._order: list[str] = []
+        self._event_cb = None
+
+    # ------------------------------------------------------------- register
+    def load(self) -> None:
+        """Ladda register från data/cameras.json (eller seeda från CAMERA_*)."""
+        records: list[dict] = []
+        if config.CAMERAS_FILE.exists():
+            try:
+                data = json.loads(config.CAMERAS_FILE.read_text(encoding="utf-8"))
+                records = data if isinstance(data, list) else []
+            except Exception as exc:  # noqa: BLE001 - fall tillbaka på seed
+                print(f"[camera] kunde inte läsa register ({exc}) - startar om från .env")
+                records = []
+        if not records:
+            seed = self._seed_from_env()
+            if seed:
+                records = [seed]
+        for rec in records:
+            self._add_record(rec, start=False)
+        self._save()
+
+    def _seed_from_env(self) -> dict | None:
+        """Migration: om inget register finns används befintlig CAMERA_*/REOLINK_*."""
+        if not config.CAMERA_ENABLED and not config.CAMERA_HOST:
+            return None
+        return {
+            "enabled": config.CAMERA_ENABLED,
+            "name": config.CAMERA_NAME,
+            "host": config.CAMERA_HOST,
+            "user": config.CAMERA_USER,
+            "password": config.CAMERA_PASS,
+            "path": config.CAMERA_PATH,
+            "full_url": config.CAMERA_RTSP_URL,
+            "reconnect": config.CAMERA_RECONNECT,
+            "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
+            "autostart": config.CAMERA_AUTOSTART,
+        }
+
+    def _save(self) -> None:
+        try:
+            records = [self._workers[c].record() for c in self._order if c in self._workers]
+            config.CAMERAS_FILE.write_text(
+                json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:  # noqa: BLE001
+            print(f"[camera] kunde inte spara register: {exc}")
+
+    def _add_record(self, rec: dict, start: bool) -> CameraWorker:
+        base = str(rec.get("id") or _slugify(rec.get("name", "kamera"))).lower()
+        cid, n = base, 2
+        while cid in self._workers:
+            cid = f"{base}-{n}"
+            n += 1
+        w = CameraWorker(self.analyzer, camera_id=cid, camera_cfg=rec)
+        with self._lock:
+            self._workers[cid] = w
+            self._order.append(cid)
+        if self._event_cb is not None:
+            w.on_event(self._event_cb)
+        if start and bool(w.camera.get("enabled")):
+            w.start()
+        return w
+
+    # -------------------------------------------------------------- lookup
+    def get(self, key: str) -> CameraWorker | None:
+        """Hämta worker via id eller (skifteslöst) namn."""
+        key = (key or "").strip().lower()
+        with self._lock:
+            if key in self._workers:
+                return self._workers[key]
+            for w in self._workers.values():
+                if str(w.camera.get("name", "")).lower() == key:
+                    return w
+        return None
+
+    def require(self, key: str) -> CameraWorker:
+        w = self.get(key)
+        if w is None:
+            raise KeyError(key)
+        return w
+
+    def default(self) -> CameraWorker | None:
+        with self._lock:
+            for cid in self._order:
+                if cid in self._workers:
+                    return self._workers[cid]
+        return None
+
+    def ids(self) -> list:
+        with self._lock:
+            return list(self._order)
+
+    def all(self) -> list:
+        with self._lock:
+            return [self._workers[c] for c in self._order if c in self._workers]
+
+    def count(self) -> int:
+        with self._lock:
+            return len(self._order)
+
+    # -------------------------------------------------------------- CRUD
+    def add(self, cfg: dict) -> CameraWorker:
+        """Lägg till en kamera (startas direkt om enabled)."""
+        rec = {k: cfg.get(k) for k in _CAMERA_FIELDS if cfg.get(k) is not None}
+        rec.setdefault("name", "Kamera")
+        rec.setdefault("enabled", False)
+        rec.setdefault("reconnect", True)
+        rec.setdefault("reconnect_delay", int(config.CAMERA_RECONNECT_DELAY))
+        rec.setdefault("autostart", True)
+        rec.setdefault("path", "/Preview_01_sub")
+        w = self._add_record(rec, start=True)
+        self._save()
+        return w
+
+    def update(self, cid: str, patch: dict) -> CameraWorker | None:
+        """Uppdatera en kamera; startar/stoppar/startar om vid behov."""
+        w = self.get(cid)
+        if w is None:
+            return None
+        values = {k: v for k, v in patch.items() if k in _CAMERA_FIELDS and k != "id"}
+        if values.get("name") is not None:
+            values["name"] = str(values["name"]).strip()
+        if values.get("password") in (None, ""):
+            values.pop("password", None)  # tomt = behåll befintligt
+        if values.get("host") is not None:
+            values["host"] = str(values["host"]).strip()
+        if values.get("path") is not None:
+            p = str(values["path"]).strip() or "/Preview_01_sub"
+            values["path"] = p if p.startswith("/") else "/" + p
+        if values.get("full_url") is not None:
+            values["full_url"] = str(values["full_url"]).strip()
+
+        was_running = w.running
+        enabled = values.get("enabled", w.camera.get("enabled", False))
+        restart_keys = ("host", "user", "password", "path", "full_url")
+        needs_restart = any(k in values for k in restart_keys)
+        w.update_camera(values)
+
+        if not enabled:
+            w.stop()
+        else:
+            if not w.running:
+                w.start()
+            elif needs_restart or (was_running and "name" in values):
+                w.restart()
+        self._save()
+        return w
+
+    def remove(self, cid: str) -> bool:
+        w = self.get(cid)
+        if w is None:
+            return False
+        w.stop()
+        with self._lock:
+            self._workers.pop(cid, None)
+            if cid in self._order:
+                self._order.remove(cid)
+        self._save()
+        return True
+
+    # --------------------------------------------------------- lifecycle
+    def start(self, cid: str) -> CameraWorker | None:
+        w = self.get(cid)
+        if w is not None:
+            w.start()
+        return w
+
+    def stop(self, cid: str) -> CameraWorker | None:
+        w = self.get(cid)
+        if w is not None:
+            w.stop()
+        return w
+
+    def start_all(self) -> None:
+        """Starta aktiverade kameror (kontinuerligt, oavsett webbläsare)."""
+        for w in self.all():
+            if bool(w.camera.get("enabled")):
+                w.start()
+
+    def stop_all(self, join: float = 3.0) -> None:
+        for w in self.all():
+            w.stop(join=join)
+
+    # ----------------------------------------------------------- settings
+    def on_event(self, fn) -> None:
+        self._event_cb = fn
+        for w in self.all():
+            w.on_event(fn)
+
+    def apply_all(self, kind: str, values: dict) -> None:
+        """Applicera globala inställningar (detect/live/events) på alla kameror."""
+        method = getattr(CameraWorker, f"update_{kind}", None)
+        if method is None:
+            return
+        for w in self.all():
+            method(w, values)
+
+    def statuses(self) -> list:
+        return [w.status() for w in self.all()]
+
+    def camera_list(self) -> list:
+        return [w.public_cfg() for w in self.all()]
+
