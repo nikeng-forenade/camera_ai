@@ -161,6 +161,27 @@ API i korthet: `GET/PUT /api/settings`, `GET /api/cameras/status`,
 `GET /api/live/{kamera}` (MJPEG). Befintliga endpoints (`/api/analyze`,
 `/api/history`, `/api/stats`, `/api/health`, HA/Ollama) är oförändrade.
 
+### Live-event → Home Assistant (v0.6)
+
+Nya detektioner i live-strömmen kan skickas till HA som händelser. En händelse
+skapas bara när en klass blir **närvarande** (eller kommer tillbaka efter att ha
+varit borta i "vila"-tiden) – en statisk/parkerad bil ger alltså **bara en
+händelse**, inte ett ständigt larm. Inställningar under **Inställningar →
+HA-event** (klasser, vila innan återaktivering, ON-tid, min-intervall,
+start-grace) eller i `.env` (`LIVE_EVENT_*`).
+
+Så här får du in det i HA:
+
+1. Sätt `HA_ENABLED=1`, `HA_TRANSPORT=mqtt` samt `HA_MQTT_HOST/USER/PASS`
+   (eller `rest` + `HA_REST_URL/TOKEN`) i `.env` och starta om.
+2. Aktivera live-kameran (RTSP) och slå på **HA-event** i GUI:t.
+3. HA skapar då automatiskt (MQTT auto-discovery) entiteterna:
+   - `binary_sensor.camera_ai_<id>_motion` – ON vid ny detektion
+   - `sensor.camera_ai_<id>_last_detection` – klasser + konfidens
+   - `image.camera_ai_<id>_snapshot` – senaste annoterade bilden
+4. I HA: skapa t.ex. en automation som triggar på binary_sensorn och skickar
+   en notis med bild, eller lägg bilden på en dashboard-kort.
+
 ## Home Assistant
 
 ### MQTT + auto-discovery (rekommenderat)

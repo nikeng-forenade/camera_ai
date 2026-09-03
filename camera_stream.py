@@ -54,6 +54,62 @@ class _FpsMeter:
         self._t.clear()
 
 
+class _EventTracker:
+    """Avgör när en händelseklass blir NY (löser statiska objekt).
+
+    Statiska objekt (t.ex. en parkerad bil på uppfarten) ska inte skapa
+    händelser hela tiden. Därför hålls klassen som "aktiv" tills den varit
+    BORTA i ``clear_after`` sekunder - en händelse skapas bara när klassen
+    faktiskt dyker upp (efter att ha varit frånvarande) eller kommer tillbaka
+    efter ett uppehåll. En bil som står stilla genererar alltså bara en enda
+    händelse när den först sågs.
+    """
+
+    def __init__(self) -> None:
+        self._active: dict[str, float] = {}   # klass -> tidpunkt aktiv
+        self._absent_since: dict[str, float] = {}
+        self._streak: dict[str, int] = {}     # antal på varandra följande inferenser
+
+    def update(self, present: set, now: float, clear_after: float) -> list:
+        """Anropa varje AI-tick. Returnerar klasser som blivit nya (fire)."""
+        fired: list[str] = []
+        # Uppdatera aktiva klasser: har de varit borta tillräckligt länge?
+        for cls in list(self._active):
+            if cls in present:
+                self._absent_since.pop(cls, None)
+                self._streak[cls] = self._streak.get(cls, 0) + 1
+            else:
+                a = self._absent_since.get(cls)
+                if a is None:
+                    a = now
+                    self._absent_since[cls] = a
+                if now - a >= clear_after:
+                    self._active.pop(cls)
+                    self._absent_since.pop(cls)
+                    self._streak[cls] = 0
+        # Nya kandidater: kräv 2 på varandra följande inferenser (mindre
+        # falska utlösningar på enstaka felklassningar).
+        for cls in present:
+            if cls in self._active:
+                continue
+            streak = self._streak.get(cls, 0) + 1
+            self._streak[cls] = streak
+            if streak >= 2:
+                self._active[cls] = now
+                self._streak[cls] = 0
+                fired.append(cls)
+        # Städa streaks som inte längre är relevanta
+        for cls in list(self._streak):
+            if cls not in present and cls not in self._active and self._streak.get(cls) == 0:
+                self._streak.pop(cls, None)
+        return fired
+
+    def reset(self) -> None:
+        self._active.clear()
+        self._absent_since.clear()
+        self._streak.clear()
+
+
 def _quote_cred(value: str) -> str:
     return quote((value or ""), safe="")
 
@@ -209,6 +265,7 @@ class CameraWorker:
         self.camera = self._camera_defaults()
         self.detect = self._detect_defaults()
         self.live = self._live_defaults()
+        self.events = self._event_defaults()
 
         # --- Runtime-state ---
         self.state = CAM_DISABLED
@@ -235,6 +292,15 @@ class CameraWorker:
         self._placeholder = None
         self._placeholder_text = ""
         self._running = False
+        # Event-tillstånd (HA-publicering av nya detektioner)
+        self._event_callback = None
+        self._evt = _EventTracker()
+        self._ev_classes = self._parse_event_classes(self.events["classes"])
+        self._ev_binary_until = 0.0   # binary_sensor i HA hålls ON till denna tid
+        self._ev_last_pub = 0.0
+        self.last_event: str | None = None
+        self.last_event_ts: float | None = None
+        self.event_count = 0
 
     # ------------------------------------------------------------------ utils
     @staticmethod
@@ -271,12 +337,32 @@ class CameraWorker:
             "show_conf": config.LIVE_SHOW_CONF,
         }
 
+    @staticmethod
+    def _event_defaults() -> dict:
+        return {
+            "enabled": config.LIVE_EVENT_ENABLED,
+            "classes": config.LIVE_EVENT_CLASSES,
+            "clear_after": float(config.LIVE_EVENT_CLEAR_AFTER),
+            "hold": float(config.LIVE_EVENT_HOLD),
+            "min_interval": float(config.LIVE_EVENT_MIN_INTERVAL),
+            "startup_grace": float(config.LIVE_EVENT_STARTUP_GRACE),
+        }
+
+    @staticmethod
+    def _parse_event_classes(classes: str) -> set:
+        return {
+            c.strip().lower()
+            for c in (classes or "").split(",")
+            if c.strip()
+        }
+
     def _cfg(self) -> dict:
         with self._lock:
             return {
                 "camera": dict(self.camera),
                 "detect": dict(self.detect),
                 "live": dict(self.live),
+                "events": dict(self.events),
             }
 
     def _set_state(self, state: str, detail: str = "", error: str | None = None) -> None:
@@ -466,6 +552,8 @@ class CameraWorker:
             now = time.time()
             cfg = self._cfg()
             camera, detect, live = cfg["camera"], cfg["detect"], cfg["live"]
+            # Skicka OFF när binary-hålltiden i HA gått ut (oberoende av frames)
+            self._maybe_event_off(now)
             with self._lock:
                 raw = self._raw_frame
                 raw_ts = self._raw_ts
@@ -515,6 +603,8 @@ class CameraWorker:
                             ms if self.inference_ms <= 0 else self.inference_ms * 0.8 + ms * 0.2
                         )
                     self._ai_fps.tick()
+                    # HA-event: nya detektioner (statiska objekt -> bara en händelse)
+                    self._eval_events(dets, res.get("annotated"), now)
 
             # --- JPEG-kodning (display-FPS) - alltid senaste raw + nuvarande boxes ---
             disp_interval = 1.0 / max(1.0, float(live["display_fps"]))
@@ -623,6 +713,119 @@ class CameraWorker:
                 if k in self.live:
                     self.live[k] = v
 
+    # --------------------------------------------------------- HA-event (live)
+    def on_event(self, fn) -> None:
+        """Registrera callback som anropas vid nya händelser (kind=event/clear)."""
+        with self._lock:
+            self._event_callback = fn
+
+    def update_events(self, values: dict) -> None:
+        with self._lock:
+            for k, v in values.items():
+                if k in self.events:
+                    self.events[k] = v
+            self._ev_classes = self._parse_event_classes(self.events["classes"])
+            enabled = bool(self.events.get("enabled"))
+            was_on = self._ev_binary_until > 0.0
+            cb = self._event_callback
+            if not enabled:
+                self._ev_binary_until = 0.0
+                self._evt.reset()
+                self._ev_last_pub = 0.0
+        if not enabled and was_on and cb is not None:
+            try:
+                cb({
+                    "kind": "clear", "classes": [], "detections": [],
+                    "summary": "", "jpeg": None,
+                    "ts": time.time(), "camera_name": self.camera["name"],
+                })
+            except Exception as exc:  # noqa: BLE001
+                print(f"[event] clear misslyckades: {exc}")
+
+    def _maybe_event_off(self, now: float) -> None:
+        """Skicka OFF till HA när binary-hålltiden gått ut (körs varje loopvarv)."""
+        with self._lock:
+            until = self._ev_binary_until
+            cb = self._event_callback
+            if until and now >= until:
+                self._ev_binary_until = 0.0
+        if until and now >= until and cb is not None:
+            try:
+                cb({
+                    "kind": "clear", "classes": [], "detections": [],
+                    "summary": "", "jpeg": None,
+                    "ts": now, "camera_name": self.camera["name"],
+                })
+            except Exception as exc:  # noqa: BLE001
+                print(f"[event] clear misslyckades: {exc}")
+
+    def _eval_events(self, dets: list, annotated_bgr, now: float) -> None:
+        """Kör event-trackern på senaste inferensen och publicerar nya händelser."""
+        with self._lock:
+            enabled = bool(self.events.get("enabled"))
+            cfg = dict(self.events)
+            cb = self._event_callback
+            camera_name = self.camera["name"]
+            classes = set(self._ev_classes)
+        if not enabled or cb is None:
+            return
+        with self._lock:
+            present = {d.get("class") for d in dets if d.get("class") in classes}
+            fired = self._evt.update(present, now, float(cfg.get("clear_after", 5.0)))
+            grace_until = self._started_ts + float(cfg.get("startup_grace", 0.0))
+            if fired and now >= grace_until:
+                min_int = float(cfg.get("min_interval", 5.0))
+                hold = float(cfg.get("hold", 10.0))
+                can_pub = (now - self._ev_last_pub) >= min_int
+                if can_pub:
+                    self._ev_last_pub = now
+                # Förläng alltid ON så binary_sensorn inte slår av mitt i aktivitet
+                self._ev_binary_until = max(self._ev_binary_until, now + hold)
+            else:
+                can_pub = False
+        if not fired:
+            return
+        if now < grace_until:
+            return  # låt redan närvarande objekt "landa" innan man larmar
+        if not can_pub:
+            return
+        ev_dets = [d for d in dets if d.get("class") in fired]
+        summary = self._event_summary(ev_dets)
+        jpeg = None
+        if annotated_bgr is not None:
+            with self._lock:
+                q = int(self.live.get("jpeg_quality", 80))
+            ok, buf = cv2.imencode(
+                ".jpg", annotated_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), q]
+            )
+            if ok:
+                jpeg = buf.tobytes()
+        with self._lock:
+            self.last_event = summary
+            self.last_event_ts = now
+            self.event_count += 1
+        try:
+            cb({
+                "kind": "event",
+                "classes": list(fired),
+                "detections": ev_dets,
+                "summary": summary,
+                "jpeg": jpeg,
+                "ts": now,
+                "camera_name": camera_name,
+            })
+        except Exception as exc:  # noqa: BLE001 - workern får aldrig krascha
+            print(f"[event] publicering misslyckades: {exc}")
+
+    @staticmethod
+    def _event_summary(ev_dets: list) -> str:
+        if not ev_dets:
+            return ""
+        return ", ".join(
+            f"{d.get('class', '?')} {float(d.get('confidence', 0.0)) * 100:.0f}%"
+            for d in ev_dets[:4]
+        )
+
     def latest_jpeg(self):
         """Returnera (jpeg-bytes, versionsnummer) för senaste annoterade bilden."""
         with self._lock:
@@ -638,6 +841,7 @@ class CameraWorker:
             camera = dict(self.camera)
             detect = dict(self.detect)
             live = dict(self.live)
+            events = dict(self.events)
             state = self.state
             detail = self.state_detail
             error = self.error
@@ -703,4 +907,14 @@ class CameraWorker:
             "show_boxes": bool(live["show_boxes"]),
             "show_labels": bool(live["show_labels"]),
             "show_conf": bool(live["show_conf"]),
+            # HA-event-status
+            "events_enabled": bool(events["enabled"]),
+            "event_classes": (events["classes"] or ""),
+            "event_clear_after": float(events["clear_after"]),
+            "event_hold": float(events["hold"]),
+            "event_min_interval": float(events["min_interval"]),
+            "event_startup_grace": float(events["startup_grace"]),
+            "last_event": self.last_event,
+            "last_event_ts": self.last_event_ts,
+            "event_count": self.event_count,
         }

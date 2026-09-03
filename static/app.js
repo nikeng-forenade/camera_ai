@@ -681,6 +681,14 @@ loadStats();
         ["JPEG-kvalitet", String(s.jpeg_quality)],
         ["Upptid", (s.uptime || 0) + " s"],
       ];
+      if (s.events_enabled) {
+        const evTxt = s.last_event
+          ? (s.last_event + (s.last_event_ts ? " · " + new Date(s.last_event_ts * 1000).toLocaleTimeString("sv-SE") : ""))
+          : "Aktivt – väntar på ny detektion";
+        rows.push(["HA-event", evTxt, s.last_event ? "metric-ok" : "metric-warn"]);
+      } else {
+        rows.push(["HA-event", "Av"]);
+      }
       if (s.yolo_error) rows.push(["YOLO-fel", s.yolo_error.slice(0, 80), "metric-err"]);
       if (s.camera_error && s.camera_state !== "online") rows.push(["Kameras fel", s.camera_error.slice(0, 80), "metric-err"]);
       statusTable.innerHTML = rows.map((r) => `<tr><td>${escapeHtml(r[0])}</td><td class="${r[2] || ""}">${escapeHtml(String(r[1]))}</td></tr>`).join("");
@@ -819,6 +827,15 @@ loadStats();
       setChecked("liveLabels", liv.show_labels !== false);
       setChecked("liveConf", liv.show_conf !== false);
     }
+    const ev = s.events;
+    if (ev) {
+      setChecked("evEnabled", ev.enabled);
+      if ($id("evClasses")) $id("evClasses").value = ev.classes || "";
+      if ($id("evClearAfter")) $id("evClearAfter").value = (ev.clear_after != null) ? ev.clear_after : 5;
+      if ($id("evHold")) $id("evHold").value = (ev.hold != null) ? ev.hold : 10;
+      if ($id("evMinInterval")) $id("evMinInterval").value = (ev.min_interval != null) ? ev.min_interval : 5;
+      if ($id("evStartupGrace")) $id("evStartupGrace").value = (ev.startup_grace != null) ? ev.startup_grace : 5;
+    }
     renderStatus(s.runtime || {});
   }
 
@@ -939,6 +956,33 @@ loadStats();
       try {
         await saveSettingsJson(body);
         setMsg(out, "✓ Sparat – gäller direkt", true);
+        loadSettingsPage();
+        pollStatus();
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+
+  /* ---- Inställningar: HA-event ---- */
+  if ($id("btnSaveEvents")) {
+    $id("btnSaveEvents").addEventListener("click", async () => {
+      const out = $id("evSaveMsg");
+      setMsg(out, "Sparar…", false);
+      const body = {
+        events: {
+          enabled: $id("evEnabled").checked,
+          classes: ($id("evClasses").value || "").trim(),
+          clear_after: parseFloat($id("evClearAfter").value) || 5,
+          hold: parseFloat($id("evHold").value) || 10,
+          min_interval: parseFloat($id("evMinInterval").value) || 5,
+          startup_grace: parseFloat($id("evStartupGrace").value) || 5,
+        },
+      };
+      try {
+        const res = await saveSettingsJson(body);
+        const on = res.runtime && res.runtime.events_enabled;
+        setMsg(out, on ? "✓ Sparat – aktivt: nya detektioner skickas till HA" : "✓ Sparat (av)", true);
         loadSettingsPage();
         pollStatus();
       } catch (e) {

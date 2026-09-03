@@ -294,6 +294,39 @@
           <span id="liveSaveMsg" class="save-msg"></span>
         </div>
       </section>
+
+      <!-- HA-event vid nya detektioner -->
+      <section class="card">
+        <h2>📨 HA-event vid nya detektioner</h2>
+        <div class="settings-grid">
+          <label class="chk">
+            <input type="checkbox" id="evEnabled" /> Skicka event till Home Assistant (MQTT/REST)
+          </label>
+          <label>Klasser (kommaseparerat)
+            <input type="text" id="evClasses" placeholder="person, car, cat, dog" />
+            <span class="hint">Endast dessa objekt skapar händelser. En bil som står parkerad på uppfarten ger bara EN händelse (när den dyker upp) – inte hela tiden.</span>
+          </label>
+          <label>Vila innan återaktivering (s)
+            <input type="number" id="evClearAfter" min="1" max="120" value="5" />
+            <span class="hint">Hur länge objektet måste vara borta innan en ny händelse kan skapas. Statiska objekt som aldrig försvinner ger bara en händelse.</span>
+          </label>
+          <label>ON-tid i HA (s)
+            <input type="number" id="evHold" min="1" max="300" value="10" />
+          </label>
+          <label>Minsta intervall mellan event (s)
+            <input type="number" id="evMinInterval" min="1" max="300" value="5" />
+          </label>
+          <label>Start-grace (s)
+            <input type="number" id="evStartupGrace" min="0" max="120" value="5" />
+            <span class="hint">Ignorera händelser de första sekunderna efter start – så redan parkerade objekt inte larmar direkt efter omstart.</span>
+          </label>
+        </div>
+        <p class="hint">Kräver att Home Assistant är aktiverat (HA_ENABLED=1, se README) och att kameran är igång. Lösenord/HA-token skickas aldrig till webbläsaren.</p>
+        <div class="save-bar">
+          <button id="btnSaveEvents" class="btn" type="button">💾 Spara event</button>
+          <span id="evSaveMsg" class="save-msg"></span>
+        </div>
+      </section>
     </section>
   </main>
 

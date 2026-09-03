@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 
 def model_path(name: str) -> str:
@@ -179,6 +179,26 @@ LIVE_JPEG_QUALITY = _env_int("LIVE_JPEG_QUALITY", 80, lo=20, hi=100)
 LIVE_SHOW_BOXES = _env_bool("LIVE_SHOW_BOXES", True)
 LIVE_SHOW_LABELS = _env_bool("LIVE_SHOW_LABELS", True)
 LIVE_SHOW_CONF = _env_bool("LIVE_SHOW_CONF", True)
+
+# ---------------------------------------------------------------------------
+# HA-event vid NYA detektioner i live-strömmen (kräver HA + kamera aktiv).
+# Modellen löser "statiska objekt" (t.ex. parkerad bil på uppfarten): en
+# händelse skapas bara när en klass blir NÄRVARANDE/kommer tillbaka - inte så
+# länge den står stilla. Klasser: komma-separerad lista (YOLO-namn, små bokst).
+# ---------------------------------------------------------------------------
+LIVE_EVENT_ENABLED = _env_bool("LIVE_EVENT_ENABLED", False)
+LIVE_EVENT_CLASSES = (
+    os.getenv("LIVE_EVENT_CLASSES", "person,car,cat,dog") or "person"
+).strip()
+# Hur länge klassen måste vara borta innan den räknas som "lämnad" (re-arms).
+LIVE_EVENT_CLEAR_AFTER = _env_float("LIVE_EVENT_CLEAR_AFTER", 5.0, lo=1.0, hi=120.0)
+# Hur länge binary_sensorn i HA är ON per händelse.
+LIVE_EVENT_HOLD = _env_float("LIVE_EVENT_HOLD", 10.0, lo=1.0, hi=300.0)
+# Minsta intervall mellan publiceringar/snapshots (skydd mot spam).
+LIVE_EVENT_MIN_INTERVAL = _env_float("LIVE_EVENT_MIN_INTERVAL", 5.0, lo=0.5, hi=300.0)
+# Ignorera event de första N sekunderna efter start (låt ev. redan parkerade
+# objekt "landa" innan man larmar). 0 = av.
+LIVE_EVENT_STARTUP_GRACE = _env_float("LIVE_EVENT_STARTUP_GRACE", 5.0, lo=0.0, hi=120.0)
 
 # ---------------------------------------------------------------------------
 # Home Assistant integration

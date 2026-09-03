@@ -42,6 +42,38 @@ analyzer = YoloAnalyzer()
 ha = HAClient(config)
 cam = CameraWorker(analyzer)  # live-kamera: RTSP -> YOLO -> Dashboard
 
+
+def _live_event_publish(payload: dict) -> None:
+    """Publicera ett live-event (ny detektion) till Home Assistant.
+
+    Anropas från kameraworkerns loop-tråd. Sparar snapshot (om medskickad) till
+    MEDIA_DIR och återanvänder den befintliga HA-klienten (MQTT/REST). Aldrig
+    krascha - event är icke-kritiskt.
+    """
+    kind = payload.get("kind")
+    detections = payload.get("detections") or []
+    summary = payload.get("summary") or ""
+    annotated_path = None
+    jpeg = payload.get("jpeg")
+    if jpeg:
+        try:
+            p = config.MEDIA_DIR / f"event_{int(time.time() * 1000)}.jpg"
+            p.write_bytes(jpeg)
+            annotated_path = str(p)
+        except OSError as exc:  # noqa: BLE001 - snapshot är valfri
+            print(f"[event] kunde inte spara snapshot: {exc}")
+    try:
+        ha.publish_result(
+            detections=detections,
+            description=summary,
+            annotated_path=annotated_path,
+            camera=payload.get("camera_name"),
+        )
+        if kind == "event":
+            print(f"[ha] live-event: {summary}")
+    except Exception as exc:  # noqa: BLE001 - event ska aldrig stoppa workern
+        print(f"[ha] live-event misslyckades: {exc}")
+
 # Runtime settings — changeable from the HA integration via POST /api/config
 RUNTIME = {
     "model": config.DEFAULT_MODEL,
@@ -185,6 +217,11 @@ async def lifespan(_: FastAPI):
             set_llm_keep_alive(str(RUNTIME["keep_alive"]))
         except Exception as exc:  # noqa: BLE001
             print(f"[config] startup keep_alive apply failed: {exc}")
+    # Live->HA-event (nya detektioner) publiceras via befintlig HA-klient
+    try:
+        cam.on_event(_live_event_publish)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[camera] event-callback registrering misslyckades: {exc}")
     # Live-kamera-worker (startar även utan konfigurerad kamera - visar bara
     # tydlig 'inaktiverad'-placeholder. Kraschar aldrig servern.)
     try:
@@ -542,6 +579,7 @@ class _SettingsIn(BaseModel):
     camera: dict | None = None
     detect: dict | None = None
     live: dict | None = None
+    events: dict | None = None
 
 
 @app.get("/api/cameras/status")
@@ -621,7 +659,7 @@ def camera_test(payload: _CameraTestIn | None = None):
 def get_settings():
     """Nuvarande inställningar för live-kamera/YOLO/stream. Inga hemligheter."""
     c = cam._cfg()
-    camc, det, liv = c["camera"], c["detect"], c["live"]
+    camc, det, liv, ev = c["camera"], c["detect"], c["live"], c["events"]
     full_url = camc.get("full_url") or ""
     return {
         "camera": {
@@ -657,6 +695,14 @@ def get_settings():
             "show_labels": bool(liv["show_labels"]),
             "show_conf": bool(liv["show_conf"]),
         },
+        "events": {
+            "enabled": bool(ev["enabled"]),
+            "classes": ev["classes"],
+            "clear_after": float(ev["clear_after"]),
+            "hold": float(ev["hold"]),
+            "min_interval": float(ev["min_interval"]),
+            "startup_grace": float(ev["startup_grace"]),
+        },
         "runtime": cam.status(),
     }
 
@@ -668,7 +714,9 @@ def update_settings(payload: _SettingsIn):
     tillbaka i GET; tomt lösenordsfält vid PUT behåller det befintliga."""
     body = payload.model_dump(exclude_unset=True)
     cur = cam._cfg()
-    cur_cam, cur_det, cur_live = cur["camera"], cur["detect"], cur["live"]
+    cur_cam, cur_det, cur_live, cur_ev = (
+        cur["camera"], cur["detect"], cur["live"], cur["events"]
+    )
 
     errors: list[str] = []
     requires: list[str] = []
@@ -676,6 +724,7 @@ def update_settings(payload: _SettingsIn):
     pending_cam: dict | None = None
     pending_det: dict | None = None
     pending_live: dict | None = None
+    pending_events: dict | None = None
 
     def _to_bool(v, cur: bool) -> bool:
         try:
@@ -832,6 +881,47 @@ def update_settings(payload: _SettingsIn):
                 "LIVE_SHOW_CONF": "true" if show_conf else "false",
             })
 
+    # ------------------------- HA-event (nya detektioner) ------------
+    if body.get("events"):
+        e = dict(body["events"])
+        en = _to_bool(e.get("enabled", cur_ev["enabled"]), cur_ev["enabled"])
+        classes = str(e.get("classes", cur_ev["classes"]) or "").strip()
+        toks = [t.strip() for t in classes.split(",") if t.strip()]
+        if not toks:
+            errors.append("Ange minst en händelseklass (t.ex. person, car, cat, dog).")
+        classes = ",".join(sorted({t.lower() for t in toks}))
+
+        def _clamp(v, cur, lo, hi, name):
+            try:
+                val = float(v)
+            except (TypeError, ValueError):
+                val = float(cur)
+            if not lo <= val <= hi:
+                errors.append(f"{name} måste vara mellan {lo:g} och {hi:g}.")
+            return val
+
+        ca = _clamp(e.get("clear_after", cur_ev["clear_after"]), cur_ev["clear_after"], 1.0, 120.0, "Vila innan återaktivering")
+        hd = _clamp(e.get("hold", cur_ev["hold"]), cur_ev["hold"], 1.0, 300.0, "ON-tid i HA")
+        mi = _clamp(e.get("min_interval", cur_ev["min_interval"]), cur_ev["min_interval"], 0.5, 300.0, "Minsta intervall")
+        sg = _clamp(e.get("startup_grace", cur_ev["startup_grace"]), cur_ev["startup_grace"], 0.0, 120.0, "Start-grace")
+        if not errors:
+            pending_events = {
+                "enabled": en,
+                "classes": classes,
+                "clear_after": ca,
+                "hold": hd,
+                "min_interval": mi,
+                "startup_grace": sg,
+            }
+            env_write.update({
+                "LIVE_EVENT_ENABLED": "true" if en else "false",
+                "LIVE_EVENT_CLASSES": classes,
+                "LIVE_EVENT_CLEAR_AFTER": str(round(ca, 1)),
+                "LIVE_EVENT_HOLD": str(round(hd, 1)),
+                "LIVE_EVENT_MIN_INTERVAL": str(round(mi, 2)),
+                "LIVE_EVENT_STARTUP_GRACE": str(round(sg, 1)),
+            })
+
     # ------------------------------ Apply -----------------------------
     if errors:
         return JSONResponse({"ok": False, "errors": errors}, status_code=400)
@@ -854,6 +944,8 @@ def update_settings(payload: _SettingsIn):
                 start_yolo_model_download(str(RUNTIME["model"]))
     if pending_live is not None:
         cam.update_live(pending_live)
+    if pending_events is not None:
+        cam.update_events(pending_events)
 
     if env_write:
         if not config.persist_env(env_write):
