@@ -25,11 +25,12 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 
+import httpx
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import CameraAIClient, server_payload
@@ -95,13 +96,16 @@ class CameraAICoordinator(DataUpdateCoordinator[dict]):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     global _services_registered
 
-    session = async_get_clientsession(hass)
+    # client.py är skriven för httpx (resp.json() är sync) – vi måste alltså
+    # använda en httpx-klient, inte HA:s aiohttp-session.
+    session = httpx.AsyncClient(timeout=30.0)
     client = CameraAIClient(entry.data[CONF_URL], session)
     coordinator = CameraAICoordinator(hass, client, entry.entry_id)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "client": client,
         "coordinator": coordinator,
+        "session": session,
     }
 
     await coordinator.async_config_entry_first_refresh()
@@ -116,9 +120,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     global _services_registered
 
+    store = hass.data[DOMAIN].get(entry.entry_id)
+    session = store.get("session") if store else None
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        if session is not None:
+            await session.aclose()
         # Avregistrera tjänsterna när den sista instansen tas bort.
         if not hass.data[DOMAIN] and _services_registered:
             for service in _SERVICES:
