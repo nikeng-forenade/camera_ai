@@ -51,6 +51,29 @@ _LOGGER = logging.getLogger(__name__)
 _SERVICES = ("analyze_camera", "analyze_url", "describe_image", "set_config")
 _services_registered = False
 
+_PANEL_PATH = "camera_ai"
+
+
+def _async_register_panel(hass: HomeAssistant, url: str) -> None:
+    """Visa serverns GUI i HA:s sidofält (iframe-panel)."""
+    frontend = hass.components.frontend
+    frontend.async_register_built_in_panel(
+        component_name="custom",
+        sidebar_title="Camera AI",
+        sidebar_icon="mdi:cctv",
+        frontend_url_path=_PANEL_PATH,
+        config={"url": (url or "").rstrip("/")},
+        require_admin=True,
+    )
+
+
+def _async_remove_panel(hass: HomeAssistant) -> None:
+    frontend = hass.components.frontend
+    try:
+        frontend.async_remove_panel(_PANEL_PATH)
+    except Exception:  # noqa: BLE001 – paneler får inte krascha avladdning
+        pass
+
 
 class CameraAICoordinator(DataUpdateCoordinator[dict]):
     """Pollar servern (health, config, kamerastatus) var 10:e sekund."""
@@ -114,6 +137,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not _services_registered:
         _register_services(hass)
         _services_registered = True
+
+    # Panel i HA:s sidofält (serverns GUI) – av/på i Alternativ.
+    if entry.options.get("panel_enabled", True):
+        _async_register_panel(hass, entry.data.get(CONF_URL, ""))
     return True
 
 
@@ -125,6 +152,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        _async_remove_panel(hass)
         if session is not None:
             await session.aclose()
         # Avregistrera tjänsterna när den sista instansen tas bort.

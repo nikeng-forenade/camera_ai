@@ -19,5 +19,17 @@
     "abort": {
       "already_configured": "Den här server-URL:en är redan konfigurerad."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Camera AI",
+        "description": "Server-URL och om Camera AI ska visas i HA:s sidofält (panel med serverns GUI).",
+        "data": {
+          "url": "Server URL",
+          "panel_enabled": "Visa Camera AI i sidofältet"
+        }
+      }
+    }
   }
 }
