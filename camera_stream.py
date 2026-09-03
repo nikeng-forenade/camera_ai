@@ -60,25 +60,34 @@ def _draw_roi_line(img, roi_cfg):
         ty = y - 8 if y > 24 else y + 22
         cv2.putText(img, label, (10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
         return img
-    pts = roi_cfg.get("points") or []
-    if len(pts) < 3:
+    polys = roi_cfg.get("polys") or []
+    if not polys and roi_cfg.get("points"):
+        polys = [roi_cfg["points"]]  # äldre enstaka-zon-format
+    if not polys:
         return img
     import numpy as np
 
-    poly = np.array(
-        [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in pts], np.int32
-    ).reshape(-1, 1, 2)
     inside = str(roi_cfg.get("mode", "inside")) != "outside"
     color = (80, 230, 120) if inside else (255, 130, 60)  # BGR grön / orange
-    cv2.polylines(img, [poly], True, color, 2, cv2.LINE_AA)
-    for p in poly.reshape(-1, 2):
-        cv2.circle(img, (int(p[0]), int(p[1])), 4, color, -1, cv2.LINE_AA)
-    label = "Zon: kolla inuti" if inside else "Zon: kolla utanfor"
-    x0, y0 = int(poly[0][0][0]), int(poly[0][0][1])
-    ty = max(14, min(y0 - 6, h - 10))
-    cv2.putText(
-        img, label, (x0, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA
-    )
+    label = "Zoner: kolla inuti" if inside else "Zoner: overvaka INTE dessa"
+    first = None
+    for raw_p in polys:
+        if len(raw_p) < 3:
+            continue
+        poly = np.array(
+            [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in raw_p], np.int32
+        ).reshape(-1, 1, 2)
+        cv2.polylines(img, [poly], True, color, 2, cv2.LINE_AA)
+        for p in poly.reshape(-1, 2):
+            cv2.circle(img, (int(p[0]), int(p[1])), 4, color, -1, cv2.LINE_AA)
+        if first is None:
+            first = poly
+    if first is not None:
+        x0, y0 = int(first[0][0][0]), int(first[0][0][1])
+        ty = max(14, min(y0 - 6, h - 10))
+        cv2.putText(
+            img, label, (x0, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA
+        )
     return img
 
 
@@ -375,12 +384,13 @@ class CameraWorker:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
-            # Detektionszon (polygon av punkter); gamla linjer (roi_*) stöds fortfarande
-            "roi_enabled": False,
-            "roi_y": 0.5,
-            "roi_side": "above",
-            "zone_enabled": False,
-            "zone_points": [],
+# Detektionszoner (en eller flera polygoner); gamla linjer (roi_*) stöds fortfarande
+    "roi_enabled": False,
+    "roi_y": 0.5,
+    "roi_side": "above",
+    "zone_enabled": False,
+    "zone_polys": [],  # list av polygoner (flera zoner)
+    "zone_points": [],  # äldre format: en enda polygon (migreras vid läsning)
             "zone_mode": "inside",
         }
 
@@ -788,42 +798,68 @@ class CameraWorker:
                     self.camera[k] = v
 
     def _roi_cfg(self) -> dict:
-        """Nuvarande detektionsfiltrering (linje ELLER polygon-zon).
+        """Nuvarande detektionsfiltrering (linje ELLER en/flera polygon-zoner).
 
-        Läses varje inferens – ingen omstart. En aktiv polygon-zon
-        (zone_enabled + ≥3 punkter) vinner över en gammal vågrät linje
-        (roi_enabled/roi_y/roi_side). legacy_line=True = rita som en enda linje.
+        Läses varje inferens – ingen omstart. En aktiv zon (zone_enabled +
+        minst en polygon med ≥3 punkter) vinner över en gammal vågrät linje
+        (roi_enabled/roi_y/roi_side). legacy_line=True = rita som EN linje.
+
+        Flera zoner: mode 'inside' = detektionen ligger i NÅGON polygon;
+        'outside' = den ligger INTE i någon polygon (zonerna = "inte övervaka").
         """
         with self._lock:
             c = self.camera
-            points: list = []
             mode = str(c.get("zone_mode", "inside"))
             enabled = bool(c.get("zone_enabled"))
-            raw = c.get("zone_points") or []
-            if enabled and isinstance(raw, list):
-                for p in raw:
-                    try:
-                        points.append([float(p[0]), float(p[1])])
-                    except (TypeError, ValueError, IndexError):
-                        continue
-            has_zone = enabled and len(points) >= 3
+            polys = self._zone_polys_from_cfg(c) if enabled else []
+            has_zone = enabled and len(polys) >= 1
             legacy_line = False
             if not has_zone and bool(c.get("roi_enabled")):
                 legacy_line = True
                 ry = min(1.0, max(0.0, float(c.get("roi_y", 0.5))))
                 if str(c.get("roi_side", "above")) == "above":
-                    points = [[0.0, 0.0], [1.0, 0.0], [1.0, ry], [0.0, ry]]
+                    polys = [[[0.0, 0.0], [1.0, 0.0], [1.0, ry], [0.0, ry]]]
                 else:
-                    points = [[0.0, ry], [1.0, ry], [1.0, 1.0], [0.0, 1.0]]
+                    polys = [[[0.0, ry], [1.0, ry], [1.0, 1.0], [0.0, 1.0]]]
                 mode = "inside"
         return {
             "roi_enabled": has_zone or legacy_line,
-            "points": points,
+            "polys": polys,
             "mode": mode if mode in ("inside", "outside") else "inside",
             "legacy_line": legacy_line,
             "roi_y": float(c.get("roi_y", 0.5)),
             "roi_side": str(c.get("roi_side", "above")),
         }
+
+    @staticmethod
+    def _norm_poly(raw) -> list:
+        """Rensa en polygon till [[x, y], ...] (float, 0–1)."""
+        pts: list = []
+        if isinstance(raw, list):
+            for p in raw:
+                try:
+                    x = min(1.0, max(0.0, float(p[0])))
+                    y = min(1.0, max(0.0, float(p[1])))
+                except (TypeError, ValueError, IndexError):
+                    continue
+                pts.append([x, y])
+        return pts
+
+    def _zone_polys_from_cfg(self, c: dict) -> list:
+        """Alla aktiva zonpolygoner (normaliserade). Äldre zone_points med en
+        enda polygon migreras automatiskt till en lista."""
+        polys: list = []
+        raw = c.get("zone_polys")
+        if isinstance(raw, list):
+            for poly in raw:
+                pts = self._norm_poly(poly)
+                if len(pts) >= 3:
+                    polys.append(pts)
+        if not polys:
+            pts = self._norm_poly(c.get("zone_points"))
+            if len(pts) >= 3:
+                polys.append(pts)
+        return polys
 
     @staticmethod
     def _point_in_poly(px: float, py: float, poly: list) -> bool:
@@ -842,14 +878,14 @@ class CameraWorker:
         return inside
 
     def _apply_roi(self, dets: list, roi: dict, width: int, height: int) -> list:
-        """Behåll bara detektioner i (eller utanför) zonen.
+        """Behåll bara detektioner i (eller utanför) zonerna.
 
         Polygonpunkterna är normaliserade 0–1; boxarna är i pixlar. Använder
-        boxens mittpunkt. mode='inside' = mittpunkten ligger i polygonen;
-        'outside' = den gör det inte.
+        boxens mittpunkt. mode='inside' = mittpunkten ligger i NÅGON polygon;
+        'outside' = den ligger inte i NÅGON polygon (zonerna = inte övervaka).
         """
-        points = roi.get("points") or []
-        if not roi.get("roi_enabled") or len(points) < 3 or not dets or width <= 0 or height <= 0:
+        polys = roi.get("polys") or []
+        if not roi.get("roi_enabled") or not polys or not dets or width <= 0 or height <= 0:
             return dets
         inside_mode = roi.get("mode", "inside") != "outside"
         out = []
@@ -860,8 +896,8 @@ class CameraWorker:
                 continue
             cx = ((float(box[0]) + float(box[2])) / 2.0) / float(width)
             cy = ((float(box[1]) + float(box[3])) / 2.0) / float(height)
-            in_zone = self._point_in_poly(cx, cy, points)
-            if in_zone == inside_mode:
+            in_any = any(self._point_in_poly(cx, cy, poly) for poly in polys)
+            if in_any == inside_mode:
                 out.append(d)
         return out
 
@@ -1036,6 +1072,7 @@ class CameraWorker:
             "roi_side": str(c.get("roi_side", "above")),
             "zone_enabled": bool(c.get("zone_enabled")),
             "zone_points": c.get("zone_points") or [],
+            "zone_polys": self._zone_polys_from_cfg(c),
             "zone_mode": str(c.get("zone_mode", "inside")),
         }
 
@@ -1154,7 +1191,7 @@ _CAMERA_FIELDS = (
     "enabled", "name", "host", "user", "password", "path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
     "roi_enabled", "roi_y", "roi_side",
-    "zone_enabled", "zone_points", "zone_mode",
+    "zone_enabled", "zone_polys", "zone_points", "zone_mode",
 )
 
 
@@ -1202,12 +1239,12 @@ class CameraPool:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
-            # Detektionszon
+            # Detektionszoner
             "roi_enabled": False,
             "roi_y": 0.5,
             "roi_side": "above",
             "zone_enabled": False,
-            "zone_points": [],
+            "zone_polys": [],
             "zone_mode": "inside",
         }
 

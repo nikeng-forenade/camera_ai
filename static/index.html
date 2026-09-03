@@ -266,7 +266,7 @@
             </label>
             <div class="zone-kind" id="zoneKind">
               <button type="button" class="zk" id="camKindLine" data-kind="line">➖ Linje</button>
-              <button type="button" class="zk active" id="camKindPoly" data-kind="polygon">▭ Ruta / Zon</button>
+              <button type="button" class="zk active" id="camKindPoly" data-kind="polygon">▭ Zoner</button>
             </div>
           </div>
 
@@ -291,16 +291,16 @@
                 <div class="zone-mode">
                   <span class="zone-mode-label">Kolla</span>
                   <select id="camZoneMode">
-                    <option value="inside">INUTI zonen</option>
-                    <option value="outside">UTANFÖR zonen</option>
+                    <option value="inside">INUTI zonerna</option>
+                    <option value="outside">UTANFÖR zonerna (övervaka INTE)</option>
                   </select>
                 </div>
                 <div class="zone-actions">
-                  <button id="btnZoneUndo" class="btn" type="button">↩ Ångra</button>
-                  <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa</button>
+                  <button id="btnZoneUndo" class="btn" type="button">↩ Ta bort zon</button>
+                  <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa alla</button>
                 </div>
                 <div><span class="zone-chip" id="camZoneCount"></span></div>
-                <div class="zone-tip"><b>Klicka</b> = ny ruta · <b>dra</b> = rita egen ruta · <b>dra hörn</b> = ändra storlek · <b>dra inuti</b> = flytta hela.</div>
+                <div class="zone-tip"><b>Klicka/dra</b> = lägg till en zon (flera) · <b>dra hörn</b> = ändra storlek · <b>dra inuti</b> = flytta · <b>✕</b> = ta bort zon.</div>
               </div>
               <div class="zone-ctl" id="zoneLineCtl" hidden>
                 <div class="zone-mode">

@@ -980,16 +980,25 @@ loadStats();
   });
 
   /* ---- Inställningar: kameror (flera) ---- */
-  function zonePointsFromCam(c) {
-    const pts = (c && Array.isArray(c.zone_points) && c.zone_points.length >= 3)
-      ? c.zone_points : null;
-    if (pts) return pts.map((p) => [
-      Math.min(1, Math.max(0, Number(p && p[0]) || 0)),
-      Math.min(1, Math.max(0, Number(p && p[1]) || 0)),
-    ]);
-    return [];
+  function zonePolysFromCam(c) {
+    // Flera zoner: zone_polys = [ [ [x,y], ... ], ... ]. Äldre format med en
+    // enda zone_points-polygon migreras automatiskt till en lista.
+    let list = [];
+    if (c && Array.isArray(c.zone_polys)) {
+      list = c.zone_polys;
+    } else if (c && Array.isArray(c.zone_points) && c.zone_points.length >= 3) {
+      list = [c.zone_points];
+    }
+    const norm = (poly) => (Array.isArray(poly) ? poly : [])
+      .filter((p) => p && Array.isArray(p) && p.length >= 2)
+      .map((p) => [
+        Math.min(1, Math.max(0, Number(p[0]) || 0)),
+        Math.min(1, Math.max(0, Number(p[1]) || 0)),
+      ])
+      .filter((p, i, arr) => i === 0 || p[0] !== arr[i - 1][0] || p[1] !== arr[i - 1][1]);
+    return list.map(norm).filter((poly) => poly.length >= 3);
   }
-  let zonePts = [];
+  let zones = [];            // flera zoner: varje zon = [[x,y], ...]
   let filterKind = "polygon"; // 'line' | 'polygon'
   let lineY = 50; // 0..100 (% av bildhöjden)
   function zoneActive() {
@@ -1029,41 +1038,69 @@ loadStats();
     } else {
       vals.roi_enabled = false;
       vals.zone_enabled = enabled;
-      vals.zone_points = zonePts.map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]);
       vals.zone_mode = ($id("camZoneMode") ? $id("camZoneMode").value : "inside");
+      // Flera zoner (varje zon = lista av punkter). zone_points töms (legacy).
+      vals.zone_polys = zones.map((poly) =>
+        poly.map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000])
+      );
+      vals.zone_points = [];
     }
     return vals;
   }
   function zoneRender() {
     const svg = $id("camZoneSvg"), cnt = $id("camZoneCount");
     const on = filterKind === "polygon" && zoneActive();
+    const outside = !!($id("camZoneMode") && $id("camZoneMode").value === "outside");
     const host = $id("roiPreview");
-    if (host) host.querySelectorAll(".roi-pt").forEach((n) => n.remove());
+    if (host) host.querySelectorAll(".roi-pt, .roi-del").forEach((n) => n.remove());
     if (svg) svg.innerHTML = "";
     if (on) {
-      const outside = !!($id("camZoneMode") && $id("camZoneMode").value === "outside");
-      if (zonePts.length >= 3 && svg) {
-        const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-        poly.setAttribute("points", zonePts.map((p) => (p[0] * 100) + "," + (p[1] * 100)).join(" "));
-        poly.classList.add("roi-zone-poly");
-        if (outside) poly.classList.add("outside");
-        svg.appendChild(poly);
-      }
-      if (host) {
-        zonePts.forEach((p, i) => {
-          const d = document.createElement("div");
-          d.className = "roi-pt";
-          d.dataset.i = String(i);
-          d.style.left = (p[0] * 100) + "%";
-          d.style.top = (p[1] * 100) + "%";
-          d.title = "Hörn " + (i + 1) + " – dra för att flytta, dubbelklicka för att ta bort";
-          host.appendChild(d);
+      zones.forEach((poly) => {
+        if (!poly || poly.length < 3) return;
+        if (svg) {
+          const p = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+          p.setAttribute("points", poly.map((pt) => (pt[0] * 100) + "," + (pt[1] * 100)).join(" "));
+          p.classList.add("roi-zone-poly");
+          if (outside) p.classList.add("outside");
+          svg.appendChild(p);
+        }
+        if (host) {
+          poly.forEach((pt, i) => {
+            const d = document.createElement("div");
+            d.className = "roi-pt";
+            d.dataset.z = String(zones.indexOf(poly));
+            d.dataset.i = String(i);
+            d.style.left = (pt[0] * 100) + "%";
+            d.style.top = (pt[1] * 100) + "%";
+            d.title = "Hörn – dra för att ändra storlek, dubbelklicka för att ta bort";
+            host.appendChild(d);
+          });
+        }
+      });
+      // ✕ per zon (i zonens mitt) – ta bort den zonen
+      zones.forEach((poly) => {
+        if (!host || !poly || poly.length < 3) return;
+        const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+        const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "roi-del";
+        b.title = "Ta bort den här zonen";
+        b.textContent = "✕";
+        b.style.left = (cx * 100) + "%";
+        b.style.top = (cy * 100) + "%";
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const idx = zones.indexOf(poly);
+          if (idx >= 0) { zones.splice(idx, 1); zoneRender(); }
         });
-      }
+        host.appendChild(b);
+      });
     }
     if (cnt) {
-      cnt.textContent = !on ? "Ruta av" :
-        (zonePts.length >= 3 ? zonePts.length + " hörn – ruta aktiv" : zonePts.length + " hörn (dra en ruta för att börja)");
+      cnt.textContent = !on ? "Zoner av"
+        : !zones.length ? "Inga zoner – klicka/dra på bilden för att lägga till"
+        : (zones.length + (zones.length === 1 ? " zon" : " zoner") + " – " + (outside ? "övervakas INTE" : "övervakas"));
     }
     const lb = $id("roiLineBar");
     if (lb) lb.hidden = !(filterKind === "line" && zoneActive());
@@ -1083,11 +1120,11 @@ loadStats();
     if (lb) lb.hidden = !(filterKind === "line" && zoneActive());
   }
   function applyRoiFromCam(c) {
-    zonePts = zonePointsFromCam(c);
-    const isZone = !!(c && (c.zone_enabled || (Array.isArray(c.zone_points) && c.zone_points.length >= 3)));
-    const isLine = !!(c && !isZone && c.roi_enabled);
+    zones = zonePolysFromCam(c);
+    const hasGeo = zones.length > 0;
+    const isLine = !!(c && !hasGeo && !c.zone_enabled && c.roi_enabled);
     filterKind = isLine ? "line" : "polygon";
-    const eff = isZone || isLine;
+    const eff = !!(c && (c.roi_enabled || (c.zone_enabled && hasGeo)));
     if ($id("camZoneEnabled")) $id("camZoneEnabled").checked = eff;
     if ($id("camZoneMode")) $id("camZoneMode").value = (c && c.zone_mode === "outside") ? "outside" : "inside";
     lineY = Math.min(100, Math.max(0, Number(c && c.roi_y) * 100 || 50));
@@ -1277,10 +1314,9 @@ loadStats();
     });
   }
 
-  /* ---- Inställningar: detektionsfilter (linje ELLER ruta/zon) ---- */
+  /* ---- Inställningar: detektionsfilter (linje ELLER flera rutor/zoner) ---- */
   const roiPreviewEl = $id("roiPreview");
-  let zoneDragIdx = -1;
-  let zoneOp = null; // null | {type:'line'} | {type:'handle',i} | {type:'rect',sx,sy} | {type:'move',sx,sy,base}
+  let zoneOp = null; // null | {type:'line'} | {type:'handle',z,i} | {type:'rect',sx,sy} | {type:'move',z,sx,sy,base}
   function roiPosOf(e) {
     const r = roiPreviewEl.getBoundingClientRect();
     if (!r.width || !r.height) return null;
@@ -1289,42 +1325,51 @@ loadStats();
       Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
     ];
   }
-  function zoneNearest(nx, ny, tolPx) {
-    const r = roiPreviewEl.getBoundingClientRect();
-    const tol2 = (tolPx || 16) * (tolPx || 16);
-    let best = -1, bestD = tol2;
-    zonePts.forEach((p, i) => {
-      const dx = p[0] * r.width - nx * r.width;
-      const dy = p[1] * r.height - ny * r.height;
-      const d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = i; }
-    });
-    return best;
-  }
-  function ptInPoly(nx, ny) {
+  function ptInPoly(poly, nx, ny) {
     let inside = false;
-    for (let i = 0, j = zonePts.length - 1; i < zonePts.length; j = i++) {
-      const xi = zonePts[i][0], yi = zonePts[i][1], xj = zonePts[j][0], yj = zonePts[j][1];
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
       if ((yi > ny) !== (yj > ny) && (nx < (xj - xi) * (ny - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
     }
     return inside;
   }
-  function zoneRect(corners) {
-    if (corners.length !== 4) return;
+  function zoneHit(nx, ny, tolPx) {
+    // Närmaste hörn → {z,i}; annars första zon som innehåller punkten → {z}.
+    const r = roiPreviewEl.getBoundingClientRect();
+    const tol2 = (tolPx || 16) * (tolPx || 16);
+    let best = null, bestD = tol2;
+    for (let z = 0; z < zones.length; z++) {
+      const poly = zones[z];
+      for (let i = 0; i < poly.length; i++) {
+        const dx = poly[i][0] * r.width - nx * r.width;
+        const dy = poly[i][1] * r.height - ny * r.height;
+        const d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = { z, i }; }
+      }
+    }
+    if (best) return best;
+    for (let z = 0; z < zones.length; z++) {
+      if (zones[z] && zones[z].length >= 3 && ptInPoly(zones[z], nx, ny)) return { z };
+    }
+    return null;
+  }
+  function zoneAdd(corners) {
+    // Dragen rektangel → lägg till som EN ny zon (flera tillåts).
+    if (!corners || corners.length !== 4) return;
     const xs = corners.map((p) => p[0]), ys = corners.map((p) => p[1]);
     const x1 = Math.min(...xs), x2 = Math.max(...xs), y1 = Math.min(...ys), y2 = Math.max(...ys);
     if ((x2 - x1) < 0.02 || (y2 - y1) < 0.02) return; // för liten – ignorera
-    zonePts = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+    zones.push([[x1, y1], [x2, y1], [x2, y2], [x1, y2]]);
     zoneRender();
   }
-  function zoneDefaultBox(cx, cy) {
-    // Enkel klick → skapa en färdig ruta runt klickstället (dra sedan hörn/inuti)
+  function zoneClickBox(cx, cy) {
+    // Enkel klick på tom yta → lägg till en NY färdig ruta runt klickstället.
     const half = 0.18;
     const x1 = Math.min(1, Math.max(0, cx - half));
     const x2 = Math.min(1, Math.max(0, cx + half));
     const y1 = Math.min(1, Math.max(0, cy - half));
     const y2 = Math.min(1, Math.max(0, cy + half));
-    zonePts = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+    zones.push([[x1, y1], [x2, y1], [x2, y2], [x1, y2]]);
     zoneRender();
   }
   function drawRectPreview(sx, sy, cx, cy) {
@@ -1362,7 +1407,7 @@ loadStats();
   }
   if (roiPreviewEl) {
     roiPreviewEl.addEventListener("pointerdown", (e) => {
-      // Klick på knappar/fält (t.ex. ▶ Starta ström) ska inte rita/flytta något
+      // Klick på knappar/fält (t.ex. ▶ Starta ström, ✕ ta bort zon) ska inte rita
       if (e.target && e.target.closest && e.target.closest("button, input, select, label, a")) return;
       const on = zoneActive();
       const pos = roiPosOf(e);
@@ -1376,23 +1421,23 @@ loadStats();
         e.preventDefault();
         return;
       }
-      // Polygon
+      // Flera zoner (rutor/polygoner)
       if (e.detail > 1) return; // dubbelklick = ta bort hörn (separat)
-      if (!on && zonePts.length) return; // av → bara visning
-      const i = zoneNearest(pos[0], pos[1], 18);
-      if (i >= 0) {
-        zoneOp = { type: "handle", i };
+      if (!on && zones.length) return; // av → bara visning
+      const hit = zoneHit(pos[0], pos[1], 18);
+      if (hit && hit.i !== undefined) {
+        zoneOp = { type: "handle", z: hit.z, i: hit.i };
         try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
         e.preventDefault();
         return;
       }
-      if (zonePts.length >= 3 && ptInPoly(pos[0], pos[1])) {
-        zoneOp = { type: "move", sx: pos[0], sy: pos[1], base: zonePts.map((p) => [p[0], p[1]]) };
+      if (hit && hit.i === undefined && zones[hit.z] && zones[hit.z].length >= 3) {
+        zoneOp = { type: "move", z: hit.z, sx: pos[0], sy: pos[1], base: zones[hit.z].map((p) => [p[0], p[1]]) };
         try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
         e.preventDefault();
         return;
       }
-      // Dra för att rita ny ruta
+      // Tom yta → dra (eller klicka) för att lägga till en NY zon
       zoneOp = { type: "rect", sx: pos[0], sy: pos[1] };
       drawRectPreview(pos[0], pos[1], pos[0], pos[1]);
       try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
@@ -1407,15 +1452,17 @@ loadStats();
         lineY = pos[1] * 100;
         renderLine();
       } else if (zoneOp.type === "handle") {
-        zonePts[zoneOp.i] = [pos[0], pos[1]];
-        zoneRender();
+        const poly = zones[zoneOp.z];
+        if (poly) { poly[zoneOp.i] = [pos[0], pos[1]]; zoneRender(); }
       } else if (zoneOp.type === "move") {
         const dx = pos[0] - zoneOp.sx, dy = pos[1] - zoneOp.sy;
-        zonePts = zoneOp.base.map((p) => [
-          Math.min(1, Math.max(0, p[0] + dx)),
-          Math.min(1, Math.max(0, p[1] + dy)),
-        ]);
-        zoneRender();
+        if (zones[zoneOp.z]) {
+          zones[zoneOp.z] = zoneOp.base.map((p) => [
+            Math.min(1, Math.max(0, p[0] + dx)),
+            Math.min(1, Math.max(0, p[1] + dy)),
+          ]);
+          zoneRender();
+        }
       } else if (zoneOp.type === "rect") {
         drawRectPreview(zoneOp.sx, zoneOp.sy, pos[0], pos[1]);
       }
@@ -1427,10 +1474,10 @@ loadStats();
           const w = Math.abs(end[0] - zoneOp.sx);
           const h = Math.abs(end[1] - zoneOp.sy);
           if (w < 0.02 && h < 0.02) {
-            // Enkel klick → skapa en färdig ruta som du sedan drar hörn/inuti på
-            zoneDefaultBox(zoneOp.sx, zoneOp.sy);
+            // Enkel klick på tom yta → lägg till en ny färdig ruta på klickstället
+            zoneClickBox(zoneOp.sx, zoneOp.sy);
           } else {
-            zoneRect([[zoneOp.sx, zoneOp.sy], [end[0], zoneOp.sy], [end[0], end[1]], [zoneOp.sx, end[1]]]);
+            zoneAdd([[zoneOp.sx, zoneOp.sy], [end[0], zoneOp.sy], [end[0], end[1]], [zoneOp.sx, end[1]]]);
           }
         }
       }
@@ -1447,15 +1494,18 @@ loadStats();
       if (filterKind !== "polygon") return;
       const pos = roiPosOf(e);
       if (!pos) return;
-      const i = zoneNearest(pos[0], pos[1], 20);
-      if (i >= 0 && zonePts.length > 3) { zonePts.splice(i, 1); zoneRender(); }
+      const hit = zoneHit(pos[0], pos[1], 20);
+      if (hit && hit.i !== undefined && zones[hit.z] && zones[hit.z].length > 3) {
+        zones[hit.z].splice(hit.i, 1);
+        zoneRender();
+      }
     });
   }
   if ($id("btnZoneUndo")) {
-    $id("btnZoneUndo").addEventListener("click", () => { zonePts.pop(); zoneRender(); });
+    $id("btnZoneUndo").addEventListener("click", () => { zones.pop(); zoneRender(); });
   }
   if ($id("btnZoneClear")) {
-    $id("btnZoneClear").addEventListener("click", () => { zonePts = []; zoneRender(); });
+    $id("btnZoneClear").addEventListener("click", () => { zones = []; zoneRender(); });
   }
   function zoneStartStream() {
     if (!editingId) return;

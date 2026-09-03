@@ -50,6 +50,14 @@
 .roi-zone-svg .roi-zone-poly { fill: rgba(80, 230, 120, 0.14); stroke: #50e678; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .roi-zone-svg .roi-zone-poly.outside { fill: rgba(255, 150, 60, 0.12); stroke: #ff963c; }
 .roi-pt { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; border: 3px solid #50e678; box-shadow: 0 1px 6px rgba(0,0,0,0.7); cursor: move; z-index: 5; }
+.roi-del {
+  position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px;
+  border-radius: 50%; background: #f85149; color: #fff; border: 1px solid rgba(255,255,255,0.4);
+  cursor: pointer; font-size: 12px; line-height: 1; z-index: 6;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 4px rgba(0,0,0,0.6);
+}
+.roi-del:hover { background: #ff6b61; }
 .zone-side { flex: 0 1 250px; min-width: 200px; display: flex; flex-direction: column; gap: 10px; }
 .zone-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .zone-actions .btn { padding: 7px 13px; border-radius: 8px; }

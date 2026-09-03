@@ -757,8 +757,9 @@ class _CameraIn(BaseModel):
     roi_enabled: bool | None = None
     roi_y: float | None = None
     roi_side: str | None = None
-    # Detektionszon (polygon av normaliserade punkter)
+    # Detektionszon(er) (en eller flera polygoner av normaliserade punkter)
     zone_enabled: bool | None = None
+    zone_polys: list | None = None
     zone_points: list | None = None
     zone_mode: str | None = None
 
@@ -803,26 +804,46 @@ def _roi_normalize(body: dict) -> list:
             body["roi_y"] = round(y, 3)
     if "roi_side" in body and body.get("roi_side") not in ("above", "below"):
         errors.append("Linjesidan måste vara 'above' (ovanför) eller 'below' (nedanför).")
-    # Detektionszon (polygon)
+    # Detektionszon(er) – en eller flera polygoner. Nytt format: zone_polys
+    # (lista av polygoner). Äldre format: en enda zone_points-polygon migreras.
     if "zone_enabled" in body:
         body["zone_enabled"] = bool(body["zone_enabled"])
     if "zone_mode" in body and body.get("zone_mode") not in ("inside", "outside"):
         errors.append("Zonläget måste vara 'inside' (inuti) eller 'outside' (utanför).")
-    if "zone_points" in body and body.get("zone_points") is not None:
-        pts = []
-        for p in body["zone_points"]:
-            try:
-                x, y = float(p[0]), float(p[1])
-            except (TypeError, ValueError, IndexError):
-                errors.append("Varje zonpunkt måste vara [x, y] med värden 0–1.")
-                continue
-            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
-                errors.append("Zonpunkter måste ligga mellan 0 och 1.")
-                continue
-            pts.append([round(x, 3), round(y, 3)])
-        body["zone_points"] = pts
-        if body.get("zone_enabled") and len(pts) < 3:
-            errors.append("Zonen behöver minst 3 punkter för att vara aktiv.")
+    has_poly_src = "zone_polys" in body or (
+        "zone_points" in body and body.get("zone_points") is not None
+    )
+    if has_poly_src:
+        src = body.get("zone_polys")
+        if src is None:
+            src = [body.get("zone_points") or []]  # legacy: en enda polygon
+        if not isinstance(src, list):
+            errors.append("Zoner måste vara en lista av polygoner ([ [ [x,y], ... ], ... ]).")
+        else:
+            polys = []
+            for i, poly in enumerate(src):
+                if not isinstance(poly, list):
+                    errors.append(f"Zon {i + 1} måste vara en lista av punkter.")
+                    continue
+                pts = []
+                for p in poly:
+                    try:
+                        x, y = float(p[0]), float(p[1])
+                    except (TypeError, ValueError, IndexError):
+                        errors.append(f"Zon {i + 1}: varje punkt måste vara [x, y] med värden 0–1.")
+                        continue
+                    if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                        errors.append(f"Zon {i + 1}: punkter måste ligga mellan 0 och 1.")
+                        continue
+                    pts.append([round(x, 3), round(y, 3)])
+                if len(pts) >= 3:
+                    polys.append(pts)
+                elif pts:
+                    errors.append(f"Zon {i + 1} behöver minst 3 punkter.")
+            if body.get("zone_enabled") and not polys:
+                errors.append("Zonen behöver minst 3 punkter för att vara aktiv.")
+            body["zone_polys"] = polys
+            body["zone_points"] = []  # legacy töms – zone_polys är källan
     return errors
 
 
