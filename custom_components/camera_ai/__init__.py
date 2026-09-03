@@ -55,16 +55,26 @@ _PANEL_PATH = "camera_ai"
 
 
 def _async_register_panel(hass: HomeAssistant, url: str) -> None:
-    """Visa serverns GUI i HA:s sidofält (iframe-panel)."""
-    frontend = hass.components.frontend
-    frontend.async_register_built_in_panel(
-        component_name="custom",
-        sidebar_title="Camera AI",
-        sidebar_icon="mdi:cctv",
-        frontend_url_path=_PANEL_PATH,
-        config={"url": (url or "").rstrip("/")},
-        require_admin=True,
-    )
+    """Visa serverns GUI i HA:s sidofält (iframe-panel).
+
+    Får ALDRIG fälla integrationens uppstart – misslyckas panelen loggas det bara.
+    """
+    try:
+        frontend = hass.components.frontend
+        try:
+            frontend.async_remove_panel(_PANEL_PATH)  # ersätt ev. gammal/trasig
+        except Exception:  # noqa: BLE001
+            pass
+        frontend.async_register_built_in_panel(
+            component_name="custom",
+            sidebar_title="Camera AI",
+            sidebar_icon="mdi:cctv",
+            frontend_url_path=_PANEL_PATH,
+            config={"url": (url or "").rstrip("/")},
+            require_admin=True,
+        )
+    except Exception as exc:  # noqa: BLE001 – panel är bara en bonus
+        _LOGGER.warning("Kunde inte skapa sidofältspanelen för Camera AI: %s", exc)
 
 
 def _async_remove_panel(hass: HomeAssistant) -> None:
