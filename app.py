@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import httpx
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -35,10 +35,12 @@ from analyzer import (
     summarize_detections,
     yolo_model_installed,
 )
+from camera_stream import CameraWorker, test_rtsp
 from ha_client import HAClient
 
 analyzer = YoloAnalyzer()
 ha = HAClient(config)
+cam = CameraWorker(analyzer)  # live-kamera: RTSP -> YOLO -> Dashboard
 
 # Runtime settings — changeable from the HA integration via POST /api/config
 RUNTIME = {
@@ -153,25 +155,10 @@ def _persist_env(changes: dict) -> None:
             to_write[env_key] = str(v)
     if not to_write:
         return
-    env_file = config.BASE_DIR / ".env"
-    try:
-        lines = (
-            env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
-        )
-        out = []
-        for line in lines:
-            if "=" in line:
-                key = line.split("=", 1)[0].strip()
-                if key in to_write:
-                    out.append(f"{key}={to_write.pop(key)}")
-                    continue
-            out.append(line)
-        for key, val in to_write.items():
-            out.append(f"{key}={val}")
-        env_file.write_text("\n".join(out) + "\n", encoding="utf-8")
-        print(f"[config] sparade till .env: {', '.join(_ENV_KEYS.get(k, k) for k in changes if _ENV_KEYS.get(k))}")
-    except OSError as exc:
-        print(f"[config] kunde inte spara .env: {exc}")
+    if config.persist_env(to_write):
+        print(f"[config] sparade till .env: {', '.join(to_write)}")
+    else:
+        print(f"[config] kunde inte spara .env")
 
 
 def _on_ha_alarm(state: str) -> None:
@@ -198,7 +185,20 @@ async def lifespan(_: FastAPI):
             set_llm_keep_alive(str(RUNTIME["keep_alive"]))
         except Exception as exc:  # noqa: BLE001
             print(f"[config] startup keep_alive apply failed: {exc}")
+    # Live-kamera-worker (startar även utan konfigurerad kamera - visar bara
+    # tydlig 'inaktiverad'-placeholder. Kraschar aldrig servern.)
+    try:
+        cam.start()
+        print("[camera] worker startad")
+    except Exception as exc:  # noqa: BLE001 - API:t ska starta ändå
+        print(f"[camera] worker start misslyckades: {exc}")
     yield
+    # Graceful shutdown: stoppa trådar + frigör RTSP
+    try:
+        cam.stop()
+        print("[camera] worker stoppad")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[camera] worker stop misslyckades: {exc}")
 
 
 app = FastAPI(title="Camera AI", version=config.VERSION, lifespan=lifespan)
@@ -494,6 +494,7 @@ def index():
 
 @app.get("/api/health")
 def health():
+    s = cam.status()
     return {
         "ok": True,
         "version": config.VERSION,
@@ -506,12 +507,371 @@ def health():
             else None
         ),
         "ha_enabled": ha.available(),
+        "camera_enabled": s["camera_enabled"],
+        "camera_state": s["camera_state"],
+        "yolo_state": s["yolo_state"],
+        "actual_device": s["actual_device"],
     }
 
 
 @app.get("/api/ha/status")
 def ha_status():
     return ha.status()
+
+
+# ---------------------------------------------------------------------------
+# Live-kamera (RTSP -> YOLO -> MJPEG) - Dashboard-API + inställningar
+# ---------------------------------------------------------------------------
+_KNOWN_YOLO_MODELS = [
+    "yolo11n.pt", "yolo11s.pt", "yolo11m.pt",
+    "yolo26n.pt", "yolo26s.pt", "yolo26m.pt",
+]
+_KNOWN_DEVICES = ["cpu", "openvino:CPU", "openvino:GPU"]
+_KNOWN_IMGSZ = [320, 480, 640, 960, 1280]
+
+
+class _CameraTestIn(BaseModel):
+    host: str | None = None
+    user: str | None = None
+    password: str | None = None
+    path: str | None = None
+    full_url: str | None = None
+
+
+class _SettingsIn(BaseModel):
+    camera: dict | None = None
+    detect: dict | None = None
+    live: dict | None = None
+
+
+@app.get("/api/cameras/status")
+def cameras_status():
+    return cam.status()
+
+
+@app.post("/api/cameras/start")
+def camera_start():
+    """Starta kameraworkern (kräver konfigurerad kamera för riktig bild)."""
+    cam.start()
+    return cam.status()
+
+
+@app.post("/api/cameras/stop")
+def camera_stop():
+    cam.stop()
+    return cam.status()
+
+
+@app.get("/api/live/{camera}")
+def live_stream(camera: str = "default"):
+    """MJPEG-liveström (senaste annoterade bilden - ingen kö, låg latens).
+
+    Worker + YOLO körs på servern oavsett hur många webbläsare som tittar -
+    endpoints bara skickar senaste bilden. Vid frånkoppling skickas en tydlig
+    placeholder så GUI:t aldrig hänger.
+    """
+    async def _mjpeg_gen():
+        last_v = -1
+        while True:
+            data, v = cam.latest_jpeg()
+            if data is not None and v != last_v:
+                last_v = v
+                yield (
+                    b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                    + data
+                    + b"\r\n"
+                )
+            else:
+                await asyncio.sleep(0.05)
+
+    return StreamingResponse(
+        _mjpeg_gen(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/camera/test")
+def camera_test(payload: _CameraTestIn | None = None):
+    """Testa RTSP-anslutningen. Stör inte en aktiv worker.
+
+    Utan override: om kameran redan är online återanvänds dess status i stället
+    för att öppna en andra anslutning. Resultat: upplösning/FPS/kodek/latens.
+    """
+    body = payload.model_dump(exclude_unset=True) if payload else {}
+    cfg = cam._cfg()["camera"]
+    s = cam.status()
+    if not body and s.get("stream_active"):
+        return {
+            "ok": True,
+            "using_live": True,
+            "resolution": s.get("resolution"),
+            "fps": s.get("source_fps"),
+            "codec": s.get("codec"),
+        }
+    host = str(body.get("host") or cfg.get("host") or "")
+    user = str(body.get("user") or cfg.get("user") or "")
+    password = body["password"] if "password" in body else (cfg.get("password") or "")
+    path = str(body.get("path") or cfg.get("path") or "/Preview_01_sub")
+    full_url = str(body.get("full_url") or cfg.get("full_url") or "")
+    return test_rtsp(host, user, password, path, full_url)
+
+
+@app.get("/api/settings")
+def get_settings():
+    """Nuvarande inställningar för live-kamera/YOLO/stream. Inga hemligheter."""
+    c = cam._cfg()
+    camc, det, liv = c["camera"], c["detect"], c["live"]
+    full_url = camc.get("full_url") or ""
+    return {
+        "camera": {
+            "enabled": bool(camc["enabled"]),
+            "name": camc["name"],
+            "host": camc.get("host") or "",
+            "user": camc.get("user") or "",
+            "path": camc.get("path") or "/Preview_01_sub",
+            "password_configured": bool(
+                (camc.get("password") or "") or ("@" in full_url)
+            ),
+            "full_url_configured": bool(full_url),
+            "reconnect": bool(camc["reconnect"]),
+            "reconnect_delay": int(camc["reconnect_delay"]),
+            "autostart": bool(camc["autostart"]),
+        },
+        "detect": {
+            "yolo_enabled": bool(det["yolo_enabled"]),
+            "model": RUNTIME["model"],
+            "conf": RUNTIME["conf"],
+            "device": RUNTIME["device"],
+            "ai_fps": float(det["ai_fps"]),
+            "imgsz": int(det["imgsz"]),
+            "model_options": list(_KNOWN_YOLO_MODELS),
+            "device_options": list(_KNOWN_DEVICES),
+            "imgsz_options": list(_KNOWN_IMGSZ),
+        },
+        "live": {
+            "enabled": bool(liv["enabled"]),
+            "display_fps": int(liv["display_fps"]),
+            "jpeg_quality": int(liv["jpeg_quality"]),
+            "show_boxes": bool(liv["show_boxes"]),
+            "show_labels": bool(liv["show_labels"]),
+            "show_conf": bool(liv["show_conf"]),
+        },
+        "runtime": cam.status(),
+    }
+
+
+@app.put("/api/settings")
+def update_settings(payload: _SettingsIn):
+    """Spara live-inställningar (GUI-first). Validering sker här - med
+    användarvänliga felmeddelanden, inte HTTP 422. Lösenord skickas aldrig
+    tillbaka i GET; tomt lösenordsfält vid PUT behåller det befintliga."""
+    body = payload.model_dump(exclude_unset=True)
+    cur = cam._cfg()
+    cur_cam, cur_det, cur_live = cur["camera"], cur["detect"], cur["live"]
+
+    errors: list[str] = []
+    requires: list[str] = []
+    env_write: dict[str, str] = {}
+    pending_cam: dict | None = None
+    pending_det: dict | None = None
+    pending_live: dict | None = None
+
+    def _to_bool(v, cur: bool) -> bool:
+        try:
+            return bool(v) if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
+        except (TypeError, ValueError):
+            return cur
+
+    # ----------------------------- Kamera -----------------------------
+    if body.get("camera"):
+        c = dict(body["camera"])
+        enabled = _to_bool(c.get("enabled", cur_cam["enabled"]), cur_cam["enabled"])
+        name = str(c.get("name", cur_cam["name"])).strip()
+        if not name:
+            errors.append("Kameranamnet får inte vara tomt.")
+        host = str(c.get("host", cur_cam.get("host") or "")).strip()
+        user = str(c.get("user", cur_cam.get("user") or ""))
+        # Tomt lösenordsfält = behåll befintligt lösenord
+        password = cur_cam.get("password") or ""
+        if "password" in c and c["password"] is not None and str(c["password"]).strip():
+            password = str(c["password"])
+        path = str(c.get("path", cur_cam.get("path") or "/Preview_01_sub")).strip() or "/Preview_01_sub"
+        if not path.startswith("/"):
+            path = "/" + path
+        reconnect = _to_bool(c.get("reconnect", cur_cam["reconnect"]), cur_cam["reconnect"])
+        autostart = _to_bool(c.get("autostart", cur_cam["autostart"]), cur_cam["autostart"])
+        rd = int(cur_cam["reconnect_delay"])
+        if "reconnect_delay" in c:
+            try:
+                rd = int(c["reconnect_delay"])
+            except (TypeError, ValueError):
+                rd = 0
+            if not 1 <= rd <= 300:
+                errors.append("Återanslutningsintervall måste vara 1–300 sekunder.")
+        full_url = str(c.get("full_url", cur_cam.get("full_url") or "")).strip()
+        if not host and not full_url:
+            errors.append("Ange kamera-IP (eller full RTSP-URL).")
+        if not errors:
+            pending_cam = {
+                "enabled": enabled, "name": name, "host": host, "user": user,
+                "password": password, "path": path, "reconnect": reconnect,
+                "reconnect_delay": rd, "autostart": autostart, "full_url": full_url,
+            }
+            env_write.update({
+                "CAMERA_ENABLED": "true" if enabled else "false",
+                "CAMERA_NAME": name,
+                "CAMERA_HOST": host,
+                "CAMERA_USER": user,
+                "CAMERA_PASS": password,
+                "CAMERA_PATH": path,
+                "CAMERA_RECONNECT": "true" if reconnect else "false",
+                "CAMERA_RECONNECT_DELAY": str(rd),
+                "CAMERA_AUTOSTART": "true" if autostart else "false",
+                "CAMERA_RTSP_URL": full_url,
+            })
+            if any(k in c for k in (
+                "enabled", "name", "host", "user", "password", "path",
+                "reconnect", "reconnect_delay", "full_url", "autostart",
+            )):
+                requires.append("camera_restart")
+
+    # --------------------------- Detektering --------------------------
+    if body.get("detect"):
+        d = dict(body["detect"])
+        yolo_en = _to_bool(d.get("yolo_enabled", cur_det["yolo_enabled"]), cur_det["yolo_enabled"])
+        af = float(cur_det["ai_fps"])
+        if "ai_fps" in d:
+            try:
+                af = float(d["ai_fps"])
+            except (TypeError, ValueError):
+                af = 0.0
+            if not 1 <= af <= 30:
+                errors.append("AI FPS måste vara mellan 1 och 30.")
+        imgsz = int(cur_det["imgsz"])
+        if "imgsz" in d:
+            try:
+                imgsz = int(d["imgsz"])
+            except (TypeError, ValueError):
+                imgsz = 0
+            if imgsz not in _KNOWN_IMGSZ:
+                errors.append(f"Bildstorleken måste vara en av: {', '.join(map(str, _KNOWN_IMGSZ))}.")
+        # Model/conf/device delas med stillbildsanalysen via analyzer + RUNTIME
+        model_changed = False
+        model = RUNTIME["model"]
+        if "model" in d:
+            model = str(d["model"] or "").strip()
+            if not model:
+                errors.append("YOLO-modellen får inte vara tom.")
+            elif model != RUNTIME["model"]:
+                model_changed = True
+        conf = RUNTIME["conf"]
+        if "conf" in d:
+            try:
+                conf = float(d["conf"])
+            except (TypeError, ValueError):
+                conf = -1.0
+            if not 0.01 <= conf <= 1.0:
+                errors.append("Konfidensen måste vara mellan 0.01 och 1.0.")
+        device = RUNTIME["device"]
+        device_changed = False
+        if "device" in d:
+            device = str(d["device"] or "").strip()
+            if device not in _KNOWN_DEVICES:
+                errors.append(f"Enheten måste vara en av: {', '.join(_KNOWN_DEVICES)}.")
+            elif device != RUNTIME["device"]:
+                device_changed = True
+        if not errors:
+            pending_det = {"yolo_enabled": yolo_en, "ai_fps": af, "imgsz": imgsz}
+            env_write["YOLO_STREAM_FPS"] = str(af)
+            env_write["YOLO_IMG_SIZE"] = str(imgsz)
+            if model_changed:
+                env_write["YOLO_MODEL"] = model
+                requires.append("yolo_reload")
+            if "conf" in d and conf != RUNTIME["conf"]:
+                env_write["YOLO_CONF"] = str(conf)
+            if device_changed:
+                env_write["YOLO_DEVICE"] = device
+                requires.append("yolo_reload")
+
+    # ------------------------- Live-stream ----------------------------
+    if body.get("live"):
+        lv = dict(body["live"])
+        enabled = _to_bool(lv.get("enabled", cur_live["enabled"]), cur_live["enabled"])
+        dfps = int(cur_live["display_fps"])
+        if "display_fps" in lv:
+            try:
+                dfps = int(lv["display_fps"])
+            except (TypeError, ValueError):
+                dfps = 0
+            if not 1 <= dfps <= 30:
+                errors.append("Visnings-FPS (display FPS) måste vara mellan 1 och 30.")
+        jq = int(cur_live["jpeg_quality"])
+        if "jpeg_quality" in lv:
+            try:
+                jq = int(lv["jpeg_quality"])
+            except (TypeError, ValueError):
+                jq = 0
+            if not 20 <= jq <= 100:
+                errors.append("JPEG-kvaliteten måste vara mellan 20 och 100.")
+        show_boxes = _to_bool(lv.get("show_boxes", cur_live["show_boxes"]), cur_live["show_boxes"])
+        show_labels = _to_bool(lv.get("show_labels", cur_live["show_labels"]), cur_live["show_labels"])
+        show_conf = _to_bool(lv.get("show_conf", cur_live["show_conf"]), cur_live["show_conf"])
+        if not errors:
+            pending_live = {
+                "enabled": enabled, "display_fps": dfps, "jpeg_quality": jq,
+                "show_boxes": show_boxes, "show_labels": show_labels,
+                "show_conf": show_conf,
+            }
+            env_write.update({
+                "LIVE_STREAM_ENABLED": "true" if enabled else "false",
+                "LIVE_STREAM_FPS": str(dfps),
+                "LIVE_JPEG_QUALITY": str(jq),
+                "LIVE_SHOW_BOXES": "true" if show_boxes else "false",
+                "LIVE_SHOW_LABELS": "true" if show_labels else "false",
+                "LIVE_SHOW_CONF": "true" if show_conf else "false",
+            })
+
+    # ------------------------------ Apply -----------------------------
+    if errors:
+        return JSONResponse({"ok": False, "errors": errors}, status_code=400)
+
+    if pending_cam is not None:
+        cam.update_camera(pending_cam)
+    if pending_det is not None:
+        cam.update_detect(pending_det)
+        # Model/conf/device -> delad analyzer (live + stillbilder)
+        if "model" in body.get("detect", {}) or "conf" in body.get("detect", {}) or "device" in body.get("detect", {}):
+            RUNTIME["model"] = body["detect"].get("model", RUNTIME["model"])
+            if "conf" in body["detect"]:
+                RUNTIME["conf"] = body["detect"]["conf"]
+            if "device" in body["detect"]:
+                RUNTIME["device"] = body["detect"]["device"]
+            analyzer.configure(
+                model=RUNTIME["model"], conf=RUNTIME["conf"], device=RUNTIME["device"]
+            )
+            if "model" in body["detect"]:
+                start_yolo_model_download(str(RUNTIME["model"]))
+    if pending_live is not None:
+        cam.update_live(pending_live)
+
+    if env_write:
+        if not config.persist_env(env_write):
+            return JSONResponse(
+                {"ok": False, "errors": ["Kunde inte spara inställningarna till .env."]},
+                status_code=500,
+            )
+        print(f"[settings] sparade till .env: {', '.join(env_write)}")
+
+    if "camera_restart" in requires:
+        cam.restart()
+
+    return {
+        "ok": True,
+        "saved": True,
+        "requires": requires,
+        "runtime": cam.status(),
+    }
 
 
 @app.get("/media/{name}")

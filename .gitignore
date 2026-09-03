@@ -5,6 +5,7 @@ venv/
 uploads/
 media/
 *.pt
+.env
 .DS_Store
 
 # PyInstaller build artifacts

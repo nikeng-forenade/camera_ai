@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Camera AI — Test GUI</title>
+  <title>Camera AI</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -12,7 +12,7 @@
       <span class="logo">🎥</span>
       <div>
         <h1>Camera AI <span class="ver" id="ver">v…</span></h1>
-        <p>Upload a picture → YOLO detects objects → small LLM describes the scene</p>
+        <p>Reolink RTSP → YOLO → live-detektering</p>
       </div>
     </div>
     <div class="status-wrap">
@@ -22,108 +22,278 @@
     </div>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="dashboard">📺 Dashboard</button>
+    <button class="tab" data-view="analys">🖼️ Analys</button>
+    <button class="tab" data-view="historik">📊 Historik</button>
+    <button class="tab" data-view="modeller">🤖 Modeller &amp; System</button>
+    <button class="tab" data-view="settings">⚙️ Inställningar</button>
+  </nav>
+
   <main>
-    <!-- Settings -->
-    <section class="card settings">
-      <h2>⚙️ Settings</h2>
-      <div class="settings-grid">
-        <label>YOLO model
-          <select id="model">
-            <option value="yolo11n.pt">yolo11n.pt (nano — fastest)</option>
-            <option value="yolo11s.pt">yolo11s.pt (small)</option>
-            <option value="yolo11m.pt">yolo11m.pt (medium)</option>
-            <option value="yolo26n.pt">yolo26n.pt (nano — fastest, YOLO26)</option>
-            <option value="yolo26s.pt">yolo26s.pt (small, YOLO26)</option>
-            <option value="yolo26m.pt">yolo26m.pt (medium, YOLO26)</option>
-          </select>
-          <span id="yoloDlStatus" class="yolo-dl" hidden></span>
-        </label>
-        <label>LLM model (Ollama)
-          <select id="llmModel"></select>
-          <span id="llmModelHint" class="hint"></span>
-        </label>
-        <label>Confidence <span id="confValue">0.30</span>
-          <input type="range" id="conf" min="0.05" max="0.95" step="0.05" value="0.30" />
-        </label>
-        <label>
-          <input type="checkbox" id="useLlm" checked />
-          Ask the small vision LLM to describe the scene
-        </label>
-        <label>
-          <input type="checkbox" id="useHa" checked />
-          Send results to Home Assistant
-        </label>
-        <label>LLM i minnet (keep_alive)
-          <select id="keepAlive">
-            <option value="-1">Behåll i minne (alltid)</option>
-            <option value="0">Ladda ur direkt</option>
-            <option value="300">5 min</option>
-            <option value="600">10 min</option>
-            <option value="1800">30 min</option>
-            <option value="3600">60 min</option>
-          </select>
-        </label>
-        <label class="wide">LLM prompt (sparas på servern)
-          <textarea id="prompt" rows="5" placeholder="Beskriv vad vision-LLM:en ska svara på...">Beskriv på svenska, men BARA detta och inget annat: personer – färg på kläder; bilar – bilens färg; djur – vilket djur och dess färg. Svara med en kort mening. Ignorera helt: skyltar, registreringsskyltar, hus, träd, väder, vägar och allt annat. Om inget av de tre syns, svara 'Inget av intresse.'</textarea>
-        </label>
-      </div>
-      <div class="save-bar">
-        <button id="saveSettings" class="btn" type="button">💾 Spara inställningar</button>
-        <span id="saveMsg" class="save-msg"></span>
-      </div>
-    </section>
+    <!-- ============================ DASHBOARD ============================ -->
+    <section id="view-dashboard" class="view active">
+      <div class="dash-grid">
+        <div class="dash-live">
+          <div class="card live-card">
+            <div class="live-head">
+              <span class="live-badge"><span class="live-dot" id="liveDot"></span><span id="liveBadgeText">LIVE</span></span>
+              <span class="live-sub" id="liveSub"></span>
+            </div>
+            <div class="live-viewer">
+              <img id="liveImg" alt="Live-kamera" />
+              <div class="live-overlay" id="liveOverlay"></div>
+            </div>
+            <div class="live-controls">
+              <button id="btnStreamToggle" class="btn" type="button">▶ Starta</button>
+              <span id="streamHint" class="hint"></span>
+              <span class="live-toggles">
+                <label class="toggle"><input type="checkbox" id="dashBoxes" checked /> Boxar</label>
+                <label class="toggle"><input type="checkbox" id="dashLabels" checked /> Etiketter</label>
+                <label class="toggle"><input type="checkbox" id="dashConf" checked /> Konfidens</label>
+              </span>
+            </div>
+          </div>
+        </div>
 
-    <!-- Ollama-modeller -->
-    <section class="card">
-      <div class="stats-head">
-        <h2>🤖 Ollama-modeller</h2>
-        <button id="refreshModels" class="btn" type="button">↻ Uppdatera</button>
-      </div>
-      <div id="modelList" class="model-list">
-        <p class="empty">Laddar modeller…</p>
-      </div>
-      <div id="pullStatus" class="pull-status" hidden>
-        <span id="pullText" class="pull-text"></span>
-        <div class="progress"><div id="pullBar" class="progress-bar"></div></div>
-      </div>
-    </section>
+        <div class="dash-side">
+          <div class="card">
+            <h2>Detected now</h2>
+            <ul id="detNowList" class="detection-list">
+              <li class="empty-li"><span class="empty">Inga objekt detekterade</span></li>
+            </ul>
+            <p class="hint" id="detNowAge"></p>
+          </div>
 
-    <!-- System -->
-    <section class="card">
-      <h2>🛠️ System</h2>
-      <div class="system-actions">
-        <button id="btnUnload" class="btn" type="button">⚡ Ladda ur alla modeller</button>
-        <button id="btnRestartServer" class="btn" type="button">🔄 Starta om servern</button>
-        <button id="btnRestartOllama" class="btn" type="button">🔄 Starta om Ollama</button>
-      </div>
-      <p id="sysMsg" class="save-msg"></p>
-      <p class="hint">Ollama-omstart tömmer alla modeller ur GPU-minnet. Server-omstart bryter anslutningen några sekunder.</p>
-    </section>
+          <div class="card warn-card" id="gpuWarnCard" hidden>
+            <p><strong>⚠ GPU FALLBACK</strong></p>
+            <p>YOLO bad om <span id="gpuWarnConfigured"></span> men kör på <span id="gpuWarnActual"></span>.</p>
+          </div>
 
-    <!-- Dropzone -->
-    <section class="card">
-      <div class="dropzone" id="dropzone" tabindex="0">
-        <input type="file" id="fileInput" accept="image/*" multiple hidden />
-        <div class="dz-inner">
-          <span class="dz-icon">📤</span>
-          <p><strong>Drop images here</strong> or <span class="link">click to browse</span></p>
-          <p class="hint">JPG, PNG, WEBP, BMP — multiple files supported</p>
+          <div class="card">
+            <h2>System / Runtime</h2>
+            <table class="metric-table" id="statusTable"></table>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Results -->
-    <section class="results" id="results"></section>
+    <!-- ============================ ANALYS ============================ -->
+    <section id="view-analys" class="view">
+      <section class="card">
+        <div class="dropzone" id="dropzone" tabindex="0">
+          <input type="file" id="fileInput" accept="image/*" multiple hidden />
+          <div class="dz-inner">
+            <span class="dz-icon">📤</span>
+            <p><strong>Släpp bilder här</strong> eller <span class="link">klicka för att bläddra</span></p>
+            <p class="hint">JPG, PNG, WEBP, BMP — flera filer stöds. Körs med samma YOLO/LLM som live-analysen.</p>
+          </div>
+        </div>
+      </section>
+      <section class="results" id="results"></section>
+    </section>
 
-    <!-- Stats -->
-    <section class="card">
-      <div class="stats-head">
-        <h2>📊 Stats &amp; Historik</h2>
-        <button id="statsBtn" class="btn" type="button">Uppdatera</button>
-      </div>
-      <div id="statsBox">
-        <p class="empty">Ladda för att se statistik…</p>
-      </div>
+    <!-- ============================ HISTORIK ============================ -->
+    <section id="view-historik" class="view">
+      <section class="card">
+        <div class="stats-head">
+          <h2>📊 Stats &amp; Historik</h2>
+          <button id="statsBtn" class="btn" type="button">↻ Uppdatera</button>
+        </div>
+        <div id="statsBox">
+          <p class="empty">Ladda för att se statistik…</p>
+        </div>
+      </section>
+    </section>
+
+    <!-- ===================== MODELLER & SYSTEM ===================== -->
+    <section id="view-modeller" class="view">
+      <section class="card">
+        <div class="stats-head">
+          <h2>🤖 Ollama-modeller</h2>
+          <button id="refreshModels" class="btn" type="button">↻ Uppdatera</button>
+        </div>
+        <div id="modelList" class="model-list">
+          <p class="empty">Laddar modeller…</p>
+        </div>
+        <div id="pullStatus" class="pull-status" hidden>
+          <span id="pullText" class="pull-text"></span>
+          <div class="progress"><div id="pullBar" class="progress-bar"></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>🛠️ System</h2>
+        <div class="system-actions">
+          <button id="btnUnload" class="btn" type="button">⚡ Ladda ur alla modeller</button>
+          <button id="btnRestartServer" class="btn" type="button">🔄 Starta om servern</button>
+          <button id="btnRestartOllama" class="btn" type="button">🔄 Starta om Ollama</button>
+        </div>
+        <p id="sysMsg" class="save-msg"></p>
+        <p class="hint">Ollama-omstart tömmer alla modeller ur GPU-minnet. Server-omstart bryter anslutningen några sekunder.</p>
+      </section>
+    </section>
+
+    <!-- ========================= INSTÄLLNINGAR ========================= -->
+    <section id="view-settings" class="view">
+      <!-- Detektering & LLM (befintlig modell/konfidens/prompt) -->
+      <section class="card settings">
+        <h2>🎯 Detektering &amp; LLM</h2>
+        <div class="settings-grid">
+          <label>YOLO model
+            <select id="model">
+              <option value="yolo11n.pt">yolo11n.pt (nano — fastest)</option>
+              <option value="yolo11s.pt">yolo11s.pt (small)</option>
+              <option value="yolo11m.pt">yolo11m.pt (medium)</option>
+              <option value="yolo26n.pt">yolo26n.pt (nano — fastest, YOLO26)</option>
+              <option value="yolo26s.pt">yolo26s.pt (small, YOLO26)</option>
+              <option value="yolo26m.pt">yolo26m.pt (medium, YOLO26)</option>
+            </select>
+            <span id="yoloDlStatus" class="yolo-dl" hidden></span>
+          </label>
+          <label>LLM model (Ollama)
+            <select id="llmModel"></select>
+            <span id="llmModelHint" class="hint"></span>
+          </label>
+          <label>Confidence <span id="confValue">0.30</span>
+            <input type="range" id="conf" min="0.05" max="0.95" step="0.05" value="0.30" />
+          </label>
+          <label>
+            <input type="checkbox" id="useLlm" checked />
+            Låt vision-LLM:en beskriva scenen
+          </label>
+          <label>
+            <input type="checkbox" id="useHa" checked />
+            Skicka resultat till Home Assistant
+          </label>
+          <label>LLM i minnet (keep_alive)
+            <select id="keepAlive">
+              <option value="-1">Behåll i minne (alltid)</option>
+              <option value="0">Ladda ur direkt</option>
+              <option value="300">5 min</option>
+              <option value="600">10 min</option>
+              <option value="1800">30 min</option>
+              <option value="3600">60 min</option>
+            </select>
+          </label>
+          <label class="wide">LLM prompt (sparas på servern)
+            <textarea id="prompt" rows="5" placeholder="Beskriv vad vision-LLM:en ska svara på...">Beskriv på svenska, men BARA detta och inget annat: personer – färg på kläder; bilar – bilens färg; djur – vilket djur och dess färg. Svara med en kort mening. Ignorera helt: skyltar, registreringsskyltar, hus, träd, väder, vägar och allt annat. Om inget av de tre syns, svara 'Inget av intresse.'</textarea>
+          </label>
+        </div>
+        <div class="save-bar">
+          <button id="saveSettings" class="btn" type="button">💾 Spara inställningar</button>
+          <span id="saveMsg" class="save-msg"></span>
+        </div>
+      </section>
+
+      <!-- Kamera -->
+      <section class="card">
+        <div class="stats-head">
+          <h2>📷 Kamera (Reolink RTSP)</h2>
+          <button id="btnTestCam" class="btn" type="button">🧪 Testa anslutning</button>
+        </div>
+        <div class="settings-grid">
+          <label class="chk">
+            <input type="checkbox" id="camEnabled" /> Kamera aktiverad
+          </label>
+          <label>Kameranamn
+            <input type="text" id="camName" placeholder="Garden" />
+          </label>
+          <label>Kamera-IP / host
+            <input type="text" id="camHost" placeholder="192.168.1.50" />
+          </label>
+          <label>Användarnamn
+            <input type="text" id="camUser" placeholder="admin" />
+          </label>
+          <label>Lösenord
+            <input type="password" id="camPass" placeholder="••••••••" autocomplete="new-password" />
+            <span id="camPassHint" class="hint"></span>
+          </label>
+          <label>Ström-sökväg
+            <input type="text" id="camPath" placeholder="/Preview_01_sub" />
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="camReconnect" /> Auto-återanslut
+          </label>
+          <label>Återanslutning (sekunder)
+            <input type="number" id="camReconnectDelay" min="1" max="300" value="5" />
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="camAutostart" /> Auto-start vid appstart
+          </label>
+        </div>
+        <p class="hint">Sub-stream rekommenderas för kontinuerlig detektering. Lösenord skickas aldrig tillbaka till webbläsaren — tomt fält vid spara behåller det befintliga.</p>
+        <span id="camTestResult" class="save-msg"></span>
+        <div class="save-bar">
+          <button id="btnSaveCamera" class="btn" type="button">💾 Spara kamera &amp; starta om ström</button>
+          <span id="camSaveMsg" class="save-msg"></span>
+        </div>
+      </section>
+
+      <!-- Live-detektering -->
+      <section class="card">
+        <h2>⚡ Live-detektering</h2>
+        <div class="settings-grid">
+          <label class="chk">
+            <input type="checkbox" id="detYolo" checked /> YOLO aktiv på live-ström
+          </label>
+          <label>AI FPS — hur ofta YOLO analyserar <span id="detAiFpsVal">4</span>
+            <input type="range" id="detAiFps" min="1" max="10" step="1" value="4" />
+            <span class="hint">Högre värden ökar GPU-belastningen. 3–5 är lagom för detektering.</span>
+          </label>
+          <label>Bildstorlek
+            <select id="detImgsz">
+              <option value="320">320</option>
+              <option value="480">480</option>
+              <option value="640" selected>640</option>
+              <option value="960">960</option>
+              <option value="1280">1280</option>
+            </select>
+          </label>
+          <label>Enhet
+            <select id="detDevice">
+              <option value="openvino:GPU">Intel GPU / OpenVINO (rekommenderat)</option>
+              <option value="openvino:CPU">OpenVINO CPU</option>
+              <option value="cpu">CPU</option>
+            </select>
+            <span class="hint">Intel GPU / OpenVINO rekommenderas på detta system. Vid GPU-fel sker automatisk fallback till CPU (visas i Dashboard).</span>
+          </label>
+        </div>
+        <div class="save-bar">
+          <button id="btnSaveDetect" class="btn" type="button">💾 Spara detektering</button>
+          <span id="detSaveMsg" class="save-msg"></span>
+        </div>
+      </section>
+
+      <!-- Live-ström -->
+      <section class="card">
+        <h2>📺 Live-ström</h2>
+        <div class="settings-grid">
+          <label class="chk">
+            <input type="checkbox" id="liveEnabled" checked /> Live-ström aktiverad
+          </label>
+          <label>Visnings-FPS <span id="liveFpsVal">10</span>
+            <input type="range" id="liveFps" min="1" max="20" step="1" value="10" />
+          </label>
+          <label>JPEG-kvalitet <span id="liveQualityVal">80</span>
+            <input type="range" id="liveQuality" min="20" max="100" step="5" value="80" />
+            <span class="hint">Lägre kvalitet = snabbare ström och lägre CPU.</span>
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="liveBoxes" checked /> Visa boxar
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="liveLabels" checked /> Visa etiketter
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="liveConf" checked /> Visa konfidens
+          </label>
+        </div>
+        <div class="save-bar">
+          <button id="btnSaveLive" class="btn" type="button">💾 Spara live-ström</button>
+          <span id="liveSaveMsg" class="save-msg"></span>
+        </div>
+      </section>
     </section>
   </main>
 

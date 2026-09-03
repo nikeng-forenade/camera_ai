@@ -551,3 +551,405 @@ if (btnUnload) btnUnload.addEventListener("click", () => systemAction("/api/syst
 if (btnRestartServer) btnRestartServer.addEventListener("click", () => systemAction("/api/system/restart-server", "Startar om servern", "Starta om servern? Anslutningen bryts i några sekunder."));
 if (btnRestartOllama) btnRestartOllama.addEventListener("click", () => systemAction("/api/system/restart-ollama", "Startar om Ollama", "Starta om Ollama? Alla modeller töms ur GPU-minnet."));
 loadStats();
+
+/* ============================================================
+   Tabs & Dashboard (live-kamera) - tillägg
+   ============================================================ */
+(function () {
+  "use strict";
+  const $id = (id) => document.getElementById(id);
+
+  /* ---- Tabs ---- */
+  function showView(name) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
+    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+    if (name === "historik") loadStats();
+    window.scrollTo({ top: 0 });
+  }
+  document.querySelectorAll(".tab").forEach((b) =>
+    b.addEventListener("click", () => showView(b.dataset.view))
+  );
+  window.__showView = showView;
+
+  /* ---- Referenser ---- */
+  const liveImg = $id("liveImg");
+  const liveDot = $id("liveDot");
+  const liveBadgeText = $id("liveBadgeText");
+  const liveSub = $id("liveSub");
+  const statusTable = $id("statusTable");
+  const detNowList = $id("detNowList");
+  const detNowAge = $id("detNowAge");
+  const gpuWarnCard = $id("gpuWarnCard");
+  const gpuWarnConfigured = $id("gpuWarnConfigured");
+  const gpuWarnActual = $id("gpuWarnActual");
+  const btnStreamToggle = $id("btnStreamToggle");
+  const streamHint = $id("streamHint");
+
+  const CAMERA_LABELS = { disabled: "Inaktiv", connecting: "Ansluter…", online: "Online", reconnecting: "Återansluter…", offline: "Offline", error: "Fel" };
+  const YOLO_LABELS = { stopped: "Stoppad", loading: "Laddar modell…", running: "Kör", error: "Fel" };
+
+  async function fetchJson(url, opts) {
+    const res = await fetch(url, opts);
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* tom */ }
+    if (!res.ok) {
+      const why = (data && data.errors && data.errors.join(" · ")) || (data && data.detail) || ("HTTP " + res.status);
+      throw new Error(why);
+    }
+    return data;
+  }
+
+  function setMsg(el, text, ok) {
+    if (!el) return;
+    el.classList.toggle("ok", !!ok);
+    el.textContent = text;
+  }
+
+  /* ---- Dashboard status ---- */
+  async function pollStatus() {
+    let s;
+    try {
+      s = await fetchJson("/api/cameras/status");
+    } catch (e) {
+      if (statusTable) statusTable.innerHTML = `<tr><td colspan="2" class="metric-err">Backend nås inte – försöker igen…</td></tr>`;
+      return;
+    }
+    renderStatus(s);
+  }
+
+  function stateClass(state) {
+    return state || "disabled";
+  }
+
+  function renderStatus(s) {
+    // Live-bild: sätt MJPEG-källan en gång per kamera
+    const name = (s.camera_name || "default").trim() || "default";
+    if (liveImg && (!liveImg.dataset.src || liveImg.dataset.src !== name)) {
+      liveImg.dataset.src = name;
+      liveImg.src = "/api/live/" + encodeURIComponent(name);
+    }
+
+    // Badge + subtext
+    let badgeText = "LIVE";
+    let stCls = "online";
+    if (!s.camera_enabled) { badgeText = "INAKTIV"; stCls = "disabled"; }
+    else if (s.camera_state === "online") { badgeText = "LIVE " + name; stCls = "online"; }
+    else if (s.camera_state === "reconnecting") { badgeText = "ÅTERANSLUTER"; stCls = "reconnecting"; }
+    else if (s.camera_state === "connecting") { badgeText = "ANSLUTER"; stCls = "connecting"; }
+    else { badgeText = "OFFLINE"; stCls = "offline"; }
+    if (liveBadgeText) liveBadgeText.textContent = badgeText;
+    if (liveDot && liveDot.parentElement) {
+      liveDot.parentElement.classList.remove("online", "reconnecting", "connecting", "disabled", "offline", "error");
+      liveDot.parentElement.classList.add(stCls);
+    }
+    if (liveSub) {
+      liveSub.textContent = s.camera_state === "online"
+        ? (s.resolution ? s.resolution + " · " : "") + (s.codec || "") + (s.source_fps ? " · " + s.source_fps.toFixed(1) + " FPS" : "")
+        : (s.camera_detail || "");
+    }
+
+    // Start/Stopp-knapp
+    if (btnStreamToggle) {
+      btnStreamToggle.disabled = false;
+      if (!s.camera_enabled) { btnStreamToggle.textContent = "⚙️ Konfigurera kamera"; btnStreamToggle.dataset.action = "settings"; }
+      else if (s.camera_state === "online" || s.camera_state === "connecting" || s.camera_state === "reconnecting") {
+        btnStreamToggle.textContent = "⏹ Stoppa ström"; btnStreamToggle.dataset.action = "stop";
+      } else { btnStreamToggle.textContent = "▶ Starta ström"; btnStreamToggle.dataset.action = "start"; }
+    }
+    if (streamHint) {
+      streamHint.textContent = !s.camera_enabled ? "Kameran är inte aktiverad ännu." : "";
+    }
+
+    // Status-/metrictabell
+    if (statusTable) {
+      const camCls = s.camera_state === "online" ? "metric-ok"
+        : (s.camera_state === "reconnecting" || s.camera_state === "connecting") ? "metric-warn"
+        : "metric-err";
+      const yoloCls = s.yolo_state === "running" ? "metric-ok"
+        : s.yolo_state === "error" ? "metric-err" : "metric-warn";
+      const rows = [
+        ["Kamera", CAMERA_LABELS[s.camera_state] || s.camera_state, camCls],
+        ["YOLO", (YOLO_LABELS[s.yolo_state] || s.yolo_state), yoloCls],
+        ["Modell", s.model || "—"],
+        ["Konfigurerad enhet", s.configured_device || "—"],
+        ["Enhet (faktisk)", (s.actual_device || "—") + (s.gpu_fallback ? " ⚠ fallback" : ""), s.gpu_fallback ? "metric-warn" : "metric-ok"],
+        ["Inferens", (s.inference_ms || 0).toFixed(1) + " ms"],
+        ["AI FPS", (s.ai_fps || 0).toFixed(1) + " (mål " + s.target_ai_fps + ")"],
+        ["Video FPS (in)", (s.source_fps || 0).toFixed(1)],
+        ["Display FPS", (s.display_fps || 0).toFixed(1) + " (mål " + s.target_display_fps + ")"],
+        ["Upplösning", s.resolution || "—"],
+        ["JPEG-kvalitet", String(s.jpeg_quality)],
+        ["Upptid", (s.uptime || 0) + " s"],
+      ];
+      if (s.yolo_error) rows.push(["YOLO-fel", s.yolo_error.slice(0, 80), "metric-err"]);
+      if (s.camera_error && s.camera_state !== "online") rows.push(["Kameras fel", s.camera_error.slice(0, 80), "metric-err"]);
+      statusTable.innerHTML = rows.map((r) => `<tr><td>${escapeHtml(r[0])}</td><td class="${r[2] || ""}">${escapeHtml(String(r[1]))}</td></tr>`).join("");
+    }
+
+    // Detected now (unik per klass)
+    if (detNowList) {
+      const dets = s.detections || [];
+      const counts = s.detection_counts || {};
+      const byClass = {};
+      dets.forEach((d) => {
+        if (!(d.class in byClass) || d.confidence > byClass[d.class].confidence) byClass[d.class] = d;
+      });
+      const uniq = Object.values(byClass);
+      if (!uniq.length) {
+        detNowList.innerHTML = `<li class="empty-li"><span class="empty">${s.yolo_state === "error" ? "YOLO-fel" : "Inga objekt detekterade"}</span></li>`;
+        if (detNowAge) detNowAge.textContent = "";
+      } else {
+        detNowList.innerHTML = uniq.map((d) =>
+          `<li><span>${escapeHtml(d.class)}${counts[d.class] > 1 ? " ×" + counts[d.class] : ""}</span><span class="conf">${Math.round((d.confidence || 0) * 100)}%</span></li>`
+        ).join("");
+        if (detNowAge) detNowAge.textContent = s.last_detection_ts ? "Senaste: " + new Date(s.last_detection_ts * 1000).toLocaleTimeString("sv-SE") : "";
+      }
+    }
+
+    // GPU-fallback-varning
+    if (gpuWarnCard) {
+      if (s.gpu_fallback) {
+        gpuWarnCard.hidden = false;
+        if (gpuWarnConfigured) gpuWarnConfigured.textContent = s.configured_device || "?";
+        if (gpuWarnActual) gpuWarnActual.textContent = s.actual_device || "?";
+      } else {
+        gpuWarnCard.hidden = true;
+      }
+    }
+
+    // Synka överlagrings-toggles (Dashboard + Inställningar)
+    if ($id("dashBoxes")) $id("dashBoxes").checked = s.show_boxes !== false;
+    if ($id("dashLabels")) $id("dashLabels").checked = s.show_labels !== false;
+    if ($id("dashConf")) $id("dashConf").checked = s.show_conf !== false;
+    if ($id("liveBoxes")) $id("liveBoxes").checked = s.show_boxes !== false;
+    if ($id("liveLabels")) $id("liveLabels").checked = s.show_labels !== false;
+    if ($id("liveConf")) $id("liveConf").checked = s.show_conf !== false;
+  }
+
+  async function saveSettingsJson(payload) {
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data.errors && data.errors.join(" · ")) || ("HTTP " + res.status));
+    return data;
+  }
+
+  /* ---- Stream start/stopp ---- */
+  if (btnStreamToggle) {
+    btnStreamToggle.addEventListener("click", async () => {
+      const action = btnStreamToggle.dataset.action || "start";
+      if (action === "settings") { showView("settings"); return; }
+      btnStreamToggle.disabled = true;
+      try {
+        await fetchJson("/api/cameras/" + action, { method: "POST" });
+        if (streamHint) streamHint.textContent = "";
+      } catch (e) {
+        if (streamHint) streamHint.textContent = "Fel: " + e.message;
+      }
+      pollStatus();
+    });
+  }
+
+  /* ---- Överlagring: live-apply direkt från Dashboard ---- */
+  function bindOverlayToggle(chkId, key, syncedId) {
+    const chk = $id(chkId);
+    if (!chk) return;
+    chk.addEventListener("change", async () => {
+      try {
+        await saveSettingsJson({ live: { [key]: chk.checked } });
+      } catch (e) {
+        chk.checked = !chk.checked;
+      }
+      pollStatus();
+      if (syncedId && $id(syncedId)) $id(syncedId).checked = chk.checked;
+    });
+  }
+  bindOverlayToggle("dashBoxes", "show_boxes", "liveBoxes");
+  bindOverlayToggle("dashLabels", "show_labels", "liveLabels");
+  bindOverlayToggle("dashConf", "show_conf", "liveConf");
+
+  /* ---- Inställningar: ladda ---- */
+  function setChecked(id, val) { const el = $id(id); if (el) el.checked = !!val; }
+  function ensureOption(sel, val) {
+    if (!sel || !val) return;
+    const has = Array.from(sel.options).some((o) => o.value === val);
+    if (!has) {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = val;
+      sel.appendChild(o);
+    }
+  }
+
+  async function loadSettingsPage() {
+    let s;
+    try {
+      s = await fetchJson("/api/settings");
+    } catch (e) { return; } // backend offline – behåll standardvärden
+    const cam = s.camera, det = s.detect, liv = s.live;
+    if (cam) {
+      setChecked("camEnabled", cam.enabled);
+      if ($id("camName")) $id("camName").value = cam.name || "";
+      if ($id("camHost")) $id("camHost").value = cam.host || "";
+      if ($id("camUser")) $id("camUser").value = cam.user || "";
+      if ($id("camPass")) { $id("camPass").value = ""; }
+      if ($id("camPassHint")) {
+        $id("camPassHint").textContent = cam.password_configured
+          ? "🔒 Lösenord är konfigurerat (tomt fält = behåll)."
+          : (cam.full_url_configured ? "Full RTSP-URL används." : "");
+      }
+      if ($id("camPath")) $id("camPath").value = cam.path || "/Preview_01_sub";
+      setChecked("camReconnect", cam.reconnect);
+      if ($id("camReconnectDelay")) $id("camReconnectDelay").value = (cam.reconnect_delay != null) ? cam.reconnect_delay : 5;
+      setChecked("camAutostart", cam.autostart);
+    }
+    if (det) {
+      setChecked("detYolo", det.yolo_enabled !== false);
+      if ($id("detAiFps")) { const v = Math.round(det.ai_fps || 4); $id("detAiFps").value = v; if ($id("detAiFpsVal")) $id("detAiFpsVal").textContent = v; }
+      if ($id("detImgsz")) $id("detImgsz").value = String(det.imgsz || 640);
+      if ($id("detDevice")) { ensureOption($id("detDevice"), det.device); $id("detDevice").value = det.device || "openvino:GPU"; }
+    }
+    if (liv) {
+      setChecked("liveEnabled", liv.enabled);
+      if ($id("liveFps")) { const v = liv.display_fps || 10; $id("liveFps").value = v; if ($id("liveFpsVal")) $id("liveFpsVal").textContent = v; }
+      if ($id("liveQuality")) { const v = liv.jpeg_quality || 80; $id("liveQuality").value = v; if ($id("liveQualityVal")) $id("liveQualityVal").textContent = v; }
+      setChecked("liveBoxes", liv.show_boxes !== false);
+      setChecked("liveLabels", liv.show_labels !== false);
+      setChecked("liveConf", liv.show_conf !== false);
+    }
+    renderStatus(s.runtime || {});
+  }
+
+  // Slider-textvärden
+  ["detAiFps", "liveFps", "liveQuality"].forEach((id) => {
+    const el = $id(id), val = $id(id + "Val");
+    if (el && val) el.addEventListener("input", () => { val.textContent = el.value; });
+  });
+
+  /* ---- Inställningar: spara kamera ---- */
+  if ($id("btnSaveCamera")) {
+    $id("btnSaveCamera").addEventListener("click", async () => {
+      const out = $id("camSaveMsg");
+      setMsg(out, "Sparar…", false);
+      const body = {
+        camera: {
+          enabled: $id("camEnabled").checked,
+          name: ($id("camName").value || "").trim(),
+          host: ($id("camHost").value || "").trim(),
+          user: $id("camUser").value || "",
+          password: $id("camPass").value || "",   // tom = behåll befintligt
+          path: ($id("camPath").value || "").trim(),
+          reconnect: $id("camReconnect").checked,
+          reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
+          autostart: $id("camAutostart").checked,
+        },
+      };
+      try {
+        const res = await saveSettingsJson(body);
+        setMsg(out, "✓ Sparat – strömmen startas om…", true);
+        loadSettingsPage();
+        pollStatus();
+        if (res.requires && res.requires.length) console.info("[settings] requires:", res.requires);
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+
+  /* ---- Inställningar: testa kamera ---- */
+  if ($id("btnTestCam")) {
+    $id("btnTestCam").addEventListener("click", async () => {
+      const btn = $id("btnTestCam"), out = $id("camTestResult");
+      btn.disabled = true;
+      setMsg(out, "Testar anslutning…", false);
+      const body = {};
+      if (($id("camHost").value || "").trim()) body.host = $id("camHost").value.trim();
+      if ($id("camUser").value) body.user = $id("camUser").value;
+      if ($id("camPass").value) body.password = $id("camPass").value;
+      if (($id("camPath").value || "").trim()) body.path = $id("camPath").value.trim();
+      try {
+        const r = await fetchJson("/api/camera/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (r.ok) {
+          if (r.using_live) {
+            out.innerHTML = "● Ansluten (live-status). Upplösning: " + escapeHtml(r.resolution || "?") + ", FPS: " + escapeHtml(String(r.fps != null ? r.fps : "?"));
+          } else {
+            out.innerHTML = "● Ansluten. Upplösning: " + escapeHtml((r.width || "?") + "x" + (r.height || "?")) +
+              ", FPS: " + escapeHtml(String(r.fps != null ? r.fps : "?")) +
+              ", Kod: " + escapeHtml(r.codec || "?") +
+              ", Latens: " + escapeHtml(String(r.latency_ms != null ? r.latency_ms + " ms" : "?"));
+          }
+          out.classList.add("ok");
+        } else {
+          out.innerHTML = "❌ Anslutning misslyckades. Orsak: " + escapeHtml(r.error || "okänt");
+          out.classList.remove("ok");
+        }
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+      btn.disabled = false;
+    });
+  }
+
+  /* ---- Inställningar: spara detektering ---- */
+  if ($id("btnSaveDetect")) {
+    $id("btnSaveDetect").addEventListener("click", async () => {
+      const out = $id("detSaveMsg");
+      setMsg(out, "Sparar…", false);
+      const body = {
+        detect: {
+          yolo_enabled: $id("detYolo").checked,
+          ai_fps: parseInt($id("detAiFps").value, 10) || 4,
+          imgsz: parseInt($id("detImgsz").value, 10) || 640,
+          device: $id("detDevice").value,
+        },
+      };
+      try {
+        const res = await saveSettingsJson(body);
+        const reload = (res.requires || []).includes("yolo_reload");
+        setMsg(out, reload ? "✓ Sparat – YOLO laddas om (kan ta några sekunder)…" : "✓ Sparat (live)", true);
+        loadSettingsPage();
+        pollStatus();
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+
+  /* ---- Inställningar: spara live-ström ---- */
+  if ($id("btnSaveLive")) {
+    $id("btnSaveLive").addEventListener("click", async () => {
+      const out = $id("liveSaveMsg");
+      setMsg(out, "Sparar…", false);
+      const body = {
+        live: {
+          enabled: $id("liveEnabled").checked,
+          display_fps: parseInt($id("liveFps").value, 10) || 10,
+          jpeg_quality: parseInt($id("liveQuality").value, 10) || 80,
+          show_boxes: $id("liveBoxes").checked,
+          show_labels: $id("liveLabels").checked,
+          show_conf: $id("liveConf").checked,
+        },
+      };
+      try {
+        await saveSettingsJson(body);
+        setMsg(out, "✓ Sparat – gäller direkt", true);
+        loadSettingsPage();
+        pollStatus();
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+
+  // Start
+  loadSettingsPage();
+  pollStatus();
+  setInterval(pollStatus, 1000);
+})();
+

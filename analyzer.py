@@ -125,6 +125,61 @@ def _yolo_download_worker(model: str) -> None:
         except OSError:
             pass
 
+# Distinkta BGR-färger för bounding boxes (cv2-ordning).
+_BOX_COLORS = [
+    (0, 255, 0),     # grön
+    (0, 165, 255),   # orange
+    (255, 0, 0),     # röd
+    (255, 255, 0),   # cyan
+    (128, 0, 255),   # rosa
+    (0, 0, 255),     # blå
+    (255, 128, 0),   # ljusblå
+    (0, 255, 255),   # gul
+]
+
+
+def annotate_frame_bgr(frame, detections, draw=None):
+    """Rita bounding boxes + etiketter direkt på en BGR-frame (cv2).
+
+    ``draw`` = {"boxes": bool, "labels": bool, "conf": bool}. Används av
+    live-inferensen så att visa/dölj kan ändras utan modell-omladdning.
+    """
+    import cv2
+
+    show_box = show_label = show_conf = True
+    if isinstance(draw, dict):
+        show_box = bool(draw.get("boxes", True))
+        show_label = bool(draw.get("labels", True))
+        show_conf = bool(draw.get("conf", True))
+    if not (show_box or show_label or show_conf) or frame is None:
+        return frame
+    out = frame.copy()
+    for i, d in enumerate(detections or []):
+        box = d.get("box") or (0, 0, 0, 0)
+        x1, y1, x2, y2 = (int(round(float(v))) for v in box[:4])
+        color = _BOX_COLORS[i % len(_BOX_COLORS)]
+        if show_box:
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
+        label = ""
+        if show_label:
+            label = str(d.get("class", ""))
+            if show_conf:
+                label += f" {d.get('confidence', 0.0) * 100:.0f}%"
+        elif show_conf:
+            label = f"{d.get('confidence', 0.0) * 100:.0f}%"
+        if label:
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+            tx1 = max(x1, 0)
+            ty1 = max(y1 - th - 8, 0)
+            tx2 = min(x1 + tw + 8, out.shape[1])
+            ty2 = min(y1, out.shape[0])
+            if tx2 > tx1 and ty2 > ty1:
+                cv2.rectangle(out, (tx1, ty1), (tx2, ty2), color, -1)
+                cv2.putText(
+                    out, label, (tx1 + 3, ty1 + th + 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1, cv2.LINE_AA,
+                )
+    return out
 
 class YoloAnalyzer:
     """Thin wrapper around Ultralytics YOLO with lazy model loading."""
@@ -140,6 +195,8 @@ class YoloAnalyzer:
         self.device = self._normalize_device(device or "cpu")
         self._model = None
         self._lock = threading.Lock()  # guards model (re)load under concurrency
+        self._infer_lock = threading.Lock()  # serialiserar faktiska predictions
+        self.last_device: str | None = None  # faktisk device senaste inferensen
 
     @staticmethod
     def _normalize_device(device: str) -> str:
@@ -210,6 +267,104 @@ class YoloAnalyzer:
                 self.model_name = model
                 self.conf = conf
 
+    def _predict(self, yolo, image, conf: float | None = None, imgsz: int | None = None):
+        """Kör en prediction med graceful device-fallback (GPU -> CPU).
+
+        Returnerar (results, used_device) och sparar faktisk device i
+        self.last_device. Fallback loggas tydligt men bara när enheten ändras,
+        så att live-inferens (flera gånger/sekund) inte spammar loggen.
+        """
+        candidates = [self._infer_device()]
+        if self.device.startswith("openvino:"):
+            candidates += ["intel:cpu", "cpu"]  # OpenVINO CPU, then torch CPU
+        kwargs: dict = {
+            "conf": conf if conf is not None else self.conf,
+            "verbose": False,
+        }
+        if imgsz:
+            kwargs["imgsz"] = int(imgsz)
+        with self._infer_lock:
+            last_exc = None
+            used_device = candidates[0]
+            for used_device in candidates:
+                try:
+                    results = yolo(image, device=used_device, **kwargs)
+                    last_exc = None
+                    break
+                except Exception as exc:  # noqa: BLE001 - try the next candidate
+                    last_exc = exc
+                    print(f"[analyzer] device '{used_device}' failed: {exc}")
+            if last_exc is not None:
+                raise last_exc
+        prev = self.last_device
+        self.last_device = used_device
+        if used_device != prev:
+            warn = used_device != candidates[0]
+            print(
+                f"[analyzer] actual device: {used_device}"
+                + ("  [GPU FALLBACK]" if warn else "")
+                + f" (configured: {self.device})"
+            )
+        return results, used_device
+
+    @staticmethod
+    def _detections_from(result) -> list[dict]:
+        """Parsa ultralytics-resultatet till standard-detektioner."""
+        detections = []
+        if result is not None and result.boxes is not None:
+            names = result.names
+            for box in result.boxes:
+                detections.append(
+                    {
+                        "class": names.get(int(box.cls.item()), "unknown"),
+                        "confidence": round(float(box.conf.item()), 4),
+                        "box": [round(float(v), 1) for v in box.xyxy[0].tolist()],
+                    }
+                )
+        return detections
+
+    def infer_frame(
+        self,
+        frame_bgr,
+        model: str | None = None,
+        conf: float | None = None,
+        imgsz: int | None = None,
+        draw: dict | None = None,
+    ) -> dict:
+        """Kör YOLO på en live BGR-numpyframe (från RTSP).
+
+        ``draw`` = {"boxes": bool, "labels": bool, "conf": bool} styr vad som
+        ritas på den returnerade ``annotated``-bilden. Returnerar:
+          {detections, annotated, model, device, inference_ms, error}
+        """
+        start = time.perf_counter()
+        try:
+            self._ensure_model(model, conf)
+            yolo = self._model  # local ref - configure() får inte bryta mitt i
+            results, used_device = self._predict(yolo, frame_bgr, conf, imgsz)
+            result = results[0]
+            detections = self._detections_from(result)
+            annotated = frame_bgr
+            if draw is not None:
+                annotated = annotate_frame_bgr(frame_bgr, detections, draw)
+            return {
+                "detections": detections,
+                "annotated": annotated,
+                "model": self.model_name,
+                "device": used_device,
+                "inference_ms": round((time.perf_counter() - start) * 1000, 1),
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001 - surface to caller/UI
+            return {
+                "detections": [],
+                "annotated": frame_bgr,
+                "model": self.model_name,
+                "device": self.last_device,
+                "inference_ms": round((time.perf_counter() - start) * 1000, 1),
+                "error": str(exc),
+            }
+
     def configure(self, model: str | None = None, conf: float | None = None, device: str | None = None) -> None:
         """Update runtime settings (used by POST /api/config from HA)."""
         with self._lock:
@@ -238,44 +393,17 @@ class YoloAnalyzer:
             self._ensure_model(model, conf)
             yolo = self._model  # local ref — safe even if configure() clears _model
 
-            # Device candidates: preferred first, then graceful fallbacks.
-            # OpenVINO models in ultralytics use 'intel:<device>' (e.g. intel:gpu);
-            # a bare 'GPU'/'gpu' hits the NVIDIA CUDA check and fails on machines
-            # without CUDA, so we never pass that.
-            candidates = [self._infer_device()]
-            if self.device.startswith("openvino:"):
-                candidates += ["intel:cpu", "cpu"]  # OpenVINO CPU, then torch CPU
-
-            last_exc = None
-            used_device = candidates[0]
-            for used_device in candidates:
-                try:
-                    results = yolo(str(image_path), conf=self.conf, device=used_device, verbose=False)
-                    last_exc = None
-                    break
-                except Exception as exc:  # noqa: BLE001 - try the next candidate
-                    last_exc = exc
-                    print(f"[analyzer] device '{used_device}' failed: {exc}")
-            if last_exc is not None:
-                raise last_exc
+            # Delad inferens med graceful device-fallback (GPU -> CPU). Faktisk
+            # device hamnar i self.last_device och loggas vid ändring.
+            results, used_device = self._predict(yolo, str(image_path), conf)
             result = results[0]
-            # Log which device actually ran inference (visible in `docker logs camera-ai`)
+            # Stillbildsanalys loggas alltid (live-inferens är tyst per frame).
             print(
                 f"[analyzer] {self.model_name} on {used_device} "
                 f"— {round((time.perf_counter() - start) * 1000, 1)} ms"
             )
 
-            detections = []
-            if result.boxes is not None:
-                names = result.names
-                for box in result.boxes:
-                    detections.append(
-                        {
-                            "class": names.get(int(box.cls.item()), "unknown"),
-                            "confidence": round(float(box.conf.item()), 4),
-                            "box": [round(float(v), 1) for v in box.xyxy[0].tolist()],
-                        }
-                    )
+            detections = self._detections_from(result)
 
             # Dominant colour for vehicles (sampled from the image pixels)
             if detections:

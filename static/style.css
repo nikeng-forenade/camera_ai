@@ -253,3 +253,146 @@ input[type="range"] { accent-color: var(--accent); }
 .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .hist-table th, .hist-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .hist-table th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* ==========================================================================
+   Dashboard / tabs / live-vy
+   ========================================================================== */
+main { max-width: 1240px; }
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 20px 0;
+  max-width: 1240px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+.tab {
+  background: var(--card);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--text);
+  background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .dash-grid { grid-template-columns: 1fr; }
+}
+
+.live-card { padding: 0; overflow: hidden; }
+.live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+.live-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 6px var(--muted);
+}
+.live-badge.online .live-dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.live-badge.reconnecting .live-dot,
+.live-badge.connecting .live-dot { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+.live-badge.offline .live-dot,
+.live-badge.disabled .live-dot,
+.live-badge.error .live-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.live-sub { color: var(--muted); font-size: 12.5px; }
+
+.live-viewer {
+  position: relative;
+  background: #000;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.live-viewer img {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 72vh;
+  object-fit: contain;
+  background: #000;
+}
+.live-overlay { position: absolute; top: 8px; left: 10px; color: #fff; text-shadow: 0 1px 3px #000; font-size: 12px; pointer-events: none; }
+
+.live-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.live-toggles { display: inline-flex; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.toggle input { accent-color: var(--accent); }
+
+.dash-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.warn-card {
+  border: 1px solid var(--yellow);
+  background: rgba(242, 204, 96, 0.08);
+  color: var(--yellow);
+}
+.warn-card p { margin: 4px 0; font-size: 13px; }
+
+.metric-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.metric-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
+.metric-table tr:last-child td { border-bottom: none; }
+.metric-table td:first-child { color: var(--muted); width: 46%; }
+.metric-table td:last-child { text-align: right; font-weight: 600; }
+.metric-table .metric-warn { color: var(--yellow); }
+.metric-table .metric-ok { color: var(--green); }
+.metric-table .metric-err { color: var(--red); }
+
+.detection-list .empty-li { list-style: none; border: none; }
+
+/* Inställningskort: checkbox-rad + hints */
+.settings-grid label.chk {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13.5px;
+  align-self: center;
+}
+.settings-grid input[type="number"] {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font-size: 13px; width: 100%;
+}
+.settings-grid label:has(input[type="range"]) .hint { display: block; }
+

@@ -2,6 +2,7 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
 ultralytics>=8.4
+opencv-python>=4.8   # RTSP-läsning + live-annotering (följer även med ultralytics)
 Pillow>=10.0
 requests>=2.31
 httpx>=0.27

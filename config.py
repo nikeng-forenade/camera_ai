@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 def model_path(name: str) -> str:
@@ -43,6 +43,73 @@ UPLOAD_DIR = Path(os.getenv("CAMERA_AI_UPLOAD_DIR", BASE_DIR / "uploads"))
 MEDIA_DIR = Path(os.getenv("CAMERA_AI_MEDIA_DIR", BASE_DIR / "media"))
 UPLOAD_DIR.mkdir(exist_ok=True)
 MEDIA_DIR.mkdir(exist_ok=True)
+
+
+def _env_bool(key: str, default: bool = False) -> bool:
+    """Parse a .env boolean (1/true/yes/on = True)."""
+    v = os.getenv(key)
+    if v is None or v.strip() == "":
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_float(key: str, default: float, lo: float | None = None, hi: float | None = None) -> float:
+    """Parse a float env value with optional range clamp."""
+    try:
+        val = float(os.getenv(key, default))
+    except (TypeError, ValueError):
+        val = float(default)
+    if lo is not None:
+        val = max(lo, val)
+    if hi is not None:
+        val = min(hi, val)
+    return val
+
+
+def _env_int(key: str, default: int, lo: int | None = None, hi: int | None = None) -> int:
+    """Parse an int env value with optional range clamp."""
+    try:
+        val = int(float(os.getenv(key, default)))
+    except (TypeError, ValueError):
+        val = int(default)
+    if lo is not None:
+        val = max(lo, val)
+    if hi is not None:
+        val = min(hi, val)
+    return val
+
+
+def persist_env(values: dict) -> bool:
+    """Merge {KEY: value} into BASE_DIR/.env atomically (tmp-fil + replace).
+
+    Kommentarer/ordning i en befintlig .env bevaras; nya nycklar läggs sist.
+    Används av API:t så att GUI-ändrade inställningar överlever omstart.
+    """
+    env_file = BASE_DIR / ".env"
+    try:
+        lines = (
+            env_file.read_text(encoding="utf-8").splitlines()
+            if env_file.exists()
+            else []
+        )
+        todo = {str(k): str(v) for k, v in values.items()}
+        out: list[str] = []
+        for line in lines:
+            if "=" in line:
+                key = line.split("=", 1)[0].strip()
+                if key in todo:
+                    out.append(f"{key}={todo.pop(key)}")
+                    continue
+            out.append(line)
+        for key, val in todo.items():
+            out.append(f"{key}={val}")
+        tmp = env_file.with_name(env_file.name + ".tmp")
+        tmp.write_text("\n".join(out) + "\n", encoding="utf-8")
+        tmp.replace(env_file)
+        return True
+    except OSError as exc:
+        print(f"[config] kunde inte spara .env: {exc}")
+        return False
 
 # YOLO defaults
 DEFAULT_MODEL = os.getenv("YOLO_MODEL", "yolo11n.pt")
@@ -71,10 +138,47 @@ LLM_DEFAULT_PROMPT = os.getenv(
     "intresse.'",
 )
 
-# Optional Reolink integration (used by reolink_motion.py)
+# Optional Reolink integration (used by reolink_motion.py + live camera)
 REOLINK_HOST = os.getenv("REOLINK_HOST", "")
 REOLINK_USER = os.getenv("REOLINK_USER", "")
 REOLINK_PASS = os.getenv("REOLINK_PASS", "")
+
+# ---------------------------------------------------------------------------
+# Live-kamera (Reolink RTSP -> YOLO -> Dashboard)
+# ---------------------------------------------------------------------------
+# Alla nya nycklar har defaultvärden så gamla .env-installationer startar utan
+# ändringar. CAMERA_HOST/USER/PASS faller tillbaka på REOLINK_* om de inte är
+# satta (migration från äldre .env). GUI skriver de nya nycklarna till .env.
+CAMERA_ENABLED = _env_bool("CAMERA_ENABLED", False)
+CAMERA_NAME = os.getenv("CAMERA_NAME", "Kamera1").strip() or "Kamera1"
+CAMERA_HOST = (os.getenv("CAMERA_HOST", "") or REOLINK_HOST).strip()
+CAMERA_USER = (os.getenv("CAMERA_USER", "") or REOLINK_USER).strip()
+CAMERA_PASS = os.getenv("CAMERA_PASS", "") or REOLINK_PASS
+CAMERA_PATH = (os.getenv("CAMERA_PATH", "/Preview_01_sub") or "/Preview_01_sub").strip()
+# Full RTSP-URL som override (t.ex. "rtsp://user:pass@1.2.3.4/Preview_01_sub").
+# Sätts den används den i stället för HOST/USER/PASS/PATH.
+CAMERA_RTSP_URL = (os.getenv("CAMERA_RTSP_URL", "") or "").strip()
+CAMERA_RECONNECT = _env_bool("CAMERA_RECONNECT", True)
+CAMERA_RECONNECT_DELAY = _env_int("CAMERA_RECONNECT_DELAY", 5, lo=1, hi=300)
+# Autostart: om osatt följer det CAMERA_ENABLED.
+CAMERA_AUTOSTART = (
+    _env_bool("CAMERA_AUTOSTART", CAMERA_ENABLED)
+    if os.getenv("CAMERA_AUTOSTART") is not None
+    else CAMERA_ENABLED
+)
+
+# Live YOLO-schemaläggning (hur ofta YOLO analyserar den senaste bilden)
+YOLO_STREAM_FPS = _env_float("YOLO_STREAM_FPS", 4.0, lo=0.5, hi=30.0)
+YOLO_IMG_SIZE = _env_int("YOLO_IMG_SIZE", 640)
+
+# Live-stream (MJPEG till webbläsare)
+LIVE_STREAM_ENABLED = _env_bool("LIVE_STREAM_ENABLED", True)
+LIVE_STREAM_FPS = _env_int("LIVE_STREAM_FPS", 10, lo=1, hi=30)
+LIVE_JPEG_QUALITY = _env_int("LIVE_JPEG_QUALITY", 80, lo=20, hi=100)
+# Visa/dölj detektionsöverlagring (ändras live från GUI)
+LIVE_SHOW_BOXES = _env_bool("LIVE_SHOW_BOXES", True)
+LIVE_SHOW_LABELS = _env_bool("LIVE_SHOW_LABELS", True)
+LIVE_SHOW_CONF = _env_bool("LIVE_SHOW_CONF", True)
 
 # ---------------------------------------------------------------------------
 # Home Assistant integration

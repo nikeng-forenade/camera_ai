@@ -8,10 +8,20 @@ Home Assistant-integration (MQTT + REST) och **larmstyrd LLM-laddning**.
 kamera → snapshot (rörelse) → YOLO-detektering → LLM-beskrivning → resultat
 ```
 
+Sedan v0.5 finns dessutom ett **live-flöde**: en Reolink RTSP-subström läses av
+en enda kameraworker, YOLO analyserar den senaste bilden kontinuerligt (AI FPS)
+och resultatet (bounding boxes + status) visas i ett Dashboard-first webb-GUI.
+
+```
+Reolink → RTSP sub → Camera worker → YOLO (AI FPS) → MJPEG → Dashboard
+```
+
 ## Funktioner
 
 - **Windows-app med GUI** — eget fönster + taskbar/tray-ikon (pywebview), eller headless som tjänst (NSSM).
-- **YOLO på Intel Arc** via OpenVINO (`openvino:GPU` → `intel:gpu`).
+- **Live-Dashboard (v0.5)** — en RTSP-session per kamera, auto-återanslut, schemalagd YOLO (AI FPS), annoterad MJPEG-ström och runtime-status (faktisk enhet, inferens, FPS) direkt i webbläsaren.
+- **YOLO på Intel Arc** via OpenVINO (`openvino:GPU` → `intel:gpu`) med tydlig GPU-fallback till CPU (visas i Dashboard).
+- **GUI-first-inställningar** — kamera, AI FPS, bildstorlek, enhet, display-FPS, JPEG-kvalitet och överlagring (boxar/etiketter/konfidens) ändras från webb-GUI:t och sparas till `.env` utan omstart där det går. Lösenord skickas aldrig tillbaka till webbläsaren.
 - **Vision-LLM (Ollama) på Arc** via Vulkan (`OLLAMA_VULKAN=1`).
 - **Home Assistant** — MQTT auto-discovery (binary_sensor, sensor, image) + REST.
 - **Larmstyrd LLM-laddning** — LLM laddas när HA-larmet är skarpt, laddas ur när det är av (frigör VRAM).
@@ -114,8 +124,42 @@ Assistant.
 | `HA_ALARM_TOPIC` | MQTT-topic för larmstatus | `homeassistant/alarm_control_panel/+/state` |
 | `OLLAMA_KEEP_ALIVE_ARMED` | `keep_alive` när larmet är skarpt (−1 = håll laddad) | `-1` |
 | `OLLAMA_KEEP_ALIVE_DISARMED` | `keep_alive` när larmet är av (0 = ladda ur) | `0` |
+| `CAMERA_ENABLED` | Aktivera live-kamera (RTSP → Dashboard) | `false` |
+| `CAMERA_NAME` | Kamera-namn (visas i GUI) | `Kamera1` |
+| `CAMERA_HOST` | Kamera-IP. Faller tillbaka på `REOLINK_HOST` | (tom) |
+| `CAMERA_USER` / `CAMERA_PASS` | RTSP-inloggning (fallback `REOLINK_USER/PASS`) | (tom) |
+| `CAMERA_PATH` | RTSP-sökväg — sub-ström rekommenderas för YOLO | `/Preview_01_sub` |
+| `CAMERA_RTSP_URL` | Full RTSP-URL som override (innehåller lösenord) | (tom) |
+| `CAMERA_RECONNECT` / `CAMERA_RECONNECT_DELAY` | Auto-återanslutning (s) | `true` / `5` |
+| `CAMERA_AUTOSTART` | Starta kameran vid appstart (osatt = följer `CAMERA_ENABLED`) | (osatt) |
+| `YOLO_STREAM_FPS` | AI FPS — hur ofta YOLO analyserar livebilden | `4` |
+| `YOLO_IMG_SIZE` | Bildstorlek live (320/480/640/960/1280) | `640` |
+| `LIVE_STREAM_ENABLED` | MJPEG-ström aktiverad | `true` |
+| `LIVE_STREAM_FPS` | Display-FPS för strömmen | `10` |
+| `LIVE_JPEG_QUALITY` | JPEG-kvalitet (20–100) | `80` |
+| `LIVE_SHOW_BOXES/LABELS/CONF` | Visa/dölj överlagring | `true` |
+
+De live-relaterade nycklarna är **GUI-first**: de ändras normalt under
+**Inställningar → Kamera / Live-detektering / Live-ström** i webb-GUI:t och
+sparas till `.env` automatiskt. En gammal `.env` utan nycklarna fungerar —
+alla har defaultvärden (kamera är inaktiverad tills den konfigurerats).
 
 Om Ollama inte körs fungerar YOLO-detekteringen ändå — beskrivningen visar bara ett fel.
+
+## Live Dashboard (v0.5+)
+
+Öppna `http://<server>:8000` — Dashboard är huvudvyn:
+
+- **Live-vy** — MJPEG via `GET /api/live/{kamera}` med YOLO-boxar ritade på servern (lägsta latens, ingen videoqueue — alltid senaste bilden).
+- **Status** — kamera/YOLO-tillstånd, modell, konfigurerad vs faktisk enhet (`intel:gpu`), inferens (ms), AI/display-FPS, upplösning.
+- **GPU-fallbackvarning** — om `openvino:GPU` inte fungerar visas tydligt "GPU FALLBACK" med faktisk enhet i stället för att tyst köra på CPU.
+- **Detected now** — senaste detektionerna med konfidens.
+- **Kontroller** — start/stopp av strömmen samt boxar/etiketter/konfidens som ändras live.
+
+API i korthet: `GET/PUT /api/settings`, `GET /api/cameras/status`,
+`POST /api/cameras/start|stop`, `POST /api/camera/test`,
+`GET /api/live/{kamera}` (MJPEG). Befintliga endpoints (`/api/analyze`,
+`/api/history`, `/api/stats`, `/api/health`, HA/Ollama) är oförändrade.
 
 ## Home Assistant
 
