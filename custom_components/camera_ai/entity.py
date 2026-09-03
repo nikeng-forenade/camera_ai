@@ -1,4 +1,9 @@
-"""Shared entity base for the Camera AI integration."""
+"""Basklasser + hjälpare för Camera AI-integrationen.
+
+Två sorters enheter skapas automatiskt från servern:
+  * "Camera AI"                       – global server (status/runtime/beskrivning)
+  * "Camera AI <kamera>" (per kamera) – motion, räknare och live-snapshot
+"""
 
 from __future__ import annotations
 
@@ -7,52 +12,85 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VERSION
 
+_VEHICLE_CLASSES = {
+    "car", "truck", "bus", "motorcycle", "bicycle", "boat", "airplane", "train",
+}
+_ANIMAL_CLASSES = {
+    "cat", "dog", "bird", "horse", "sheep", "cow", "elephant", "bear",
+    "zebra", "giraffe",
+}
 
-class CameraAIEntity(CoordinatorEntity):
-    """Base entity that links to the coordinator and the Camera AI device."""
+
+def server_cameras(data: dict | None) -> list:
+    """Alla kameror servern rapporterar just nu."""
+    return (data or {}).get("cameras") or []
+
+
+def server_device_info(entry: ConfigEntry) -> dict:
+    return {
+        "identifiers": {(DOMAIN, entry.entry_id)},
+        "name": "Camera AI",
+        "manufacturer": "Camera AI",
+        "model": "YOLO + vision-LLM",
+        "sw_version": VERSION,
+    }
+
+
+def camera_device_info(entry: ConfigEntry, cam: dict) -> dict:
+    cam_id = str(cam.get("camera_id") or "")
+    cam_name = str(cam.get("camera_name") or cam_id or "Kamera")
+    return {
+        "identifiers": {(DOMAIN, entry.entry_id, cam_id)},
+        "name": f"Camera AI {cam_name}",
+        "manufacturer": "Camera AI",
+        "model": "Live-kamera",
+        "sw_version": VERSION,
+        "via_device": (DOMAIN, entry.entry_id),
+    }
+
+
+def detection_counts(camera: dict | None) -> dict:
+    """people/vehicles/animals ur live detection_counts (per klass)."""
+    out = {"people": 0, "vehicles": 0, "animals": 0}
+    if not camera:
+        return out
+    counts = camera.get("detection_counts") or {}
+    out["people"] = int(counts.get("person", 0))
+    out["vehicles"] = sum(int(v) for k, v in counts.items() if k in _VEHICLE_CLASSES)
+    out["animals"] = sum(int(v) for k, v in counts.items() if k in _ANIMAL_CLASSES)
+    return out
+
+
+class CameraAIServerEntity(CoordinatorEntity):
+    """Global entitet på 'Camera AI'-enheten (serverstatus, runtime …)."""
 
     _attr_has_entity_name = True
 
     def __init__(self, coordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "Camera AI",
-            "manufacturer": "Camera AI",
-            "model": "Reolink + YOLO + LLM",
-            "sw_version": VERSION,
-            "configuration_url": coordinator.client.url,
-        }
+        self._attr_device_info = server_device_info(entry)
 
 
-def live_camera(data: dict | None) -> dict | None:
-    """Den kamera entiteterna följer (serverns default, annars första).
+class CameraAICameraEntity(CoordinatorEntity):
+    """Bas för entiteter som hör till en specifik serverkamera."""
 
-    Komponenten läser löpande /api/cameras/status från servern och visar
-    entiteter + bild för den här kameran.
-    """
-    if not data:
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, entry: ConfigEntry, cam: dict) -> None:
+        super().__init__(coordinator)
+        self._cam_id = str(cam.get("camera_id") or "")
+        self._cam_name = str(cam.get("camera_name") or self._cam_id or "Kamera")
+        self._attr_device_info = camera_device_info(entry, cam)
+
+    def camera(self) -> dict | None:
+        """Senaste status för den här kameran (None om borttagen från servern)."""
+        for cam in server_cameras(self.coordinator.data):
+            if cam.get("camera_id") == self._cam_id:
+                return cam
         return None
-    cams = data.get("cameras") or []
-    if not cams:
-        return None
-    did = data.get("camera_default")
-    for c in cams:
-        if c.get("camera_id") == did:
-            return c
-    return cams[0]
 
-
-_VEHICLE_CLASSES = {"car", "truck", "bus", "motorcycle", "bicycle", "boat", "airplane", "train"}
-_ANIMAL_CLASSES = {"cat", "dog", "bird", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"}
-
-
-def detection_counts(camera: dict | None) -> dict:
-    """people/vehicles/animals/colors från en kamerastatus (live)."""
-    if not camera:
-        return {"people": 0, "vehicles": 0, "animals": 0, "colors": []}
-    counts = camera.get("detection_counts") or {}
-    people = counts.get("person", 0)
-    vehicles = sum(v for k, v in counts.items() if k in _VEHICLE_CLASSES)
-    animals = sum(v for k, v in counts.items() if k in _ANIMAL_CLASSES)
-    return {"people": people, "vehicles": vehicles, "animals": animals, "colors": []}
+    @property
+    def available(self) -> bool:
+        if self.camera() is None:
+            return False
+        return super().available

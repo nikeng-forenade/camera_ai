@@ -146,12 +146,16 @@
         <div class="settings-grid">
           <label>YOLO model
             <select id="model">
+              <option value="yolo26n.pt">yolo26n.pt — snabbast / många kameror (2.4M, mAP 40.9)</option>
+              <option value="yolo26s.pt">yolo26s.pt — ⭐ bra balans (9.5M, mAP 48.6)</option>
+              <option value="yolo26m.pt">yolo26m.pt — bättre precision (20.4M, mAP 53.1)</option>
+              <option value="yolo26l.pt">yolo26l.pt — tung (24.8M, mAP 55.0)</option>
+              <option value="yolo26x.pt">yolo26x.pt — max precision (55.7M, mAP 57.5)</option>
               <option value="yolo11n.pt">yolo11n.pt (nano — fastest)</option>
               <option value="yolo11s.pt">yolo11s.pt (small)</option>
               <option value="yolo11m.pt">yolo11m.pt (medium)</option>
-              <option value="yolo26n.pt">yolo26n.pt (nano — fastest, YOLO26)</option>
-              <option value="yolo26s.pt">yolo26s.pt (small, YOLO26)</option>
-              <option value="yolo26m.pt">yolo26m.pt (medium, YOLO26)</option>
+              <option value="yolo11l.pt">yolo11l.pt (large)</option>
+              <option value="yolo11x.pt">yolo11x.pt (xlarge)</option>
             </select>
             <span id="yoloDlStatus" class="yolo-dl" hidden></span>
           </label>

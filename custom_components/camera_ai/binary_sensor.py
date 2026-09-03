@@ -1,14 +1,17 @@
-"""Binary sensor (motion) for the Camera AI integration."""
+"""Binary sensors (motion) – en per serverkamera."""
 
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import CameraAIEntity, live_camera
+from .entity import CameraAICameraEntity, server_cameras
 
 
 async def async_setup_entry(
@@ -17,36 +20,36 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities([CameraAIMotionSensor(coordinator, entry)])
+    entities = []
+    for cam in server_cameras(coordinator.data):
+        if cam.get("camera_id"):
+            entities.append(CameraAIMotionSensor(coordinator, entry, cam))
+    async_add_entities(entities)
 
 
-class CameraAIMotionSensor(CameraAIEntity, BinarySensorEntity):
-    """ON när person/bil/djur detekteras på live-kameran (eller senaste analysen)."""
+class CameraAIMotionSensor(CameraAICameraEntity, BinarySensorEntity):
+    """ON när person/bil/djur detekteras live på kameran."""
 
     _attr_device_class = BinarySensorDeviceClass.MOTION
     _attr_icon = "mdi:motion-sensor"
 
-    def __init__(self, coordinator, entry) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_motion"
+    def __init__(self, coordinator, entry: ConfigEntry, cam: dict) -> None:
+        super().__init__(coordinator, entry, cam)
+        self._attr_unique_id = f"{entry.entry_id}_{self._cam_id}_motion"
         self._attr_name = "Motion"
 
     @property
     def is_on(self) -> bool:
-        cam = live_camera(self.coordinator.data or {})
-        if cam is not None:
-            return bool(cam.get("detections"))
-        result = (self.coordinator.data or {}).get("result")
-        return bool((result or {}).get("detections"))
+        cam = self.camera()
+        return bool(cam and cam.get("detections"))
 
     @property
     def extra_state_attributes(self) -> dict:
-        cam = live_camera(self.coordinator.data or {})
-        if cam is None:
-            return {}
+        cam = self.camera() or {}
         return {
-            "camera_id": cam.get("camera_id"),
-            "camera": cam.get("camera_name"),
+            "camera_id": self._cam_id,
+            "camera_name": cam.get("camera_name") or self._cam_name,
             "camera_state": cam.get("camera_state"),
+            "stream_active": cam.get("stream_active"),
             "detection_counts": cam.get("detection_counts") or {},
         }

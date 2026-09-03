@@ -1,4 +1,9 @@
-"""Config flow and options flow for the Camera AI integration."""
+"""Config flow för Camera AI – bara server-URL, allt annat auto-hämtas.
+
+När användaren anger URL:en frågar vi servern om hälsa + kameror och visar
+vilka som hittats. Kameror/entiteter skapas sedan automatiskt per serverkamera –
+inget manuellt val av kamera eller entitet krävs.
+"""
 
 from __future__ import annotations
 
@@ -12,113 +17,28 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_URL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import selector
 
-from .client import CameraAIClient, server_payload
-from .const import (
-    CONF_CAMERA,
-    CONF_CONFIDENCE,
-    CONF_DEVICE,
-    CONF_KEEP_ALIVE,
-    CONF_LLM_MODEL,
-    CONF_MODEL,
-    CONF_PROMPT,
-    CONF_USE_LLM,
-    DEFAULT_CONFIDENCE,
-    DEFAULT_DEVICE,
-    DEFAULT_KEEP_ALIVE,
-    DEFAULT_LLM_MODEL,
-    DEFAULT_MODEL,
-    DEFAULT_MODELS,
-    DEFAULT_PROMPT,
-    DEFAULT_USE_LLM,
-    DEVICE_LABELS,
-    DEVICE_OPTIONS,
-    DOMAIN,
-    KEEP_ALIVE_LABELS,
-    KEEP_ALIVE_OPTIONS,
-)
+from .client import CameraAIClient
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _fetch_health(url: str) -> dict:
+async def _discover(url: str) -> dict:
+    """Fråga servern om hälsa och kameror (auto-discovery)."""
     async with httpx.AsyncClient(timeout=10) as session:
         client = CameraAIClient(url, session)
-        return await client.health()
-
-
-async def _apply_server_config(url: str, settings: dict) -> None:
-    """Push runtime settings to the server so they take effect immediately."""
-    async with httpx.AsyncClient(timeout=15) as session:
-        client = CameraAIClient(url, session)
-        await client.set_config(server_payload(settings))
-
-
-def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    d = defaults or {}
-    return vol.Schema(
-        {
-            vol.Required(CONF_URL, default=d.get(CONF_URL, "")): str,
-            vol.Required(
-                CONF_MODEL, default=d.get(CONF_MODEL, DEFAULT_MODEL)
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(value=m, label=m)
-                        for m in DEFAULT_MODELS
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Required(
-                CONF_CONFIDENCE,
-                default=d.get(CONF_CONFIDENCE, DEFAULT_CONFIDENCE),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0.05, max=0.95, step=0.05, mode=selector.NumberSelectorMode.BOX
-                )
-            ),
-            vol.Required(
-                CONF_DEVICE, default=d.get(CONF_DEVICE, DEFAULT_DEVICE)
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(
-                            value=v, label=DEVICE_LABELS.get(v, v)
-                        )
-                        for v in DEVICE_OPTIONS
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(
-                CONF_USE_LLM, default=d.get(CONF_USE_LLM, DEFAULT_USE_LLM)
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_LLM_MODEL, default=d.get(CONF_LLM_MODEL, DEFAULT_LLM_MODEL)
-            ): selector.TextSelector(),
-            vol.Optional(
-                CONF_PROMPT, default=d.get(CONF_PROMPT, DEFAULT_PROMPT)
-            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
-            vol.Optional(
-                CONF_KEEP_ALIVE, default=d.get(CONF_KEEP_ALIVE, DEFAULT_KEEP_ALIVE)
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        selector.SelectOptionDict(
-                            value=v, label=KEEP_ALIVE_LABELS.get(v, v)
-                        )
-                        for v in KEEP_ALIVE_OPTIONS
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(
-                CONF_CAMERA, default=d.get(CONF_CAMERA, "")
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="camera")),
-        }
-    )
+        health = await client.health()
+        cam_st = await client.cameras_status()
+    names = [
+        f"- {c.get('camera_name') or c.get('camera_id')}"
+        for c in (cam_st.get("cameras") or [])
+    ]
+    return {
+        "count": len(names),
+        "names": "\n".join(names) if names else "- (inga kameror registrerade än)",
+        "version": health.get("version") or "?",
+    }
 
 
 class CameraAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -131,20 +51,38 @@ class CameraAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             url = str(user_input[CONF_URL]).strip().rstrip("/")
             try:
-                await _fetch_health(url)
+                info = await _discover(url)
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.warning("Health check failed for %s: %s", url, exc)
+                _LOGGER.warning("Discovery failed for %s: %s", url, exc)
                 errors["base"] = "cannot_connect"
             else:
-                try:
-                    await _apply_server_config(url, user_input)
-                except Exception as exc:  # noqa: BLE001 - non-fatal
-                    _LOGGER.warning("Could not push config to server: %s", exc)
                 await self.async_set_unique_id(url)
                 self._abort_if_unique_id_configured()
-                data = {**user_input, CONF_URL: url}
-                return self.async_create_entry(title="Camera AI", data=data)
-        return self.async_show_form(step_id="user", data_schema=_schema(), errors=errors)
+                self._url = url
+                self._info = info
+                return await self.async_step_confirm()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_URL, default="http://"): str}
+            ),
+            errors=errors,
+        )
+
+    async def async_step_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        if user_input is not None:
+            return self.async_create_entry(
+                title="Camera AI", data={CONF_URL: self._url}
+            )
+        return self.async_show_form(
+            step_id="confirm",
+            description_placeholders={
+                "version": self._info["version"],
+                "camera_count": str(self._info["count"]),
+                "cameras": self._info["names"],
+            },
+        )
 
     @staticmethod
     @callback
@@ -153,18 +91,27 @@ class CameraAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class CameraAIOptionsFlow(config_entries.OptionsFlow):
-    """Handle options (model, confidence, device, LLM model/prompt, camera)."""
+    """Ändra server-URL:en – allt annat (modell, kameror) styrs från servern."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
-            url = str(user_input.get(CONF_URL) or self.config_entry.data.get(CONF_URL))
-            try:
-                await _apply_server_config(url, user_input)
-            except Exception as exc:  # noqa: BLE001 - non-fatal
-                _LOGGER.warning("Could not push config to server: %s", exc)
-            return self.async_create_entry(title="", data=user_input)
-        defaults = {**self.config_entry.data, **self.config_entry.options}
-        return self.async_show_form(step_id="init", data_schema=_schema(defaults))
+            url = str(user_input.get(CONF_URL)).strip().rstrip("/")
+            data = {**self.config_entry.data, CONF_URL: url}
+            self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_URL,
+                        default=self.config_entry.data.get(CONF_URL, ""),
+                    ): str
+                }
+            ),
+        )

@@ -1,3 +1,6 @@
+# Gemensamma YOLO-modeller för tjänsterna nedan.
+# YOLO26 (n/s/m/l/x) listas först med kort vägledning, YOLO11 finns kvar som alternativ.
+
 analyze_camera:
   name: Analyze camera
   description: >-
@@ -7,18 +10,34 @@ analyze_camera:
   fields:
     camera_entity:
       name: Camera entity
-      description: Camera to snapshot (defaults to the configured one).
+      description: Camera to snapshot (e.g. camera.camera_ai_backyard_live or your Reolink camera).
       required: false
       selector:
         entity:
           domain: camera
+    use_llm:
+      name: Use LLM description
+      description: Send the image to the server's vision LLM for a description.
+      required: false
+      selector:
+        boolean:
     model:
       name: YOLO model
-      description: Overrides the configured model for this analysis.
+      description: Model to use (overrides the server's active model).
       required: false
       selector:
         select:
           options:
+            - label: "yolo26n.pt · snabbast / många kameror (2.4M, mAP 40.9)"
+              value: yolo26n.pt
+            - label: "yolo26s.pt · ⭐ bra balans (9.5M, mAP 48.6)"
+              value: yolo26s.pt
+            - label: "yolo26m.pt · bättre precision (20.4M, mAP 53.1)"
+              value: yolo26m.pt
+            - label: "yolo26l.pt · tung (24.8M, mAP 55.0)"
+              value: yolo26l.pt
+            - label: "yolo26x.pt · max precision (55.7M, mAP 57.5)"
+              value: yolo26x.pt
             - yolo11n.pt
             - yolo11s.pt
             - yolo11m.pt
@@ -53,13 +72,29 @@ analyze_url:
       required: true
       selector:
         text:
+    use_llm:
+      name: Use LLM description
+      description: Send the image to the server's vision LLM for a description.
+      required: false
+      selector:
+        boolean:
     model:
       name: YOLO model
-      description: Overrides the configured model for this analysis.
+      description: Model to use (overrides the server's active model).
       required: false
       selector:
         select:
           options:
+            - label: "yolo26n.pt · snabbast / många kameror (2.4M, mAP 40.9)"
+              value: yolo26n.pt
+            - label: "yolo26s.pt · ⭐ bra balans (9.5M, mAP 48.6)"
+              value: yolo26s.pt
+            - label: "yolo26m.pt · bättre precision (20.4M, mAP 53.1)"
+              value: yolo26m.pt
+            - label: "yolo26l.pt · tung (24.8M, mAP 55.0)"
+              value: yolo26l.pt
+            - label: "yolo26x.pt · max precision (55.7M, mAP 57.5)"
+              value: yolo26x.pt
             - yolo11n.pt
             - yolo11s.pt
             - yolo11m.pt
@@ -82,6 +117,67 @@ analyze_url:
         text:
           multiline: true
 
+describe_image:
+  name: Describe image (server LLM)
+  description: >-
+    Skickar en bild till Camera AI-serverns vision-LLM och returnerar en svensk
+    beskrivning ('summary'/'description'). Ge antingen 'camera_entity' (en kamera
+    vars snapshot skickas) eller 'url' till en bild. Resultatet kan användas i
+    automations via response_variable och sparas även i sensorn 'Scene
+    description'.
+  fields:
+    camera_entity:
+      name: Camera entity
+      description: Kamera att fotografera och skicka till LLM:en (t.ex. camera.camera_ai_*_live).
+      required: false
+      selector:
+        entity:
+          domain: camera
+    url:
+      name: Image URL
+      description: URL till en bild som servern hämtar och skickar till LLM:en.
+      required: false
+      selector:
+        text:
+    model:
+      name: YOLO model
+      description: Detektionsmodell som används innan LLM-beskrivningen.
+      required: false
+      selector:
+        select:
+          options:
+            - label: "yolo26n.pt · snabbast / många kameror (2.4M, mAP 40.9)"
+              value: yolo26n.pt
+            - label: "yolo26s.pt · ⭐ bra balans (9.5M, mAP 48.6)"
+              value: yolo26s.pt
+            - label: "yolo26m.pt · bättre precision (20.4M, mAP 53.1)"
+              value: yolo26m.pt
+            - label: "yolo26l.pt · tung (24.8M, mAP 55.0)"
+              value: yolo26l.pt
+            - label: "yolo26x.pt · max precision (55.7M, mAP 57.5)"
+              value: yolo26x.pt
+            - yolo11n.pt
+            - yolo11s.pt
+            - yolo11m.pt
+            - yolo11l.pt
+            - yolo11x.pt
+    confidence:
+      name: Confidence
+      description: Detektionskonfidens (0.05–0.95).
+      required: false
+      selector:
+        number:
+          min: 0.05
+          max: 0.95
+          step: 0.05
+    prompt:
+      name: LLM prompt
+      description: Överskriver serverns prompt för vision-LLM:en.
+      required: false
+      selector:
+        text:
+          multiline: true
+
 set_config:
   name: Set server config
   description: >-
@@ -95,6 +191,16 @@ set_config:
       selector:
         select:
           options:
+            - label: "yolo26n.pt · snabbast / många kameror (2.4M, mAP 40.9)"
+              value: yolo26n.pt
+            - label: "yolo26s.pt · ⭐ bra balans (9.5M, mAP 48.6)"
+              value: yolo26s.pt
+            - label: "yolo26m.pt · bättre precision (20.4M, mAP 53.1)"
+              value: yolo26m.pt
+            - label: "yolo26l.pt · tung (24.8M, mAP 55.0)"
+              value: yolo26l.pt
+            - label: "yolo26x.pt · max precision (55.7M, mAP 57.5)"
+              value: yolo26x.pt
             - yolo11n.pt
             - yolo11s.pt
             - yolo11m.pt
@@ -153,4 +259,3 @@ set_config:
             - "600"
             - "1800"
             - "3600"
-

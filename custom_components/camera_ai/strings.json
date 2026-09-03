@@ -3,44 +3,21 @@
     "step": {
       "user": {
         "title": "Camera AI",
-        "description": "Connect to your Camera AI server (the LXC app).",
+        "description": "Anslut till din Camera AI-server (t.ex. http://192.168.1.66:8000). Alla kameror, entiteter och inställningar hämtas automatiskt från servern – du behöver inte välja något manuellt.",
         "data": {
-          "url": "Server URL",
-          "model": "YOLO model",
-          "confidence": "Confidence",
-          "device": "Inference device",
-          "use_llm": "Use LLM description",
-          "llm_model": "LLM model (Ollama)",
-          "prompt": "LLM prompt",
-          "keep_alive": "Keep LLM in memory",
-          "camera_entity": "Camera entity"
+          "url": "Server URL"
         }
+      },
+      "confirm": {
+        "title": "Camera AI",
+        "description": "Servern svarade (version {version}). Hittade {camera_count} kameror:\n{cameras}\n\nAlla läggs till automatiskt som entiteter i Home Assistant – lägg till integrationen?"
       }
     },
     "error": {
-      "cannot_connect": "Could not reach the Camera AI server — check the URL and that it is running."
+      "cannot_connect": "Kunde inte nå Camera AI-servern – kontrollera URL:en och att servern körs."
     },
     "abort": {
-      "already_configured": "This server URL is already configured."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Camera AI",
-        "description": "Adjust everything: model, confidence, device, LLM and camera.",
-        "data": {
-          "url": "Server URL",
-          "model": "YOLO model",
-          "confidence": "Confidence",
-          "device": "Inference device",
-          "use_llm": "Use LLM description",
-          "llm_model": "LLM model (Ollama)",
-          "prompt": "LLM prompt",
-          "keep_alive": "Keep LLM in memory",
-          "camera_entity": "Camera entity"
-        }
-      }
+      "already_configured": "Den här server-URL:en är redan konfigurerad."
     }
   }
 }

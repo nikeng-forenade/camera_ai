@@ -29,7 +29,7 @@ Reolink → RTSP sub → Camera worker → YOLO (AI FPS) → MJPEG → Dashboard
 - **Vision-LLM (Ollama) på Arc** via Vulkan (`OLLAMA_VULKAN=1`).
 - **Home Assistant** — MQTT auto-discovery (binary_sensor, sensor, image) + REST.
 - **Larmstyrd LLM-laddning** — LLM laddas när HA-larmet är skarpt, laddas ur när det är av (frigör VRAM).
-- **HACS-integration (v0.8)** — välj modell/konfidens direkt från HA:s UI, plus entiteter (kamera-status, motion, senaste detektion, personer/bilar/djur) som följer serverns **live-status** via polling av `/api/cameras/status`.
+- **HACS-integration (v0.11)** — auto-discovery: ange bara server-URL:en, så skapar komponenten en enhet per serverkamera automatiskt (motion, personer/bilar/djur, senaste detektion, live-bild) – inget manuellt val av kameror/entiteter. Tjänsterna `analyze_camera`, `analyze_url`, `describe_image` (skicka bild till serverns vision-LLM) och `set_config`.
 
 ## Installation (Windows)
 
@@ -230,19 +230,29 @@ HA får `sensor.camera_ai_detection` och eventet `camera_ai_result`
 
 Installera via HACS: **Settings → Custom repositories** → lägg till
 `https://github.com/nikeng-forenade/camera_ai` (kategori **Integration**).
-Lägg sedan till integrationen med server-URL `http://<server-ip>:8000`.
+Lägg sedan till integrationen: ange bara server-URL:en `http://<server-ip>:8000`
+(t.ex. `192.168.1.66:8000`). Komponenten frågar servern och skapar
+**automatiskt** en enhet per serverkamera – inget manuellt val av kameror/
+entiteter:
 
-När integrationen är tillagd kan du under **Integration → Camera AI → Alternativ**
-ändra **alla** runtime-inställningar direkt — de skickas till servern och
-tillämpas omedelbart (ingen omstart krävs):
+- Per kamera: `binary_sensor.camera_ai_<kamera>_motion`, sensorerna
+  `camera_ai_<kamera>_people`, `_vehicles`, `_animals`, `_last_detection` och en
+  kameraentitet `camera.camera_ai_<kamera>_live` (senaste annoterade bilden).
+- Globalt: `sensor.camera_ai_server_status`, `sensor.camera_ai_runtime_config`
+  (modell/konfidens/enhet/LLM på servern) och `sensor.camera_ai_description`
+  (senaste LLM-beskrivning).
 
-- YOLO-modell och konfidens
-- Enhet (`cpu` / `openvino:GPU` / `0`)
-- Använd LLM-beskrivning + LLM-modell (t.ex. `moondream`)
-- **LLM-prompt** (fritext)
-- **Håll LLM i minnet** (`keep_alive`): `-1` = behåll laddad (snabbast), `0` =
-  ladda ur direkt (sparar VRAM), eller antal sekunder
-- Kamera-entitet för `analyze_camera`
+Lägger du till/tar bort en kamera på servern laddas integrationen om
+**automatiskt**. Modell/konfidens/enhet/LLM ändrar du på serverns GUI
+(Inställningar) eller direkt från HA via tjänsten `camera_ai.set_config`
+(modellval: `yolo26n/s/m/l/x.pt` + `yolo11n/s/m/l/x.pt`).
+
+### Skicka en bild till serverns vision-LLM
+
+Tjänsten `camera_ai.describe_image` fotograferar en kamera (`camera_entity`)
+eller hämtar en bild från en URL (`url`) och skickar den till serverns
+vision-LLM för en svensk beskrivning. Resultatet returneras (användbart med
+`response_variable`) och sparas även i `sensor.camera_ai_description`.
 
 Alla värden syns även i sensorn **sensor.camera_ai_runtime_config** (modell,
 konfidens, enhet, prompt, keep_alive, ollama-tillgänglighet).
