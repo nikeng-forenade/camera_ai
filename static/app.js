@@ -1292,6 +1292,8 @@ loadStats();
   }
   if (roiPreviewEl) {
     roiPreviewEl.addEventListener("pointerdown", (e) => {
+      // Klick på knappar/fält (t.ex. ▶ Starta ström) ska inte rita/flytta något
+      if (e.target && e.target.closest && e.target.closest("button, input, select, label, a")) return;
       const on = zoneActive();
       const pos = roiPosOf(e);
       if (!pos) return;
@@ -1362,6 +1364,7 @@ loadStats();
     roiPreviewEl.addEventListener("pointerup", endOp);
     roiPreviewEl.addEventListener("pointercancel", endOp);
     roiPreviewEl.addEventListener("dblclick", (e) => {
+      if (e.target && e.target.closest && e.target.closest("button, input, select, label, a")) return;
       if (filterKind !== "polygon") return;
       const pos = roiPosOf(e);
       if (!pos) return;
