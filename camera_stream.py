@@ -42,26 +42,35 @@ YOLO_ERROR = "error"
 
 
 def _draw_roi_line(img, roi_cfg):
-    """Rita en detektionszon (polygon av punkter) på en BGR-bild om aktiverad.
+    """Rita en detektionszon/linje på en BGR-bild om aktiverad.
 
-    Gamla vågräta linjer omvandlas i ``_roi_cfg`` till en fyrkantszon, så här
-    ritas bara polygoner.
+    ``roi_cfg['legacy_line']`` = en gammal vågrät linje → ritas som en enda
+    linje (ovanför/nedanför). Annars ritas en polygon (ruta/zon) av punkter.
     """
     if not roi_cfg or not roi_cfg.get("roi_enabled"):
+        return img
+    h, w = img.shape[:2]
+    if roi_cfg.get("legacy_line"):
+        y = int(round(float(roi_cfg.get("roi_y", 0.5)) * h))
+        y = min(max(y, 0), h - 1)
+        side = str(roi_cfg.get("roi_side", "above"))
+        color = (255, 60, 60)  # BGR röd-orange
+        cv2.line(img, (0, y), (w, y), color, 2, cv2.LINE_AA)
+        label = "Linje: kollar ovanfor" if side == "above" else "Linje: kollar nedanfor"
+        ty = y - 8 if y > 24 else y + 22
+        cv2.putText(img, label, (10, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
         return img
     pts = roi_cfg.get("points") or []
     if len(pts) < 3:
         return img
     import numpy as np
 
-    h, w = img.shape[:2]
     poly = np.array(
         [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in pts], np.int32
     ).reshape(-1, 1, 2)
     inside = str(roi_cfg.get("mode", "inside")) != "outside"
     color = (80, 230, 120) if inside else (255, 130, 60)  # BGR grön / orange
     cv2.polylines(img, [poly], True, color, 2, cv2.LINE_AA)
-    # markera hörnen med små punkter
     for p in poly.reshape(-1, 2):
         cv2.circle(img, (int(p[0]), int(p[1])), 4, color, -1, cv2.LINE_AA)
     label = "Zon: kolla inuti" if inside else "Zon: kolla utanfor"
@@ -773,10 +782,11 @@ class CameraWorker:
                     self.camera[k] = v
 
     def _roi_cfg(self) -> dict:
-        """Nuvarande detektionszon (polygon av normaliserade punkter).
+        """Nuvarande detektionsfiltrering (linje ELLER polygon-zon).
 
-        Läses varje inferens – ingen omstart. Bakåtkompat: en gammal vågrät
-        linje (roi_enabled/roi_y/roi_side) omvandlas till en fyrkantszon.
+        Läses varje inferens – ingen omstart. En aktiv polygon-zon
+        (zone_enabled + ≥3 punkter) vinner över en gammal vågrät linje
+        (roi_enabled/roi_y/roi_side). legacy_line=True = rita som en enda linje.
         """
         with self._lock:
             c = self.camera
@@ -790,20 +800,21 @@ class CameraWorker:
                         points.append([float(p[0]), float(p[1])])
                     except (TypeError, ValueError, IndexError):
                         continue
-            # Bakåtkompat: gammal linje → fyrkantszon
-            if (not enabled or len(points) < 3) and bool(c.get("roi_enabled")):
+            has_zone = enabled and len(points) >= 3
+            legacy_line = False
+            if not has_zone and bool(c.get("roi_enabled")):
+                legacy_line = True
                 ry = min(1.0, max(0.0, float(c.get("roi_y", 0.5))))
                 if str(c.get("roi_side", "above")) == "above":
                     points = [[0.0, 0.0], [1.0, 0.0], [1.0, ry], [0.0, ry]]
                 else:
                     points = [[0.0, ry], [1.0, ry], [1.0, 1.0], [0.0, 1.0]]
                 mode = "inside"
-                enabled = True
         return {
-            "roi_enabled": enabled and len(points) >= 3,
+            "roi_enabled": has_zone or legacy_line,
             "points": points,
             "mode": mode if mode in ("inside", "outside") else "inside",
-            # legacy-fält (för ev. utritning/logg)
+            "legacy_line": legacy_line,
             "roi_y": float(c.get("roi_y", 0.5)),
             "roi_side": str(c.get("roi_side", "above")),
         }

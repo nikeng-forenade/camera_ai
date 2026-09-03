@@ -234,19 +234,16 @@
           </label>
         </div>
 
-        <!-- Detektionszon (polygon med punkter/hörn) -->
+        <!-- Detektionsfilter: enkel linje ELLER ruta/zon (punkter) -->
         <div class="zone-box" id="roiBox">
           <div class="zone-bar">
             <label class="zone-title">
               <input type="checkbox" id="camZoneEnabled" />
-              <span>🎯 Detektionszon</span>
+              <span>🎯 Detektionsfilter</span>
             </label>
-            <div class="zone-mode">
-              <span class="zone-mode-label">Kolla</span>
-              <select id="camZoneMode">
-                <option value="inside">INUTI zonen</option>
-                <option value="outside">UTANFÖR zonen</option>
-              </select>
+            <div class="zone-kind" id="zoneKind">
+              <button type="button" class="zk" id="camKindLine" data-kind="line">➖ Linje</button>
+              <button type="button" class="zk active" id="camKindPoly" data-kind="polygon">▭ Ruta / Zon</button>
             </div>
           </div>
 
@@ -254,19 +251,46 @@
             <div class="roi-preview" id="roiPreview">
               <div class="roi-empty" id="roiEmpty">
                 <div class="roi-empty-ic">📷</div>
-                <div class="roi-empty-tx">Starta strömmen (▶ på Dashboard) så visas bilden här.<br />Zonen kan ändå ritas på den tomma rutan.</div>
+                <div class="roi-empty-tx">Starta strömmen (▶ på Dashboard) så visas bilden här.<br />Filtret kan ändå ritas på den tomma rutan.</div>
               </div>
               <img id="camRoiImg" alt="Kamera-förhandsvisning" />
               <svg id="camZoneSvg" class="roi-zone-svg" preserveAspectRatio="none"></svg>
+              <div class="roi-linebar" id="roiLineBar" hidden>
+                <div class="roi-line" id="camZoneLine"></div>
+                <div class="roi-badge" id="camZoneBadge">50 %</div>
+              </div>
             </div>
 
             <div class="zone-side">
-              <div class="zone-actions">
-                <button id="btnZoneUndo" class="btn" type="button">↩ Ångra</button>
-                <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa</button>
+              <div class="zone-ctl" id="zonePolyCtl">
+                <div class="zone-mode">
+                  <span class="zone-mode-label">Kolla</span>
+                  <select id="camZoneMode">
+                    <option value="inside">INUTI zonen</option>
+                    <option value="outside">UTANFÖR zonen</option>
+                  </select>
+                </div>
+                <div class="zone-actions">
+                  <button id="btnZoneUndo" class="btn" type="button">↩ Ångra</button>
+                  <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa</button>
+                </div>
+                <div><span class="zone-chip" id="camZoneCount"></span></div>
+                <div class="zone-tip">Dra på bilden för att rita en ruta · dra i hörnen för att flytta · dra inuti rutan för att flytta hela.</div>
               </div>
-              <div><span class="zone-chip" id="camZoneCount"></span></div>
-              <div class="zone-tip" id="roiHint"><b>Klicka</b> i bilden = nytt hörn · <b>dra</b> en punkt = flytta · <b>dubbelklicka</b> = ta bort. Minst 3 hörn = aktiv zon.</div>
+              <div class="zone-ctl" id="zoneLineCtl" hidden>
+                <div class="zone-mode">
+                  <span class="zone-mode-label">Kolla</span>
+                  <select id="camZoneSide">
+                    <option value="above">OVANFÖR linjen</option>
+                    <option value="below">NEDANFÖR linjen</option>
+                  </select>
+                </div>
+                <label class="roi-slider">Linjens höjd
+                  <input type="range" id="camZoneY" min="0" max="100" step="1" value="50" />
+                  <span id="camZoneYVal">50 %</span>
+                </label>
+                <div class="zone-tip">Dra linjen upp/ner på bilden (eller använd reglaget).</div>
+              </div>
             </div>
           </div>
         </div>

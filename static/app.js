@@ -927,17 +927,29 @@ loadStats();
       Math.min(1, Math.max(0, Number(p && p[0]) || 0)),
       Math.min(1, Math.max(0, Number(p && p[1]) || 0)),
     ]);
-    // Bakåtkompat: gammal vågrät linje → fyrkantszon
-    if (c && c.roi_enabled) {
-      const y = Math.min(1, Math.max(0, Number(c.roi_y) || 0));
-      if (String(c.roi_side) === "below") return [[0, y], [1, y], [1, 1], [0, 1]];
-      return [[0, 0], [1, 0], [1, y], [0, y]];
-    }
     return [];
   }
   let zonePts = [];
+  let filterKind = "polygon"; // 'line' | 'polygon'
+  let lineY = 50; // 0..100 (% av bildhöjden)
+  function zoneActive() {
+    return !!($id("camZoneEnabled") && $id("camZoneEnabled").checked);
+  }
+  function setZoneKind(kind) {
+    filterKind = (kind === "line") ? "line" : "polygon";
+    const kt = $id("zoneKind");
+    if (kt) kt.querySelectorAll(".zk").forEach((b) => b.classList.toggle("active", b.dataset.kind === filterKind));
+    const pc = $id("zonePolyCtl"), lc = $id("zoneLineCtl");
+    if (pc) pc.hidden = filterKind !== "polygon";
+    if (lc) lc.hidden = filterKind !== "line";
+    const lb = $id("roiLineBar");
+    if (lb) lb.hidden = !(filterKind === "line" && zoneActive());
+    zoneRender();
+    renderLine();
+  }
   function cameraFormValues() {
-    return {
+    const enabled = zoneActive();
+    const vals = {
       enabled: $id("camEnabled").checked,
       name: ($id("camName").value || "").trim(),
       host: ($id("camHost").value || "").trim(),
@@ -946,15 +958,25 @@ loadStats();
       reconnect: $id("camReconnect").checked,
       reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
       autostart: $id("camAutostart").checked,
-      roi_enabled: false, // ny zon ersätter gamla linjen
-      zone_enabled: !!($id("camZoneEnabled") && $id("camZoneEnabled").checked),
-      zone_points: zonePts.map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]),
-      zone_mode: ($id("camZoneMode") ? $id("camZoneMode").value : "inside"),
     };
+    if (filterKind === "line") {
+      vals.roi_enabled = enabled;
+      vals.roi_y = Math.min(1, Math.max(0, lineY / 100));
+      vals.roi_side = ($id("camZoneSide") ? $id("camZoneSide").value : "above");
+      vals.zone_enabled = false;
+      vals.zone_points = [];
+      vals.zone_mode = "inside";
+    } else {
+      vals.roi_enabled = false;
+      vals.zone_enabled = enabled;
+      vals.zone_points = zonePts.map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]);
+      vals.zone_mode = ($id("camZoneMode") ? $id("camZoneMode").value : "inside");
+    }
+    return vals;
   }
   function zoneRender() {
     const svg = $id("camZoneSvg"), cnt = $id("camZoneCount");
-    const on = !!($id("camZoneEnabled") && $id("camZoneEnabled").checked);
+    const on = filterKind === "polygon" && zoneActive();
     const host = $id("roiPreview");
     if (host) host.querySelectorAll(".roi-pt").forEach((n) => n.remove());
     if (svg) svg.innerHTML = "";
@@ -974,23 +996,45 @@ loadStats();
           d.dataset.i = String(i);
           d.style.left = (p[0] * 100) + "%";
           d.style.top = (p[1] * 100) + "%";
-          d.title = "Punkt " + (i + 1) + " – dra för att flytta, dubbelklicka för att ta bort";
+          d.title = "Hörn " + (i + 1) + " – dra för att flytta, dubbelklicka för att ta bort";
           host.appendChild(d);
         });
       }
     }
     if (cnt) {
-      cnt.textContent = !on ? "Zon av" :
-        (zonePts.length >= 3 ? zonePts.length + " punkter – zon aktiv" : zonePts.length + " punkter (minst 3 för aktiv zon)");
+      cnt.textContent = !on ? "Ruta av" :
+        (zonePts.length >= 3 ? zonePts.length + " hörn – ruta aktiv" : zonePts.length + " hörn (dra en ruta för att börja)");
     }
+    const lb = $id("roiLineBar");
+    if (lb) lb.hidden = !(filterKind === "line" && zoneActive());
+  }
+  function renderLine() {
+    const line = $id("camZoneLine"), val = $id("camZoneYVal"), badge = $id("camZoneBadge");
+    const y = Math.min(100, Math.max(0, lineY));
+    if (line) line.style.top = y + "%";
+    if (val) val.textContent = Math.round(y) + " %";
+    if (badge) {
+      badge.textContent = Math.round(y) + " %";
+      badge.style.top = "calc(" + y + "% - 2px)";
+    }
+    const s = $id("camZoneY");
+    if (s) s.value = Math.round(y);
+    const lb = $id("roiLineBar");
+    if (lb) lb.hidden = !(filterKind === "line" && zoneActive());
   }
   function applyRoiFromCam(c) {
     zonePts = zonePointsFromCam(c);
-    const legacy = !!(c && c.roi_enabled && !(Array.isArray(c.zone_points) && c.zone_points.length >= 3));
-    const eff = !!(c && (c.zone_enabled || legacy));
+    const isZone = !!(c && (c.zone_enabled || (Array.isArray(c.zone_points) && c.zone_points.length >= 3)));
+    const isLine = !!(c && !isZone && c.roi_enabled);
+    filterKind = isLine ? "line" : "polygon";
+    const eff = isZone || isLine;
     if ($id("camZoneEnabled")) $id("camZoneEnabled").checked = eff;
     if ($id("camZoneMode")) $id("camZoneMode").value = (c && c.zone_mode === "outside") ? "outside" : "inside";
+    lineY = Math.min(100, Math.max(0, Number(c && c.roi_y) * 100 || 50));
+    if ($id("camZoneSide")) $id("camZoneSide").value = (c && c.roi_side === "below") ? "below" : "above";
+    setZoneKind(filterKind);
     zoneRender();
+    renderLine();
   }
   function hideRoiPreview() {
     const img = $id("camRoiImg");
@@ -1006,6 +1050,7 @@ loadStats();
       if (img) img.removeAttribute("src");
     }
     zoneRender();
+    renderLine();
   }
   function loadRoiPreview(camId) {
     const img = $id("camRoiImg"), pv = $id("roiPreview");
@@ -1015,7 +1060,7 @@ loadStats();
     img.onerror = () => {
       if (img) img.removeAttribute("src"); // tom-plats-hållaren visas
     };
-    // clean=1 = rå bild utan serverritade boxar/zon – bara din zon ovanpå
+    // clean=1 = rå bild utan serverritade boxar/zon – bara ditt filter ovanpå
     img.src = "/api/live/" + encodeURIComponent(camId) + "/snapshot.jpg?clean=1&ts=" + Date.now();
   }
   function fillCameraForm(c) {
@@ -1170,9 +1215,10 @@ loadStats();
     });
   }
 
-  /* ---- Inställningar: detektionszon (punkter/polygon) ---- */
+  /* ---- Inställningar: detektionsfilter (linje ELLER ruta/zon) ---- */
   const roiPreviewEl = $id("roiPreview");
   let zoneDragIdx = -1;
+  let zoneOp = null; // null | {type:'line'} | {type:'handle',i} | {type:'rect',sx,sy} | {type:'move',sx,sy,base}
   function roiPosOf(e) {
     const r = roiPreviewEl.getBoundingClientRect();
     if (!r.width || !r.height) return null;
@@ -1183,7 +1229,7 @@ loadStats();
   }
   function zoneNearest(nx, ny, tolPx) {
     const r = roiPreviewEl.getBoundingClientRect();
-    const tol2 = (tolPx || 14) * (tolPx || 14);
+    const tol2 = (tolPx || 16) * (tolPx || 16);
     let best = -1, bestD = tol2;
     zonePts.forEach((p, i) => {
       const dx = p[0] * r.width - nx * r.width;
@@ -1193,65 +1239,132 @@ loadStats();
     });
     return best;
   }
-  function zoneAddPoint(nx, ny) {
-    if (zonePts.length >= 24) return;
-    zonePts.push([nx, ny]);
+  function ptInPoly(nx, ny) {
+    let inside = false;
+    for (let i = 0, j = zonePts.length - 1; i < zonePts.length; j = i++) {
+      const xi = zonePts[i][0], yi = zonePts[i][1], xj = zonePts[j][0], yj = zonePts[j][1];
+      if ((yi > ny) !== (yj > ny) && (nx < (xj - xi) * (ny - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  function zoneRect(corners) {
+    if (corners.length !== 4) return;
+    const xs = corners.map((p) => p[0]), ys = corners.map((p) => p[1]);
+    const x1 = Math.min(...xs), x2 = Math.max(...xs), y1 = Math.min(...ys), y2 = Math.max(...ys);
+    if ((x2 - x1) < 0.02 || (y2 - y1) < 0.02) return; // för liten – ignorera
+    zonePts = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
     zoneRender();
   }
-  function zoneMovePoint(i, nx, ny) {
-    if (i >= 0 && i < zonePts.length) { zonePts[i] = [nx, ny]; zoneRender(); }
+  function drawRectPreview(sx, sy, cx, cy) {
+    const svg = $id("camZoneSvg");
+    if (!svg) return;
+    const prev = svg.querySelector(".roi-zone-poly.draft");
+    if (prev) prev.remove();
+    if (cx === sx && cy === sy) return;
+    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    const x1 = Math.min(sx, cx), x2 = Math.max(sx, cx), y1 = Math.min(sy, cy), y2 = Math.max(sy, cy);
+    poly.setAttribute("points", [[x1, y1], [x2, y1], [x2, y2], [x1, y2]].map((p) => (p[0] * 100) + "," + (p[1] * 100)).join(" "));
+    poly.classList.add("roi-zone-poly", "draft");
+    svg.appendChild(poly);
   }
-  function zoneRemovePoint(i) {
-    if (i >= 0 && i < zonePts.length) { zonePts.splice(i, 1); zoneRender(); }
+  function clearDraft() {
+    const svg = $id("camZoneSvg");
+    if (svg) { const d = svg.querySelector(".draft"); if (d) d.remove(); }
+  }
+  if ($id("camKindLine")) {
+    $id("camKindLine").addEventListener("click", () => { setZoneKind("line"); });
+  }
+  if ($id("camKindPoly")) {
+    $id("camKindPoly").addEventListener("click", () => { setZoneKind("polygon"); });
   }
   if ($id("camZoneEnabled")) {
     $id("camZoneEnabled").addEventListener("change", () => {
-      const on = $id("camZoneEnabled").checked;
-      if (on && zonePts.length === 0) {
-        // startzon (hela bilden) – dra sedan hörnen dit du vill
-        zonePts = [[0.05, 0.05], [0.95, 0.05], [0.95, 0.95], [0.05, 0.95]];
-      }
-      zoneRender();
-      if (on && editingId) loadRoiPreview(editingId);
+      if (filterKind === "line") renderLine(); else zoneRender();
+      if (zoneActive() && editingId) loadRoiPreview(editingId);
     });
   }
-  if ($id("camZoneMode")) {
-    $id("camZoneMode").addEventListener("change", zoneRender);
+  if ($id("camZoneMode")) $id("camZoneMode").addEventListener("change", zoneRender);
+  if ($id("camZoneSide")) $id("camZoneSide").addEventListener("change", renderLine);
+  if ($id("camZoneY")) {
+    $id("camZoneY").addEventListener("input", () => { lineY = parseInt($id("camZoneY").value, 10) || 0; renderLine(); });
   }
   if (roiPreviewEl) {
     roiPreviewEl.addEventListener("pointerdown", (e) => {
-      const on = !!($id("camZoneEnabled") && $id("camZoneEnabled").checked);
+      const on = zoneActive();
       const pos = roiPosOf(e);
-      if (!on || !pos) return;
-      if (e.detail > 1) return; // dubbelklick hanteras separat
-      const i = zoneNearest(pos[0], pos[1], 14);
-      if (i >= 0) {
-        zoneDragIdx = i;
+      if (!pos) return;
+      if (filterKind === "line") {
+        if (!on) return;
+        lineY = pos[1] * 100;
+        renderLine();
+        zoneOp = { type: "line" };
         try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
         e.preventDefault();
-      } else {
-        zoneAddPoint(pos[0], pos[1]);
+        return;
       }
+      // Polygon
+      if (e.detail > 1) return; // dubbelklick = ta bort hörn (separat)
+      if (!on && zonePts.length) return; // av → bara visning
+      const i = zoneNearest(pos[0], pos[1], 18);
+      if (i >= 0) {
+        zoneOp = { type: "handle", i };
+        try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+        e.preventDefault();
+        return;
+      }
+      if (zonePts.length >= 3 && ptInPoly(pos[0], pos[1])) {
+        zoneOp = { type: "move", sx: pos[0], sy: pos[1], base: zonePts.map((p) => [p[0], p[1]]) };
+        try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+        e.preventDefault();
+        return;
+      }
+      // Dra för att rita ny ruta
+      zoneOp = { type: "rect", sx: pos[0], sy: pos[1] };
+      drawRectPreview(pos[0], pos[1], pos[0], pos[1]);
+      try { roiPreviewEl.setPointerCapture(e.pointerId); } catch (err) { /* ok */ }
+      e.preventDefault();
     });
     roiPreviewEl.addEventListener("pointermove", (e) => {
-      if (zoneDragIdx < 0) return;
+      if (!zoneOp) return;
       if (roiPreviewEl.hasPointerCapture && !roiPreviewEl.hasPointerCapture(e.pointerId)) return;
       const pos = roiPosOf(e);
-      if (pos) zoneMovePoint(zoneDragIdx, pos[0], pos[1]);
+      if (!pos) return;
+      if (zoneOp.type === "line") {
+        lineY = pos[1] * 100;
+        renderLine();
+      } else if (zoneOp.type === "handle") {
+        zonePts[zoneOp.i] = [pos[0], pos[1]];
+        zoneRender();
+      } else if (zoneOp.type === "move") {
+        const dx = pos[0] - zoneOp.sx, dy = pos[1] - zoneOp.sy;
+        zonePts = zoneOp.base.map((p) => [
+          Math.min(1, Math.max(0, p[0] + dx)),
+          Math.min(1, Math.max(0, p[1] + dy)),
+        ]);
+        zoneRender();
+      } else if (zoneOp.type === "rect") {
+        drawRectPreview(zoneOp.sx, zoneOp.sy, pos[0], pos[1]);
+      }
     });
-    const endDrag = (e) => {
-      zoneDragIdx = -1;
+    const endOp = (e) => {
+      if (zoneOp && zoneOp.type === "rect") {
+        const end = roiPosOf(e);
+        if (end) zoneRect([[zoneOp.sx, zoneOp.sy], [end[0], zoneOp.sy], [end[0], end[1]], [zoneOp.sx, end[1]]]);
+      }
+      clearDraft();
+      zoneOp = null;
       if (roiPreviewEl.releasePointerCapture) {
         try { roiPreviewEl.releasePointerCapture(e.pointerId); } catch (err) { /* ok */ }
       }
     };
-    roiPreviewEl.addEventListener("pointerup", endDrag);
-    roiPreviewEl.addEventListener("pointercancel", endDrag);
+    roiPreviewEl.addEventListener("pointerup", endOp);
+    roiPreviewEl.addEventListener("pointercancel", endOp);
     roiPreviewEl.addEventListener("dblclick", (e) => {
+      if (filterKind !== "polygon") return;
       const pos = roiPosOf(e);
       if (!pos) return;
-      const i = zoneNearest(pos[0], pos[1], 16);
-      if (i >= 0) zoneRemovePoint(i);
+      const i = zoneNearest(pos[0], pos[1], 20);
+      if (i >= 0 && zonePts.length > 3) { zonePts.splice(i, 1); zoneRender(); }
     });
   }
   if ($id("btnZoneUndo")) {
