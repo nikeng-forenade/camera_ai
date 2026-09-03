@@ -17,7 +17,7 @@ from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL
-from homeassistant.core import SUPPORTS_RESPONSE_OPTIONAL, HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -115,13 +115,13 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "analyze_camera",
         _analyze_camera,
-        supports_response=SUPPORTS_RESPONSE_OPTIONAL,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "analyze_url",
         _analyze_url,
-        supports_response=SUPPORTS_RESPONSE_OPTIONAL,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(DOMAIN, "set_config", _set_config)
 
