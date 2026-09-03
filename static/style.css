@@ -58,6 +58,22 @@
   box-shadow: 0 0 4px rgba(0,0,0,0.6);
 }
 .roi-del:hover { background: #ff6b61; }
+/* Zon-färg: grön = Bevaka, röd = Övervaka INTE (0.17) */
+.roi-zone-svg .roi-zone-poly.mask { fill: rgba(255, 60, 60, 0.13); stroke: #ff3b30; }
+.roi-zone-tag {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 3px; z-index: 7;
+  background: rgba(0, 0, 0, 0.6); border: 1px solid var(--border); border-radius: 8px; padding: 2px;
+  white-space: nowrap;
+}
+.roi-zone-tag select {
+  background: #0b0e13; color: var(--text); border: 1px solid var(--border);
+  border-radius: 5px; font-size: 11px; padding: 1px 2px; cursor: pointer; max-width: 118px;
+}
+.roi-zone-tag .roi-del {
+  position: static; margin: 0; transform: none; width: 18px; height: 18px;
+  font-size: 10px; line-height: 1; border-radius: 50%;
+}
 .zone-side { flex: 0 1 250px; min-width: 200px; display: flex; flex-direction: column; gap: 10px; }
 .zone-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .zone-actions .btn { padding: 7px 13px; border-radius: 8px; }

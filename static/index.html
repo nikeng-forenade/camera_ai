@@ -289,10 +289,10 @@
               <div class="zone-ctl" id="zonePolyCtl">
                 <label class="chk zone-enable"><input type="checkbox" id="camZoneEnabled" /> Aktivera zonfilter</label>
                 <div class="zone-mode">
-                  <span class="zone-mode-label">Kolla</span>
-                  <select id="camZoneMode">
-                    <option value="inside">INUTI zonerna</option>
-                    <option value="outside">UTANFÖR zonerna (övervaka INTE)</option>
+                  <span class="zone-mode-label">Ny zon typ</span>
+                  <select id="camZoneNewKind">
+                    <option value="watch">🟢 Bevaka (bara där)</option>
+                    <option value="mask" selected>🔴 Övervaka INTE</option>
                   </select>
                 </div>
                 <div class="zone-actions">
@@ -300,7 +300,7 @@
                   <button id="btnZoneClear" class="btn danger" type="button">✖ Rensa alla</button>
                 </div>
                 <div><span class="zone-chip" id="camZoneCount"></span></div>
-                <div class="zone-tip"><b>Klicka/dra</b> = lägg till en zon (flera) · <b>dra hörn</b> = ändra storlek · <b>dra inuti</b> = flytta · <b>✕</b> = ta bort zon.</div>
+                <div class="zone-tip"><b>Klicka/dra</b> = ny zon · <b>dra hörn</b> = ändra · <b>dra inuti</b> = flytta · välj <b>🟢 Bevaka</b> / <b>🔴 Övervaka INTE</b> per zon.</div>
               </div>
               <div class="zone-ctl" id="zoneLineCtl" hidden>
                 <label class="chk zone-enable"><input type="checkbox" id="camLineEnabled" /> Aktivera linjefilter</label>

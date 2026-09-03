@@ -999,6 +999,8 @@ loadStats();
     return list.map(norm).filter((poly) => poly.length >= 3);
   }
   let zones = [];            // flera zoner: varje zon = [[x,y], ...]
+  let zoneKinds = [];        // per zon: 'watch' (bevaka) | 'mask' (övervaka INTE)
+  let zoneNewKind = "mask"; // typ för nästa zon som ritas (default: övervaka INTE)
   let filterKind = "polygon"; // 'line' | 'polygon'
   let lineY = 50; // 0..100 (% av bildhöjden)
   function zoneActive() {
@@ -1037,32 +1039,36 @@ loadStats();
       roi_enabled: lineActive(),
       roi_y: Math.min(1, Math.max(0, lineY / 100)),
       roi_side: ($id("camZoneSide") ? $id("camZoneSide").value : "above"),
-      // Zoner – oberoende: UTANFÖR = "övervaka INTE dessa"
+      // Zoner – oberoende; varje zon har egen typ: watch (bevaka) / mask (övervaka INTE)
       zone_enabled: !!(zoneActive() && zones.length),
-      zone_mode: ($id("camZoneMode") ? $id("camZoneMode").value : "inside"),
       zone_polys: zones.map((poly) =>
         poly.map((p) => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000])
       ),
+      zone_kinds: zoneKinds.map((k) => (k === "watch" ? "watch" : "mask")),
       zone_points: [],
     };
     return vals;
   }
+  function zoneNewKindVal() {
+    const s = $id("camZoneNewKind");
+    return (s && s.value === "watch") ? "watch" : "mask";
+  }
   function zoneRender() {
     const svg = $id("camZoneSvg"), cnt = $id("camZoneCount");
     const interactive = filterKind === "polygon"; // redigerar zoner just nu
-    const outside = !!($id("camZoneMode") && $id("camZoneMode").value === "outside");
     const showZones = interactive || zoneActive(); // syns när man ritar eller filtret är på
     const host = $id("roiPreview");
-    if (host) host.querySelectorAll(".roi-pt, .roi-del").forEach((n) => n.remove());
+    if (host) host.querySelectorAll(".roi-pt, .roi-del, .roi-zone-tag").forEach((n) => n.remove());
     if (svg) svg.innerHTML = "";
     if (showZones) {
-      zones.forEach((poly) => {
+      zones.forEach((poly, zi) => {
         if (!poly || poly.length < 3) return;
+        const kind = (zoneKinds[zi] === "watch") ? "watch" : "mask";
         if (svg) {
           const p = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
           p.setAttribute("points", poly.map((pt) => (pt[0] * 100) + "," + (pt[1] * 100)).join(" "));
           p.classList.add("roi-zone-poly");
-          if (outside) p.classList.add("outside");
+          if (kind === "mask") p.classList.add("mask"); // röd = övervaka INTE
           svg.appendChild(p);
         }
         if (host && interactive) {
@@ -1077,30 +1083,51 @@ loadStats();
         }
       });
       if (host && interactive) {
-        zones.forEach((poly) => {
+        zones.forEach((poly, zi) => {
           if (!poly || poly.length < 3) return;
           const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
           const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "roi-del";
-          b.title = "Ta bort den här zonen";
-          b.textContent = "✕";
-          b.style.left = (cx * 100) + "%";
-          b.style.top = (cy * 100) + "%";
-          b.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            const idx = zones.indexOf(poly);
-            if (idx >= 0) { zones.splice(idx, 1); zoneRender(); }
+          const kind = (zoneKinds[zi] === "watch") ? "watch" : "mask";
+          const tag = document.createElement("span");
+          tag.className = "roi-zone-tag";
+          tag.style.left = (cx * 100) + "%";
+          tag.style.top = (cy * 100) + "%";
+          const sel = document.createElement("select");
+          sel.title = "Zontyp";
+          const oW = document.createElement("option");
+          oW.value = "watch"; oW.textContent = "🟢 Bevaka";
+          const oM = document.createElement("option");
+          oM.value = "mask"; oM.textContent = "🔴 Övervaka INTE";
+          sel.appendChild(oW); sel.appendChild(oM);
+          sel.value = kind;
+          sel.addEventListener("change", () => {
+            zoneKinds[zi] = sel.value;
+            zoneRender();
           });
-          host.appendChild(b);
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "roi-del";
+          del.title = "Ta bort den här zonen";
+          del.textContent = "✕";
+          del.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (zi >= 0) { zones.splice(zi, 1); zoneKinds.splice(zi, 1); zoneRender(); }
+          });
+          tag.appendChild(sel);
+          tag.appendChild(del);
+          host.appendChild(tag);
         });
       }
     }
     if (cnt) {
-      cnt.textContent = !zoneActive() ? "Zonfilter av"
+      let txt = !zoneActive() ? "Zonfilter av"
         : !zones.length ? "Inga zoner – klicka/dra på bilden"
-        : (zones.length + (zones.length === 1 ? " zon" : " zoner") + " – " + (outside ? "övervakas INTE" : "övervakas"));
+        : zones.length + (zones.length === 1 ? " zon" : " zoner");
+      if (zoneActive() && zones.length) {
+        const nWatch = zoneKinds.filter((k) => k === "watch").length;
+        txt += " · " + nWatch + " bevaka · " + (zones.length - nWatch) + " ignorera";
+      }
+      cnt.textContent = txt;
     }
     updateRoiVisibility();
   }
@@ -1117,10 +1144,15 @@ loadStats();
   function applyRoiFromCam(c) {
     zones = zonePolysFromCam(c);
     const hasGeo = zones.length > 0;
+    // Per-zon-typ: läs zone_kinds; äldre config → zone_mode outside = alla mask
+    const kindsRaw = (c && Array.isArray(c.zone_kinds)) ? c.zone_kinds : [];
+    const legacyMask = !!(c && c.zone_mode === "outside");
+    zoneKinds = zones.map((p, i) =>
+      (kindsRaw[i] === "watch" || kindsRaw[i] === "mask") ? kindsRaw[i] : (legacyMask ? "mask" : "watch")
+    );
     // Oberoende filter: linje (roi_enabled) OCH/ELLER zoner (zone_enabled)
     if ($id("camLineEnabled")) $id("camLineEnabled").checked = !!(c && c.roi_enabled);
     if ($id("camZoneEnabled")) $id("camZoneEnabled").checked = !!(c && c.zone_enabled && hasGeo);
-    if ($id("camZoneMode")) $id("camZoneMode").value = (c && c.zone_mode === "outside") ? "outside" : "inside";
     lineY = Math.min(100, Math.max(0, Number(c && c.roi_y) * 100 || 50));
     if ($id("camZoneSide")) $id("camZoneSide").value = (c && c.roi_side === "below") ? "below" : "above";
     // Välj editor: linje om bara linje finns, annars zonerna
@@ -1356,6 +1388,7 @@ loadStats();
     const x1 = Math.min(...xs), x2 = Math.max(...xs), y1 = Math.min(...ys), y2 = Math.max(...ys);
     if ((x2 - x1) < 0.02 || (y2 - y1) < 0.02) return; // för liten – ignorera
     zones.push([[x1, y1], [x2, y1], [x2, y2], [x1, y2]]);
+    zoneKinds.push(zoneNewKindVal());
     zoneRender();
   }
   function zoneClickBox(cx, cy) {
@@ -1366,6 +1399,7 @@ loadStats();
     const y1 = Math.min(1, Math.max(0, cy - half));
     const y2 = Math.min(1, Math.max(0, cy + half));
     zones.push([[x1, y1], [x2, y1], [x2, y2], [x1, y2]]);
+    zoneKinds.push(zoneNewKindVal());
     zoneRender();
   }
   function drawRectPreview(sx, sy, cx, cy) {
@@ -1398,7 +1432,6 @@ loadStats();
   }
   if ($id("camZoneEnabled")) $id("camZoneEnabled").addEventListener("change", onRoiToggle);
   if ($id("camLineEnabled")) $id("camLineEnabled").addEventListener("change", onRoiToggle);
-  if ($id("camZoneMode")) $id("camZoneMode").addEventListener("change", zoneRender);
   if ($id("camZoneSide")) $id("camZoneSide").addEventListener("change", renderLine);
   if ($id("camZoneY")) {
     $id("camZoneY").addEventListener("input", () => { lineY = parseInt($id("camZoneY").value, 10) || 0; renderLine(); });

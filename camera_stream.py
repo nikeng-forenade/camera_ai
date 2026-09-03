@@ -59,15 +59,16 @@ def _draw_roi_line(img, roi_cfg):
         cv2.line(img, (0, y), (w, y), (255, 60, 60), 2, cv2.LINE_AA)  # BGR röd
     # --- Zonpolygoner ---
     zones = roi_cfg.get("zones") or {}
-    polys = zones.get("polys") or []
-    if zones.get("enabled") and polys:
+    items = zones.get("items") or []
+    if zones.get("enabled") and items:
         import numpy as np
 
-        inside = str(zones.get("mode", "inside")) != "outside"
-        color = (80, 230, 120) if inside else (255, 130, 60)  # BGR grön / orange
-        for raw_p in polys:
+        for it in items:
+            raw_p = it.get("points") or []
             if len(raw_p) < 3:
                 continue
+            # watch = grön (bevaka), mask = röd (övervaka INTE)
+            color = (80, 230, 120) if it.get("kind", "watch") == "watch" else (48, 59, 255)
             poly = np.array(
                 [[int(float(p[0]) * w), int(float(p[1]) * h)] for p in raw_p], np.int32
             ).reshape(-1, 1, 2)
@@ -376,8 +377,7 @@ class CameraWorker:
     "roi_side": "above",
     "zone_enabled": False,
     "zone_polys": [],  # list av polygoner (flera zoner)
-    "zone_points": [],  # äldre format: en enda polygon (migreras vid läsning)
-            "zone_mode": "inside",
+    "zone_kinds": [],  # per zon: 'watch' (bevaka) | 'mask' (ignorera)
         }
 
     @staticmethod
@@ -803,12 +803,10 @@ class CameraWorker:
                 "roi_y": ry,
                 "roi_side": str(c.get("roi_side", "above")),
             }
-            mode = str(c.get("zone_mode", "inside"))
-            polys = self._zone_polys_from_cfg(c)
+            items = self._zone_items_from_cfg(c)
             zones = {
-                "enabled": bool(c.get("zone_enabled")) and len(polys) >= 1,
-                "polys": polys,
-                "mode": mode if mode in ("inside", "outside") else "inside",
+                "enabled": bool(c.get("zone_enabled")) and len(items) >= 1,
+                "items": [{"points": p, "kind": k} for p, k in items],
             }
         return {"line": line, "zones": zones}
 
@@ -826,11 +824,15 @@ class CameraWorker:
                 pts.append([x, y])
         return pts
 
-    def _zone_polys_from_cfg(self, c: dict) -> list:
-        """Alla aktiva zonpolygoner (normaliserade). Äldre zone_points med en
-        enda polygon migreras automatiskt till en lista."""
-        polys: list = []
+    def _zone_items_from_cfg(self, c: dict) -> list:
+        """[(punkter, typ)] för alla zoner (normaliserade).
+
+        Typ per zon: 'watch' (bevaka) eller 'mask' (övervaka INTE). Äldre
+        configs utan zone_kinds migreras från zone_mode: outside → mask,
+        annars watch.
+        """
         raw = c.get("zone_polys")
+        polys: list = []
         if isinstance(raw, list):
             for poly in raw:
                 pts = self._norm_poly(poly)
@@ -840,7 +842,20 @@ class CameraWorker:
             pts = self._norm_poly(c.get("zone_points"))
             if len(pts) >= 3:
                 polys.append(pts)
-        return polys
+        legacy_mask = str(c.get("zone_mode", "inside")) == "outside"
+        kinds_raw = c.get("zone_kinds")
+        items = []
+        for i, poly in enumerate(polys):
+            if (
+                isinstance(kinds_raw, list)
+                and i < len(kinds_raw)
+                and kinds_raw[i] in ("watch", "mask")
+            ):
+                kind = kinds_raw[i]
+            else:
+                kind = "mask" if legacy_mask else "watch"
+            items.append((poly, kind))
+        return items
 
     @staticmethod
     def _point_in_poly(px: float, py: float, poly: list) -> bool:
@@ -886,11 +901,28 @@ class CameraWorker:
         return self._keep_in_polys(dets, [poly], True, width, height)
 
     def _apply_zones(self, dets: list, zones: dict, width: int, height: int) -> list:
-        """Behåll enligt zonerna (union): INUTI = i någon, UTANFÖR = inte i någon."""
-        if not zones.get("enabled"):
+        """Behåll enligt zonerna. 'mask' = i en sådan → släng (övervaka INTE).
+        'watch' = om någon bevaka-zon finns måste detektionen ligga i en av dem.
+        Kombineras (AND) med linjefiltret i processloopen."""
+        if not zones.get("enabled") or not dets or width <= 0 or height <= 0:
             return dets
-        inside_mode = zones.get("mode", "inside") != "outside"
-        return self._keep_in_polys(dets, zones.get("polys") or [], inside_mode, width, height)
+        items = zones.get("items") or []
+        watch = [it["points"] for it in items if it["kind"] == "watch"]
+        mask = [it["points"] for it in items if it["kind"] == "mask"]
+        out = []
+        for d in dets:
+            box = d.get("box")
+            if not box or len(box) < 4:
+                out.append(d)
+                continue
+            cx = ((float(box[0]) + float(box[2])) / 2.0) / float(width)
+            cy = ((float(box[1]) + float(box[3])) / 2.0) / float(height)
+            if any(self._point_in_poly(cx, cy, p) for p in mask):
+                continue  # i en "övervaka INTE"-zon
+            if watch and not any(self._point_in_poly(cx, cy, p) for p in watch):
+                continue  # bevaka-zoner finns men den är inte i någon
+            out.append(d)
+        return out
 
     def update_detect(self, values: dict) -> None:
         with self._lock:
@@ -1064,7 +1096,8 @@ class CameraWorker:
             "roi_side": str(c.get("roi_side", "above")),
             "zone_enabled": bool(c.get("zone_enabled")),
             "zone_points": c.get("zone_points") or [],
-            "zone_polys": self._zone_polys_from_cfg(c),
+            "zone_polys": [p for p, _k in self._zone_items_from_cfg(c)],
+            "zone_kinds": [k for _p, k in self._zone_items_from_cfg(c)],
             "zone_mode": str(c.get("zone_mode", "inside")),
         }
 
@@ -1183,7 +1216,7 @@ _CAMERA_FIELDS = (
     "enabled", "name", "host", "user", "password", "path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
     "roi_enabled", "roi_y", "roi_side",
-    "zone_enabled", "zone_polys", "zone_points", "zone_mode",
+    "zone_enabled", "zone_polys", "zone_kinds", "zone_points", "zone_mode",
 )
 
 

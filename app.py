@@ -760,6 +760,7 @@ class _CameraIn(BaseModel):
     # Detektionszon(er) (en eller flera polygoner av normaliserade punkter)
     zone_enabled: bool | None = None
     zone_polys: list | None = None
+    zone_kinds: list | None = None
     zone_points: list | None = None
     zone_mode: str | None = None
 
@@ -842,6 +843,20 @@ def _roi_normalize(body: dict) -> list:
                     errors.append(f"Zon {i + 1} behöver minst 3 punkter.")
             if body.get("zone_enabled") and not polys:
                 errors.append("Zonen behöver minst 3 punkter för att vara aktiv.")
+            # Per-zon-typ ('watch' = bevaka, 'mask' = övervaka INTE)
+            if "zone_kinds" in body and body.get("zone_kinds") is not None:
+                ksrc = body["zone_kinds"]
+                if not isinstance(ksrc, list):
+                    errors.append("Zone-typerna måste vara en lista ('watch'/'mask').")
+                else:
+                    kinds = []
+                    for i, k in enumerate(ksrc):
+                        if k not in ("watch", "mask"):
+                            errors.append("Varje zon-typ måste vara 'watch' (bevaka) eller 'mask' (övervaka INTE).")
+                            kinds.append("watch")
+                        else:
+                            kinds.append(k)
+                    body["zone_kinds"] = kinds[: len(polys)]
             body["zone_polys"] = polys
             body["zone_points"] = []  # legacy töms – zone_polys är källan
     return errors
