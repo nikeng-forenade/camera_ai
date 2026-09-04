@@ -1082,42 +1082,6 @@ loadStats();
           });
         }
       });
-      if (host && interactive) {
-        zones.forEach((poly, zi) => {
-          if (!poly || poly.length < 3) return;
-          const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
-          const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
-          const kind = (zoneKinds[zi] === "watch") ? "watch" : "mask";
-          const tag = document.createElement("span");
-          tag.className = "roi-zone-tag";
-          tag.style.left = (cx * 100) + "%";
-          tag.style.top = (cy * 100) + "%";
-          const sel = document.createElement("select");
-          sel.title = "Zontyp";
-          const oW = document.createElement("option");
-          oW.value = "watch"; oW.textContent = "🟢 Bevaka";
-          const oM = document.createElement("option");
-          oM.value = "mask"; oM.textContent = "🔴 Övervaka INTE";
-          sel.appendChild(oW); sel.appendChild(oM);
-          sel.value = kind;
-          sel.addEventListener("change", () => {
-            zoneKinds[zi] = sel.value;
-            zoneRender();
-          });
-          const del = document.createElement("button");
-          del.type = "button";
-          del.className = "roi-del";
-          del.title = "Ta bort den här zonen";
-          del.textContent = "✕";
-          del.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            if (zi >= 0) { zones.splice(zi, 1); zoneKinds.splice(zi, 1); zoneRender(); }
-          });
-          tag.appendChild(sel);
-          tag.appendChild(del);
-          host.appendChild(tag);
-        });
-      }
     }
     if (cnt) {
       let txt = !zoneActive() ? "Zonfilter av"
