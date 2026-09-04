@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-04
+- Kamerastatus: Dashboard visar nu ålder på senaste bild och YOLO-körning samt reconnect-antal/tid per kamera.
 - Eventhistorik: Android-vyn visar laddnings-/felstatus, senaste uppdatering och uppdateras automatiskt när Historik är öppen.
 - Eventhistorik: stabila event-ID:n, trådsäker åtkomst och atomisk filskrivning minskar risken för korrupt historik.
 - Home Assistant: nya sensorer visar antal event senaste timmen och senaste eventets sammanfattning.

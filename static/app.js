@@ -825,6 +825,9 @@ loadStats();
         ["Video FPS (in)", (s.source_fps || 0).toFixed(1)],
         ["Display FPS", (s.display_fps || 0).toFixed(1) + " (mål " + s.target_display_fps + ")"],
         ["Upplösning", s.resolution || "—"],
+        ["Senaste bild", ageText(s.last_frame_age)],
+        ["Senaste YOLO", ageText(s.last_inference_age)],
+        ["Reconnect", s.reconnect_count ? s.reconnect_count + " · " + fmtClock(s.last_reconnect_ts) : "0"],
         ["JPEG-kvalitet", String(s.jpeg_quality)],
         ["Upptid", (s.uptime || 0) + " s"],
       ];
@@ -886,12 +889,19 @@ loadStats();
     return new Date(ts * 1000).toLocaleTimeString("sv-SE");
   }
 
+  function ageText(age) {
+    if (age == null) return "—";
+    if (age < 2) return "nu";
+    if (age < 60) return Math.round(age) + " s sedan";
+    return Math.round(age / 60) + " min sedan";
+  }
+
   // Översikt: ALLA kameror med ren status (ingen video). Rad = klickbar.
   function renderAllCams(cams) {
     const tbody = allCamsTable ? allCamsTable.querySelector("tbody") : null;
     if (!tbody) return;
     if (!cams || !cams.length) {
-      tbody.innerHTML = `<tr><td colspan="12" class="empty">Inga kameror konfigurerade.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="15" class="empty">Inga kameror konfigurerade.</td></tr>`;
       return;
     }
     tbody.innerHTML = cams.map((c) => {
@@ -908,6 +918,10 @@ loadStats();
       const evTxt = c.last_event
         ? escapeHtml(c.last_event) + (c.last_event_ts ? " · " + fmtClock(c.last_event_ts) : "")
         : "—";
+      const ageTxt = (age) => age == null ? "—" : age < 2 ? "nu" : age < 60 ? Math.round(age) + " s sedan" : Math.round(age / 60) + " min sedan";
+      const frameTxt = ageTxt(c.last_frame_age);
+      const inferenceTxt = ageTxt(c.last_inference_age);
+      const reconnectTxt = c.reconnect_count ? `${c.reconnect_count} · ${fmtClock(c.last_reconnect_ts)}` : "0";
       const device = (c.actual_device || c.configured_device || "—") + (c.gpu_fallback ? " ⚠" : "");
       const td = (txt, extra) => `<td class="${extra || ""}">${txt}</td>`;
       return `<tr data-cam="${escapeHtml(c.camera_id)}" class="allcams-row">
@@ -921,7 +935,10 @@ loadStats();
         ${td(escapeHtml(c.resolution || "—"))}
         ${td(nowTxt)}
         ${td(fmtClock(c.last_detection_ts))}
+        ${td(frameTxt, c.last_frame_age != null && c.last_frame_age > 10 ? "metric-warn" : "")}
+        ${td(inferenceTxt, c.last_inference_age != null && c.last_inference_age > 10 ? "metric-warn" : "")}
         ${td(evTxt)}
+        ${td(escapeHtml(reconnectTxt), c.reconnect_count ? "metric-warn" : "")}
         ${td((c.uptime || 0) + " s")}
       </tr>`;
     }).join("");

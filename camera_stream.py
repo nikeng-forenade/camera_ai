@@ -332,6 +332,9 @@ class CameraWorker:
         self.source_codec: str | None = None
         self.last_frame_ts: float = 0.0
         self.last_detection_ts: float = 0.0
+        self.last_inference_ts: float = 0.0
+        self.last_reconnect_ts: float = 0.0
+        self.reconnect_count: int = 0
         self.inference_ms: float = 0.0  # EMA
         self._raw_frame = None
         self._raw_ts = 0.0
@@ -546,6 +549,7 @@ class CameraWorker:
                     f"{self.resolution[0]}x{self.resolution[1]}"
                     f"{(' · ' + self.source_codec) if self.source_codec else ''}",
                 )
+                self.error = None
                 self._read_loop(cap)
                 # Här hamnar vi när strömmen tappats
                 if not self._stop.is_set():
@@ -564,6 +568,8 @@ class CameraWorker:
                 return
             # Reconnect med väntetid (ingen busy-loop)
             if cfg["reconnect"]:
+                self.reconnect_count += 1
+                self.last_reconnect_ts = time.time()
                 self._set_state(
                     CAM_RECONNECTING,
                     f"Återansluter om {cfg['reconnect_delay']} s …",
@@ -645,6 +651,7 @@ class CameraWorker:
                         "conf": live["show_conf"],
                     },
                 )
+                self.last_inference_ts = time.time()
                 last_ai = now
                 ai_ran_for_ts = raw_ts
                 if res["error"]:
@@ -1136,6 +1143,9 @@ class CameraWorker:
             resolution = self.resolution
             last_frame = self.last_frame_ts
             last_det = self.last_detection_ts
+            last_inference = self.last_inference_ts
+            last_reconnect = self.last_reconnect_ts
+            reconnect_count = self.reconnect_count
             inference = self.inference_ms
             boxes = list(self._boxes)
         cfg = self.analyzer
@@ -1189,7 +1199,11 @@ class CameraWorker:
             "detection_counts": counts,
             "last_frame_ts": last_frame or None,
             "last_detection_ts": last_det or None,
+            "last_inference_ts": last_inference or None,
+            "last_inference_age": round(time.time() - last_inference, 1) if last_inference else None,
             "last_frame_age": round(time.time() - last_frame, 1) if last_frame else None,
+            "last_reconnect_ts": last_reconnect or None,
+            "reconnect_count": reconnect_count,
             "uptime": round(time.time() - self._started_ts),
             "show_boxes": bool(live["show_boxes"]),
             "show_labels": bool(live["show_labels"]),

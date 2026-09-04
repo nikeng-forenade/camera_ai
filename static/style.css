@@ -286,8 +286,11 @@ input[type="range"] { accent-color: var(--accent); }
   .allcams-table td:nth-child(8)::before { content: "Upplösning"; }
   .allcams-table td:nth-child(9)::before { content: "Detekterar nu"; }
   .allcams-table td:nth-child(10)::before { content: "Senaste detektion"; }
-  .allcams-table td:nth-child(11)::before { content: "HA-event"; }
-  .allcams-table td:nth-child(12)::before { content: "Upptid"; }
+  .allcams-table td:nth-child(11)::before { content: "Senaste bild"; }
+  .allcams-table td:nth-child(12)::before { content: "Senaste YOLO"; }
+  .allcams-table td:nth-child(13)::before { content: "HA-event"; }
+  .allcams-table td:nth-child(14)::before { content: "Reconnect"; }
+  .allcams-table td:nth-child(15)::before { content: "Upptid"; }
 }
 
 /* ---- Detektionsfilter: linje & zoner oberoende (0.16) ---- */
