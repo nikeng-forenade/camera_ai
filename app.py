@@ -89,6 +89,7 @@ def _live_event_publish(payload: dict) -> None:
             print(f"[event] kunde inte spara snapshot: {exc}")
         if kind == "event":
             EVENT_LOG.append({
+                "id": uuid.uuid4().hex,
                 "ts": payload.get("ts", time.time()),
                 "camera": payload.get("camera_name") or "Kamera",
                 "classes": payload.get("classes") or [],
@@ -98,7 +99,13 @@ def _live_event_publish(payload: dict) -> None:
             })
             try:
                 EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-                EVENT_LOG_PATH.write_text(json.dumps(list(EVENT_LOG), ensure_ascii=False, indent=2), encoding="utf-8")
+                with EVENT_LOG_LOCK:
+                    tmp_path = EVENT_LOG_PATH.with_suffix(".json.tmp")
+                    tmp_path.write_text(
+                        json.dumps(list(EVENT_LOG), ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    tmp_path.replace(EVENT_LOG_PATH)
             except OSError as exc:  # noqa: BLE001 - loggen får inte stoppa eventet
                 print(f"[event] kunde inte spara historik: {exc}")
     try:
@@ -129,6 +136,7 @@ RUNTIME = {
 # In-memory analysis history for stats / web GUI (keeps the last N results)
 HISTORY: deque = deque(maxlen=50)
 EVENT_LOG_PATH = config.BASE_DIR / "data" / "events.json"
+EVENT_LOG_LOCK = threading.Lock()
 
 
 def _load_event_log() -> deque:
