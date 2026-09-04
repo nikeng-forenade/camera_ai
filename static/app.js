@@ -1054,7 +1054,7 @@ loadStats();
     return (s && s.value === "watch") ? "watch" : "mask";
   }
   function zoneRender() {
-    const svg = $id("camZoneSvg"), cnt = $id("camZoneCount");
+    const svg = $id("camZoneSvg"), cnt = $id("camZoneCount"), mobileList = $id("camZoneMobileList");
     const interactive = filterKind === "polygon"; // redigerar zoner just nu
     const showZones = interactive || zoneActive(); // syns när man ritar eller filtret är på
     const host = $id("roiPreview");
@@ -1128,6 +1128,29 @@ loadStats();
         txt += " · " + nWatch + " bevaka · " + (zones.length - nWatch) + " ignorera";
       }
       cnt.textContent = txt;
+    }
+    if (mobileList) {
+      mobileList.innerHTML = "";
+      zones.forEach((poly, zi) => {
+        if (!poly || poly.length < 3) return;
+        const row = document.createElement("div");
+        row.className = "zone-mobile-row";
+        const label = document.createElement("span");
+        label.textContent = "Zon " + (zi + 1);
+        const sel = document.createElement("select");
+        sel.title = "Zontyp för zon " + (zi + 1);
+        sel.innerHTML = '<option value="watch">🟢 Bevaka</option><option value="mask">🔴 Övervaka INTE</option>';
+        sel.value = zoneKinds[zi] === "watch" ? "watch" : "mask";
+        sel.addEventListener("change", () => { zoneKinds[zi] = sel.value; zoneRender(); });
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn danger";
+        del.title = "Ta bort zon " + (zi + 1);
+        del.textContent = "✕";
+        del.addEventListener("click", () => { zones.splice(zi, 1); zoneKinds.splice(zi, 1); zoneRender(); });
+        row.append(label, sel, del);
+        mobileList.appendChild(row);
+      });
     }
     updateRoiVisibility();
   }
