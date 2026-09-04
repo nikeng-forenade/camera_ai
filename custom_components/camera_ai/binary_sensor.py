@@ -28,7 +28,7 @@ async def async_setup_entry(
 
 
 class CameraAIMotionSensor(CameraAICameraEntity, BinarySensorEntity):
-    """ON när person/bil/djur detekteras live på kameran."""
+    """ON när ett person-, djur- eller fordonsobjekt flyttar sig."""
 
     _attr_device_class = BinarySensorDeviceClass.MOTION
     _attr_icon = "mdi:motion-sensor"
@@ -41,7 +41,7 @@ class CameraAIMotionSensor(CameraAICameraEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         cam = self.camera()
-        return bool(cam and cam.get("detections"))
+        return bool(cam and (cam.get("last_frame_age") or 0) <= 10 and cam.get("moving"))
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -51,5 +51,7 @@ class CameraAIMotionSensor(CameraAICameraEntity, BinarySensorEntity):
             "camera_name": cam.get("camera_name") or self._cam_name,
             "camera_state": cam.get("camera_state"),
             "stream_active": cam.get("stream_active"),
+            "last_frame_age": cam.get("last_frame_age"),
             "detection_counts": cam.get("detection_counts") or {},
+            "moving_counts": cam.get("moving_counts") or {},
         }

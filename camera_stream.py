@@ -339,6 +339,7 @@ class CameraWorker:
         self._raw_frame = None
         self._raw_ts = 0.0
         self._boxes: list[dict] = []      # senaste YOLO-detektioner
+        self._moving_boxes: list[dict] = []
         self._boxes_ts = 0.0
         self._jpeg = None
         self._jpeg_v = 0
@@ -420,6 +421,29 @@ class CameraWorker:
             for c in (classes or "").split(",")
             if c.strip()
         }
+
+    @staticmethod
+    def _mark_moving(detections: list[dict], previous: list[dict], width: int, height: int) -> list[dict]:
+        """Markera objekt som flyttat sig mellan två inferenser."""
+        threshold = max(12.0, (width * width + height * height) ** 0.5 * 0.015)
+        previous_centers = []
+        for item in previous:
+            box = item.get("box") or []
+            if len(box) >= 4:
+                previous_centers.append((item.get("class"), (float(box[0]) + float(box[2])) / 2, (float(box[1]) + float(box[3])) / 2))
+        marked = []
+        for item in detections:
+            box = item.get("box") or []
+            moving = True
+            if len(box) >= 4:
+                cx = (float(box[0]) + float(box[2])) / 2
+                cy = (float(box[1]) + float(box[3])) / 2
+                same_class = [(px, py) for cls, px, py in previous_centers if cls == item.get("class")]
+                moving = not same_class or min(((cx - px) ** 2 + (cy - py) ** 2) ** 0.5 for px, py in same_class) >= threshold
+            copy = dict(item)
+            copy["moving"] = moving
+            marked.append(copy)
+        return marked
 
     def _cfg(self) -> dict:
         with self._lock:
@@ -677,7 +701,11 @@ class CameraWorker:
                     if roi["zones"]["enabled"]:
                         kept = self._apply_zones(kept, roi["zones"], raw.shape[1], raw.shape[0])
                     with self._lock:
+                        previous = list(self._boxes)
+                    kept = self._mark_moving(kept, previous, raw.shape[1], raw.shape[0])
+                    with self._lock:
                         self._boxes = kept
+                        self._moving_boxes = [item for item in kept if item.get("moving")]
                         self._boxes_ts = now
                         if kept:
                             self.last_detection_ts = now
@@ -1148,6 +1176,7 @@ class CameraWorker:
             reconnect_count = self.reconnect_count
             inference = self.inference_ms
             boxes = list(self._boxes)
+            moving_boxes = list(self._moving_boxes)
         cfg = self.analyzer
         configured_device = getattr(cfg, "device", None)
         actual_device = getattr(cfg, "last_device", None) or configured_device
@@ -1158,6 +1187,10 @@ class CameraWorker:
         for d in boxes:
             c = d.get("class", "?")
             counts[c] = counts.get(c, 0) + 1
+        moving_counts: dict[str, int] = {}
+        for d in moving_boxes:
+            c = d.get("class", "?")
+            moving_counts[c] = moving_counts.get(c, 0) + 1
         top = sorted(
             ({"class": d.get("class"), "confidence": d.get("confidence", 0.0)} for d in boxes),
             key=lambda d: d["confidence"],
@@ -1197,6 +1230,8 @@ class CameraWorker:
             "live_enabled": bool(live["enabled"]),
             "detections": top,
             "detection_counts": counts,
+            "moving": bool(moving_boxes),
+            "moving_counts": moving_counts,
             "last_frame_ts": last_frame or None,
             "last_detection_ts": last_det or None,
             "last_inference_ts": last_inference or None,
