@@ -552,7 +552,10 @@ def get_history(limit: int = 20):
 def get_events(limit: int = 50):
     """Senaste HA-detektionerna, newest first."""
     limit = min(50, max(1, limit))
-    return list(EVENT_LOG)[-limit:][::-1]
+    response = JSONResponse(list(EVENT_LOG)[-limit:][::-1])
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/api/stats")

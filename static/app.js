@@ -534,7 +534,9 @@ async function loadEvents() {
   const box = document.getElementById("eventLogBox");
   if (!box) return;
   try {
-    const events = await fetch("/api/events?limit=50").then((r) => r.json());
+    const response = await fetch("/api/events?limit=50", { cache: "no-store" });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const events = await response.json();
     if (!events.length) {
       box.innerHTML = '<p class="empty">Inga HA-event ännu.</p>';
       return;

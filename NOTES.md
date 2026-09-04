@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-04
+- Eventhistorik: Android-refresh tvingar nu fram aktuella event genom att kringgå klient- och servercache.
 - Version `0.17.5`: beständig logg för de 50 senaste HA-detektionseventen med kamera, tid, klasser och sammanfattning.
 - HA-eventlogg: sparar de senaste 50 live-detektionerna i `data/events.json` och visar dem under Historik.
 - Version `0.17.4`: visar tydliga `ZON 1`, `ZON 2`-etiketter i rutornas övre vänstra hörn och under pågående dragning.
