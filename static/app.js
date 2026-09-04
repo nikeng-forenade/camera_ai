@@ -1070,17 +1070,21 @@ loadStats();
           p.classList.add("roi-zone-poly");
           if (kind === "mask") p.classList.add("mask"); // röd = övervaka INTE
           svg.appendChild(p);
-          const cx = poly.reduce((sum, point) => sum + point[0], 0) / poly.length * 100;
-          const cy = poly.reduce((sum, point) => sum + point[1], 0) / poly.length * 100;
+          const minX = Math.min(...poly.map((point) => point[0])) * 100;
+          const minY = Math.min(...poly.map((point) => point[1])) * 100;
           const label = document.createElementNS("http://www.w3.org/2000/svg", "g");
           label.classList.add("roi-zone-label", kind);
-          label.setAttribute("transform", "translate(" + cx + " " + cy + ")");
-          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-          circle.setAttribute("r", "4.2");
+          label.setAttribute("transform", "translate(" + Math.min(86, Math.max(7, minX + 7)) + " " + Math.min(93, Math.max(7, minY + 7)) + ")");
+          const plate = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          plate.setAttribute("x", "-7");
+          plate.setAttribute("y", "-5");
+          plate.setAttribute("width", "14");
+          plate.setAttribute("height", "10");
+          plate.setAttribute("rx", "2");
           const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-          text.setAttribute("y", "1.5");
-          text.textContent = String(zi + 1);
-          label.append(circle, text);
+          text.setAttribute("y", "1.3");
+          text.textContent = "ZON " + (zi + 1);
+          label.append(plate, text);
           svg.appendChild(label);
         }
         if (host && interactive) {
@@ -1416,10 +1420,19 @@ loadStats();
     poly.setAttribute("points", [[x1, y1], [x2, y1], [x2, y2], [x1, y2]].map((p) => (p[0] * 100) + "," + (p[1] * 100)).join(" "));
     poly.classList.add("roi-zone-poly", "draft");
     svg.appendChild(poly);
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    label.classList.add("roi-zone-label", "draft");
+    label.setAttribute("transform", "translate(" + Math.min(86, Math.max(7, (Math.min(sx, cx) * 100) + 7)) + " " + Math.min(93, Math.max(7, (Math.min(sy, cy) * 100) + 7)) + ")");
+    const plate = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    plate.setAttribute("x", "-7"); plate.setAttribute("y", "-5"); plate.setAttribute("width", "14"); plate.setAttribute("height", "10"); plate.setAttribute("rx", "2");
+    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    text.setAttribute("y", "1.3"); text.textContent = "ZON " + (zones.length + 1);
+    label.append(plate, text);
+    svg.appendChild(label);
   }
   function clearDraft() {
     const svg = $id("camZoneSvg");
-    if (svg) { const d = svg.querySelector(".draft"); if (d) d.remove(); }
+    if (svg) svg.querySelectorAll(".draft").forEach((draft) => draft.remove());
   }
   if ($id("camKindLine")) {
     $id("camKindLine").addEventListener("click", () => { setZoneKind("line"); });

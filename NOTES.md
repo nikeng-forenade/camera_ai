@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-04
+- Version `0.17.4`: visar tydliga `ZON 1`, `ZON 2`-etiketter i rutornas övre vänstra hörn och under pågående dragning.
 - Version `0.17.3`: tydligare zonnummer direkt på kamerabilden.
 - Version `0.17.2`: numrerade och färgkodade zonmarkörer i mobilredigeraren.
 - Version `0.17.1`: tar bort den flytande zonkontrollen från bildytan helt.

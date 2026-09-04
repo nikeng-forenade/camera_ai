@@ -51,9 +51,10 @@
 .roi-zone-svg .roi-zone-poly.outside { fill: rgba(255, 150, 60, 0.12); stroke: #ff963c; }
 .roi-pt { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; border: 3px solid #50e678; box-shadow: 0 1px 6px rgba(0,0,0,0.7); cursor: move; z-index: 5; }
 .roi-zone-label { pointer-events: none; }
-.roi-zone-label circle { fill: #1f6feb; stroke: #fff; stroke-width: 0.9; vector-effect: non-scaling-stroke; }
-.roi-zone-label.mask circle { fill: #d93636; }
-.roi-zone-label text { fill: #fff; font-size: 3.4px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+.roi-zone-label rect { fill: #1f6feb; stroke: #fff; stroke-width: 0.9; vector-effect: non-scaling-stroke; }
+.roi-zone-label.mask rect { fill: #d93636; }
+.roi-zone-label.draft rect { fill: #59636f; }
+.roi-zone-label text { fill: #fff; font-size: 3.1px; font-weight: 800; text-anchor: middle; pointer-events: none; letter-spacing: 0; }
 .roi-del {
   position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px;
   border-radius: 50%; background: #f85149; color: #fff; border: 1px solid rgba(255,255,255,0.4);
