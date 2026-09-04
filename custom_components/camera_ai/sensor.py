@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -27,6 +29,8 @@ async def async_setup_entry(
         CameraAIStatusSensor(coordinator, entry),
         CameraAIRuntimeConfigSensor(coordinator, entry),
         CameraAIDescriptionSensor(coordinator, entry),
+        CameraAIEventCountSensor(coordinator, entry),
+        CameraAILastEventSensor(coordinator, entry),
     ]
     for cam in server_cameras(coordinator.data):
         if not cam.get("camera_id"):
@@ -125,6 +129,56 @@ class CameraAIDescriptionSensor(CameraAIServerEntity, SensorEntity):
             return str(desc)
         summary = (data.get("result") or {}).get("summary")
         return summary or "Inget"
+
+
+def _events(coordinator) -> list[dict]:
+    return [event for event in ((coordinator.data or {}).get("events") or []) if isinstance(event, dict)]
+
+
+class CameraAIEventCountSensor(CameraAIServerEntity, SensorEntity):
+    """Antal detektionsevent från den senaste timmen."""
+
+    _attr_icon = "mdi:bell-badge-outline"
+    _attr_native_unit_of_measurement = "event"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_events_last_hour"
+        self._attr_name = "Events last hour"
+
+    @property
+    def native_value(self) -> int:
+        cutoff = datetime.now(timezone.utc).timestamp() - 3600
+        return sum(float(event.get("ts") or 0) >= cutoff for event in _events(self.coordinator))
+
+
+class CameraAILastEventSensor(CameraAIServerEntity, SensorEntity):
+    """Senaste eventets sammanfattning med tidsstämpel som attribut."""
+
+    _attr_icon = "mdi:bell-outline"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_last_event"
+        self._attr_name = "Last event"
+
+    @property
+    def native_value(self) -> str:
+        events = _events(self.coordinator)
+        return str(events[0].get("summary") or "Ny detektion") if events else "Inget"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        events = _events(self.coordinator)
+        if not events:
+            return {"event_id": None, "timestamp": None, "camera": None}
+        event = events[0]
+        return {
+            "event_id": event.get("id"),
+            "timestamp": event.get("ts"),
+            "camera": event.get("camera"),
+            "classes": event.get("classes") or [],
+        }
 
 
 class CameraAILastDetectionSensor(CameraAICameraEntity, SensorEntity):

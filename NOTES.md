@@ -1,6 +1,11 @@
 # Ändringsnoteringar
 
 ## 2026-09-04
+- Eventhistorik: Android-vyn visar laddnings-/felstatus, senaste uppdatering och uppdateras automatiskt när Historik är öppen.
+- Eventhistorik: stabila event-ID:n, trådsäker åtkomst och atomisk filskrivning minskar risken för korrupt historik.
+- Home Assistant: nya sensorer visar antal event senaste timmen och senaste eventets sammanfattning.
+- Mobilvy: kamerastatusen visas som lättlästa kort på små skärmar.
+- Tester: grundtester för event-API:ts sortering, limit och cache-headrar tillagda.
 - Eventhistorik: Android-refresh tvingar nu fram aktuella event genom att kringgå klient- och servercache.
 - Version `0.17.5`: beständig logg för de 50 senaste HA-detektionseventen med kamera, tid, klasser och sammanfattning.
 - HA-eventlogg: sparar de senaste 50 live-detektionerna i `data/events.json` och visar dem under Historik.

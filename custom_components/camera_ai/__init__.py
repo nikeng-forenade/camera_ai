@@ -109,6 +109,12 @@ class CameraAICoordinator(DataUpdateCoordinator[dict]):
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(f"Camera AI unreachable: {err}") from err
 
+        try:
+            events = await self.client.events()
+        except Exception as err:  # noqa: BLE001 - historik är diagnostik, inte kärnstatus
+            _LOGGER.debug("Kunde inte hämta Camera AI-eventhistorik: %s", err)
+            events = list((self.data or {}).get("events") or [])
+
         cams = cam_st.get("cameras") or []
         ids = {str(c.get("camera_id")) for c in cams if c.get("camera_id")}
         # Kamera tillagd/borttagen på servern → skapa/ta bort entiteter genom en
@@ -126,6 +132,7 @@ class CameraAICoordinator(DataUpdateCoordinator[dict]):
         data["config"] = cfg
         data["cameras"] = cams
         data["camera_default"] = cam_st.get("default")
+        data["events"] = events
         return data
 
 

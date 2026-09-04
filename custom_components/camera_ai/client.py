@@ -55,6 +55,14 @@ class CameraAIClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def events(self, limit: int = 50) -> list[dict]:
+        """Senaste detektionseventen för historik och diagnostik."""
+        resp = await self._session.get(
+            f"{self.url}/api/events", params={"limit": limit}, timeout=10
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def analyze_file(
         self,
         image_path: Path,
