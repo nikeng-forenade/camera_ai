@@ -530,15 +530,34 @@ async function loadStats() {
 
 document.getElementById("statsBtn").addEventListener("click", () => { loadStats(); loadEvents(); });
 
+let eventRefreshInFlight = false;
+let eventRefreshTimer = null;
+
+function setEventRefreshState(text, isError = false) {
+  const meta = document.getElementById("eventRefreshMeta");
+  if (meta) {
+    meta.textContent = text;
+    meta.classList.toggle("err", isError);
+  }
+}
+
 async function loadEvents() {
   const box = document.getElementById("eventLogBox");
-  if (!box) return;
+  const button = document.getElementById("eventsBtn");
+  if (!box || eventRefreshInFlight) return;
+  eventRefreshInFlight = true;
+  if (button) {
+    button.disabled = true;
+    button.classList.add("is-loading");
+  }
+  setEventRefreshState("Uppdaterar…");
   try {
     const response = await fetch("/api/events?limit=50", { cache: "no-store" });
     if (!response.ok) throw new Error("HTTP " + response.status);
     const events = await response.json();
     if (!events.length) {
       box.innerHTML = '<p class="empty">Inga HA-event ännu.</p>';
+      setEventRefreshState("Uppdaterad " + new Date().toLocaleTimeString("sv-SE"));
       return;
     }
     box.innerHTML = events.map((event) => {
@@ -552,8 +571,16 @@ async function loadEvents() {
         ${detections ? `<div class="event-log-detections">${detections}</div>` : ""}</div>
       </article>`;
     }).join("");
+    setEventRefreshState("Uppdaterad " + new Date().toLocaleTimeString("sv-SE"));
   } catch (e) {
     box.innerHTML = '<p class="empty">Kunde inte hämta eventhistorik.</p>';
+    setEventRefreshState("Kunde inte uppdatera", true);
+  } finally {
+    eventRefreshInFlight = false;
+    if (button) {
+      button.disabled = false;
+      button.classList.remove("is-loading");
+    }
   }
 }
 
@@ -592,13 +619,19 @@ loadStats();
   function showView(name) {
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
-    if (name === "historik") loadStats();
+    if (name === "historik") {
+      loadStats();
+      loadEvents();
+    }
     window.scrollTo({ top: 0 });
   }
   document.querySelectorAll(".tab").forEach((b) =>
     b.addEventListener("click", () => showView(b.dataset.view))
   );
   window.__showView = showView;
+  eventRefreshTimer = setInterval(() => {
+    if (document.getElementById("view-historik")?.classList.contains("active")) loadEvents();
+  }, 30000);
 
   /* ---- Referenser ---- */
   const liveImg = $id("liveImg");
