@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-04
+- HACS v0.17.6: Motion-entiteten uppdaterad till rörelsebaserad status för människor, djur och fordon.
 - HACS: Motion räknar nu faktisk förflyttning av människor, djur och fordon mellan bildrutor; närvaroräknarna är oförändrade.
 - Kamerastatus: Dashboard visar nu ålder på senaste bild och YOLO-körning samt reconnect-antal/tid per kamera.
 - Eventhistorik: Android-vyn visar laddnings-/felstatus, senaste uppdatering och uppdateras automatiskt när Historik är öppen.
