@@ -1080,6 +1080,15 @@ loadStats();
             d.title = "Hörn – dra för att ändra storlek, dubbelklicka för att ta bort";
             host.appendChild(d);
           });
+          const cx = poly.reduce((sum, point) => sum + point[0], 0) / poly.length;
+          const cy = poly.reduce((sum, point) => sum + point[1], 0) / poly.length;
+          const marker = document.createElement("span");
+          marker.className = "roi-zone-number " + kind;
+          marker.textContent = String(zi + 1);
+          marker.title = "Zon " + (zi + 1) + (kind === "watch" ? " – Bevaka" : " – Övervaka INTE");
+          marker.style.left = (cx * 100) + "%";
+          marker.style.top = (cy * 100) + "%";
+          host.appendChild(marker);
         }
       });
     }
@@ -1098,7 +1107,11 @@ loadStats();
       zones.forEach((poly, zi) => {
         if (!poly || poly.length < 3) return;
         const row = document.createElement("div");
-        row.className = "zone-mobile-row";
+        const kind = zoneKinds[zi] === "watch" ? "watch" : "mask";
+        row.className = "zone-mobile-row " + kind;
+        const number = document.createElement("span");
+        number.className = "zone-mobile-number";
+        number.textContent = String(zi + 1);
         const label = document.createElement("span");
         label.textContent = "Zon " + (zi + 1);
         const sel = document.createElement("select");
@@ -1112,7 +1125,7 @@ loadStats();
         del.title = "Ta bort zon " + (zi + 1);
         del.textContent = "✕";
         del.addEventListener("click", () => { zones.splice(zi, 1); zoneKinds.splice(zi, 1); zoneRender(); });
-        row.append(label, sel, del);
+        row.append(number, label, sel, del);
         mobileList.appendChild(row);
       });
     }
