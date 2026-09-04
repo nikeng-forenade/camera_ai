@@ -1,6 +1,8 @@
 # Ändringsnoteringar
 
 ## 2026-09-04
+- Version `0.17.5`: beständig logg för de 50 senaste HA-detektionseventen med kamera, tid, klasser och sammanfattning.
+- HA-eventlogg: sparar de senaste 50 live-detektionerna i `data/events.json` och visar dem under Historik.
 - Version `0.17.4`: visar tydliga `ZON 1`, `ZON 2`-etiketter i rutornas övre vänstra hörn och under pågående dragning.
 - Version `0.17.3`: tydligare zonnummer direkt på kamerabilden.
 - Version `0.17.2`: numrerade och färgkodade zonmarkörer i mobilredigeraren.

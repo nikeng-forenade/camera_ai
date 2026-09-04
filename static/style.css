@@ -94,6 +94,17 @@
   .zone-mobile-row select { min-width: 0; width: 100%; background: #0b0e13; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px; }
   .zone-mobile-row .btn { width: 34px; height: 34px; padding: 0; }
 }
+  .event-log-card { margin-top: 16px; }
+  .event-log-list { display: flex; flex-direction: column; gap: 8px; }
+  .event-log-item { display: flex; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; background: #10151c; }
+  .event-log-icon { flex: 0 0 28px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: rgba(248,81,73,.16); color: var(--red); font-size: 16px; }
+  .event-log-main { min-width: 0; flex: 1; }
+  .event-log-top { display: flex; justify-content: space-between; gap: 12px; color: var(--text); }
+  .event-log-top time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .event-log-title { margin-top: 3px; color: var(--accent); font-weight: 600; }
+  .event-log-detail { margin-top: 3px; overflow-wrap: anywhere; }
+  .event-log-detections { margin-top: 6px; color: var(--yellow); font-size: 12px; }
+  @media (max-width: 600px) { .event-log-item { padding: 10px; } .event-log-top { align-items: flex-start; flex-direction: column; gap: 2px; } }
 /* ---- Typval + enkel linje (0.13.3) ---- */
 .zone-kind { display: inline-flex; gap: 6px; }
 .zk { background: #0b0e13; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 5px 13px; cursor: pointer; font-size: 13px; }

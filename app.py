@@ -5,6 +5,7 @@ Run:  python app.py        (then open http://127.0.0.1:8000)
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 import uuid
@@ -86,6 +87,20 @@ def _live_event_publish(payload: dict) -> None:
             annotated_path = str(p)
         except OSError as exc:  # noqa: BLE001 - snapshot är valfri
             print(f"[event] kunde inte spara snapshot: {exc}")
+        if kind == "event":
+            EVENT_LOG.append({
+                "ts": payload.get("ts", time.time()),
+                "camera": payload.get("camera_name") or "Kamera",
+                "classes": payload.get("classes") or [],
+                "detections": detections,
+                "summary": summary,
+                "image": annotated_path,
+            })
+            try:
+                EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                EVENT_LOG_PATH.write_text(json.dumps(list(EVENT_LOG), ensure_ascii=False, indent=2), encoding="utf-8")
+            except OSError as exc:  # noqa: BLE001 - loggen får inte stoppa eventet
+                print(f"[event] kunde inte spara historik: {exc}")
     try:
         ha.publish_result(
             detections=detections,
@@ -113,6 +128,20 @@ RUNTIME = {
 
 # In-memory analysis history for stats / web GUI (keeps the last N results)
 HISTORY: deque = deque(maxlen=50)
+EVENT_LOG_PATH = config.BASE_DIR / "data" / "events.json"
+
+
+def _load_event_log() -> deque:
+    try:
+        items = json.loads(EVENT_LOG_PATH.read_text(encoding="utf-8"))
+        if isinstance(items, list):
+            return deque(items[-50:], maxlen=50)
+    except (OSError, ValueError, TypeError):
+        pass
+    return deque(maxlen=50)
+
+
+EVENT_LOG: deque = _load_event_log()
 START_TIME = time.time()
 
 
@@ -517,6 +546,13 @@ def get_history(limit: int = 20):
     """Recent analyses, newest first."""
     items = list(HISTORY)
     return items[-limit:][::-1]
+
+
+@app.get("/api/events")
+def get_events(limit: int = 50):
+    """Senaste HA-detektionerna, newest first."""
+    limit = min(50, max(1, limit))
+    return list(EVENT_LOG)[-limit:][::-1]
 
 
 @app.get("/api/stats")

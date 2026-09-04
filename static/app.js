@@ -528,7 +528,34 @@ async function loadStats() {
   }
 }
 
-document.getElementById("statsBtn").addEventListener("click", loadStats);
+document.getElementById("statsBtn").addEventListener("click", () => { loadStats(); loadEvents(); });
+
+async function loadEvents() {
+  const box = document.getElementById("eventLogBox");
+  if (!box) return;
+  try {
+    const events = await fetch("/api/events?limit=50").then((r) => r.json());
+    if (!events.length) {
+      box.innerHTML = '<p class="empty">Inga HA-event ännu.</p>';
+      return;
+    }
+    box.innerHTML = events.map((event) => {
+      const classes = (event.classes || []).map(escapeHtml).join(", ") || "detektion";
+      const time = new Date(event.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
+      const detections = (event.detections || []).map((d) => `${escapeHtml(d.class || "objekt")} ${Math.round((Number(d.confidence) || 0) * 100)}%`).join(" · ");
+      return `<article class="event-log-item">
+        <div class="event-log-icon">●</div>
+        <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
+        <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>
+        ${detections ? `<div class="event-log-detections">${detections}</div>` : ""}</div>
+      </article>`;
+    }).join("");
+  } catch (e) {
+    box.innerHTML = '<p class="empty">Kunde inte hämta eventhistorik.</p>';
+  }
+}
+
+document.getElementById("eventsBtn").addEventListener("click", loadEvents);
 
 /* ---- System-knappar ---- */
 async function systemAction(url, label, ask) {
