@@ -50,8 +50,10 @@
 .roi-zone-svg .roi-zone-poly { fill: rgba(80, 230, 120, 0.14); stroke: #50e678; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .roi-zone-svg .roi-zone-poly.outside { fill: rgba(255, 150, 60, 0.12); stroke: #ff963c; }
 .roi-pt { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; border: 3px solid #50e678; box-shadow: 0 1px 6px rgba(0,0,0,0.7); cursor: move; z-index: 5; }
-.roi-zone-number { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; border-radius: 50%; background: #1f6feb; color: #fff; font-size: 12px; font-weight: 700; line-height: 1; pointer-events: none; user-select: none; z-index: 4; box-shadow: 0 1px 5px rgba(0,0,0,0.75); }
-.roi-zone-number.mask { background: #d93636; }
+.roi-zone-label { pointer-events: none; }
+.roi-zone-label circle { fill: #1f6feb; stroke: #fff; stroke-width: 0.9; vector-effect: non-scaling-stroke; }
+.roi-zone-label.mask circle { fill: #d93636; }
+.roi-zone-label text { fill: #fff; font-size: 3.4px; font-weight: 700; text-anchor: middle; pointer-events: none; }
 .roi-del {
   position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px;
   border-radius: 50%; background: #f85149; color: #fff; border: 1px solid rgba(255,255,255,0.4);

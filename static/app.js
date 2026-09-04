@@ -1070,6 +1070,18 @@ loadStats();
           p.classList.add("roi-zone-poly");
           if (kind === "mask") p.classList.add("mask"); // röd = övervaka INTE
           svg.appendChild(p);
+          const cx = poly.reduce((sum, point) => sum + point[0], 0) / poly.length * 100;
+          const cy = poly.reduce((sum, point) => sum + point[1], 0) / poly.length * 100;
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          label.classList.add("roi-zone-label", kind);
+          label.setAttribute("transform", "translate(" + cx + " " + cy + ")");
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("r", "4.2");
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("y", "1.5");
+          text.textContent = String(zi + 1);
+          label.append(circle, text);
+          svg.appendChild(label);
         }
         if (host && interactive) {
           poly.forEach((pt) => {
@@ -1080,15 +1092,6 @@ loadStats();
             d.title = "Hörn – dra för att ändra storlek, dubbelklicka för att ta bort";
             host.appendChild(d);
           });
-          const cx = poly.reduce((sum, point) => sum + point[0], 0) / poly.length;
-          const cy = poly.reduce((sum, point) => sum + point[1], 0) / poly.length;
-          const marker = document.createElement("span");
-          marker.className = "roi-zone-number " + kind;
-          marker.textContent = String(zi + 1);
-          marker.title = "Zon " + (zi + 1) + (kind === "watch" ? " – Bevaka" : " – Övervaka INTE");
-          marker.style.left = (cx * 100) + "%";
-          marker.style.top = (cy * 100) + "%";
-          host.appendChild(marker);
         }
       });
     }
