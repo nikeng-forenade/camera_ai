@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-07
+- Version `0.17.10`: Historik/eventlistan slutar skapa nya rader för samma stillastående objekt vid längre flimmer. `_event_locations_suppress` håller reda på var varje klass nyligen larmats (fönster = max 60 s, `clear_after` × 10) och undertrycker återlarm när objektet bara dyker upp igen på samma plats. Ny plats/ny ankomst larmar fortfarande.
 - Version `0.17.9`: Motion slutar trigga på parkerade bilar. `_mark_moving` fick ett tidsminne (`_motion_history`, fönster = eventens `clear_after`): ett objekt räknas som i rörelse bara om inget tidigare objekt av samma klass setts nära samma position nyligen - en parkerad bil som flimrar ur detektionen en bildruta räknas inte längre som rörelse (jämför Frigates stationära objekt).
 - Version `0.17.8`: sök/filtrera i Historik (bil, person, djur, kamera…) och cache-busting av statiska filer så eventbilderna även dyker upp i telefonens webbläsare.
 - Historik: sökfält filtrerar HA-eventen direkt på kamera, klasser, detektioner och sammanfattning (flera ord = alla måste matcha).

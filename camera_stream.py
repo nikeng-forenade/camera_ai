@@ -358,6 +358,7 @@ class CameraWorker:
         self._ev_classes = self._parse_event_classes(self.events["classes"])
         self._ev_binary_until = 0.0   # binary_sensor i HA hålls ON till denna tid
         self._ev_last_pub = 0.0
+        self._event_locations: dict[str, list[dict]] = {}  # platser som nyligen larmats (undertrycker flimmer)
         self.last_event: str | None = None
         self.last_event_ts: float | None = None
         self.event_count = 0
@@ -1027,6 +1028,7 @@ class CameraWorker:
             if not enabled:
                 self._ev_binary_until = 0.0
                 self._evt.reset()
+                self._event_locations.clear()
                 self._ev_last_pub = 0.0
         if not enabled and was_on and cb is not None:
             try:
@@ -1086,6 +1088,8 @@ class CameraWorker:
         if not can_pub:
             return
         ev_dets = [d for d in dets if d.get("class") in fired]
+        if self._event_locations_suppress(ev_dets, now):
+            return  # samma stillastående objekt som flimrar - inget nytt larm
         summary = self._event_summary(ev_dets)
         jpeg = None
         with self._lock:
@@ -1133,6 +1137,57 @@ class CameraWorker:
             })
         except Exception as exc:  # noqa: BLE001 - workern får aldrig krascha
             print(f"[event] publicering misslyckades: {exc}")
+
+    def _event_locations_suppress(self, ev_dets: list, now: float) -> bool:
+        """True om alla omvända detektioner ligger på nyligen kända platser.
+
+        Håller reda på var varje klass senast larmades (``_event_locations``).
+        När eventtrackern vill larma igen för en klass som varit borta längre
+        än ``clear_after`` kontrolleras här om objektet bara dök upp igen på en
+        plats där klassen setts nyligen - då är det samma stillastående objekt
+        som flimrar, inte en ny ankomst, och vi skapar inget nytt event.
+        Fönstret = max(60 s, clear_after * 10).
+        """
+        with self._lock:
+            ttl = max(60.0, float(self.events.get("clear_after", 5.0)) * 10.0)
+            ledger = self._event_locations
+            # Rensa bort platser som inte setts inom fönstret
+            for cls in list(ledger):
+                locs = [loc for loc in ledger[cls] if now - loc["last"] <= ttl]
+                if locs:
+                    ledger[cls] = locs
+                else:
+                    ledger.pop(cls, None)
+            W, H = self.resolution or (1280, 720)
+            threshold = max(12.0, (W * W + H * H) ** 0.5 * 0.015)
+            has_box = False
+            fresh: list[dict] = []
+            for d in ev_dets:
+                box = d.get("box") or []
+                if len(box) < 4:
+                    continue
+                has_box = True
+                cx = (float(box[0]) + float(box[2])) / 2.0
+                cy = (float(box[1]) + float(box[3])) / 2.0
+                cls = d.get("class")
+                hit = None
+                for loc in ledger.get(cls, []):
+                    if (loc["cx"] - cx) ** 2 + (loc["cy"] - cy) ** 2 <= threshold * threshold:
+                        hit = loc
+                        break
+                if hit is not None:
+                    hit["last"] = now
+                else:
+                    fresh.append({"cls": cls, "cx": cx, "cy": cy, "last": now})
+            if not has_box:
+                return False  # kan inte avgöra plats - låt eventet gå igenom
+            if fresh:
+                # Ny plats = ny ankomst. Kom ihåg platsen inför framtida flimmer.
+                for loc in fresh:
+                    ledger.setdefault(loc["cls"], []).append(loc)
+                return False
+            # Alla på kända, nyligen sedda platser -> samma objekt, inget nytt larm
+            return True
 
     @staticmethod
     def _event_summary(ev_dets: list) -> str:
