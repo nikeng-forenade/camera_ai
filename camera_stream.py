@@ -340,6 +340,7 @@ class CameraWorker:
         self._raw_ts = 0.0
         self._boxes: list[dict] = []      # senaste YOLO-detektioner
         self._moving_boxes: list[dict] = []
+        self._motion_history: dict[str, list[dict]] = {}  # var klasser setts nyligen (mot "static car")
         self._boxes_ts = 0.0
         self._jpeg = None
         self._jpeg_v = 0
@@ -422,28 +423,61 @@ class CameraWorker:
             if c.strip()
         }
 
-    @staticmethod
-    def _mark_moving(detections: list[dict], previous: list[dict], width: int, height: int) -> list[dict]:
-        """Markera objekt som flyttat sig mellan två inferenser."""
-        threshold = max(12.0, (width * width + height * height) ** 0.5 * 0.015)
-        previous_centers = []
-        for item in previous:
-            box = item.get("box") or []
-            if len(box) >= 4:
-                previous_centers.append((item.get("class"), (float(box[0]) + float(box[2])) / 2, (float(box[1]) + float(box[3])) / 2))
-        marked = []
-        for item in detections:
-            box = item.get("box") or []
-            moving = True
-            if len(box) >= 4:
-                cx = (float(box[0]) + float(box[2])) / 2
-                cy = (float(box[1]) + float(box[3])) / 2
-                same_class = [(px, py) for cls, px, py in previous_centers if cls == item.get("class")]
-                moving = not same_class or min(((cx - px) ** 2 + (cy - py) ** 2) ** 0.5 for px, py in same_class) >= threshold
-            copy = dict(item)
-            copy["moving"] = moving
-            marked.append(copy)
-        return marked
+    def _mark_moving(self, detections: list[dict], width: int, height: int, now: float) -> list[dict]:
+        """Markera objekt som flyttat sig - med minne över tid.
+
+        Jämför inte bara mot förra bilden utan mot en kort historik
+        (``_motion_history``) av var varje klass har setts under ``coast``
+        sekunder. Ett objekt räknas som i rörelse bara om INGET tidigare
+        objekt av samma klass finns nära samma position inom fönstret. En
+        parkerad bil som försvinner ur detektionen en bildruta (flimmer) och
+        dyker upp igen på samma ställe räknas alltså INTE som rörelse - den
+        har ju synts där nyss. Samma idé som Frigates ``max_disappeared`` /
+        stationära objekt; fönstret följer eventens ``clear_after``.
+        """
+        with self._lock:
+            coast = max(1.0, float(self.events.get("clear_after", 5.0)))
+            threshold = max(12.0, (width * width + height * height) ** 0.5 * 0.015)
+            history = self._motion_history
+            # Rensa bort observationer äldre än fönstret
+            for cls in list(history):
+                hist = [h for h in history[cls] if now - h["ts"] <= coast]
+                if hist:
+                    history[cls] = hist
+                else:
+                    history.pop(cls, None)
+            marked = []
+            for item in detections:
+                box = item.get("box") or []
+                moving = True
+                if len(box) >= 4:
+                    cx = (float(box[0]) + float(box[2])) / 2
+                    cy = (float(box[1]) + float(box[3])) / 2
+                    cls = item.get("class")
+                    nearest = None
+                    for h in history.get(cls, []):
+                        d2 = (cx - h["cx"]) ** 2 + (cy - h["cy"]) ** 2
+                        if nearest is None or d2 < nearest:
+                            nearest = d2
+                    moving = nearest is None or nearest ** 0.5 >= threshold
+                copy = dict(item)
+                copy["moving"] = moving
+                marked.append(copy)
+            # Lägg denna inferensens positioner i historiken (efter bedömning)
+            for item in marked:
+                box = item.get("box") or []
+                if len(box) < 4:
+                    continue
+                cls = item.get("class")
+                hist = history.setdefault(cls, [])
+                hist.append({
+                    "cx": (float(box[0]) + float(box[2])) / 2,
+                    "cy": (float(box[1]) + float(box[3])) / 2,
+                    "ts": now,
+                })
+                if len(hist) > 48:
+                    del hist[: len(hist) - 48]
+            return marked
 
     def _cfg(self) -> dict:
         with self._lock:
@@ -700,9 +734,7 @@ class CameraWorker:
                         kept = self._apply_line(kept, roi["line"], raw.shape[1], raw.shape[0])
                     if roi["zones"]["enabled"]:
                         kept = self._apply_zones(kept, roi["zones"], raw.shape[1], raw.shape[0])
-                    with self._lock:
-                        previous = list(self._boxes)
-                    kept = self._mark_moving(kept, previous, raw.shape[1], raw.shape[0])
+                    kept = self._mark_moving(kept, raw.shape[1], raw.shape[0], now)
                     with self._lock:
                         self._boxes = kept
                         self._moving_boxes = [item for item in kept if item.get("moving")]

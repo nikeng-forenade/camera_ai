@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-07
+- Version `0.17.9`: Motion slutar trigga på parkerade bilar. `_mark_moving` fick ett tidsminne (`_motion_history`, fönster = eventens `clear_after`): ett objekt räknas som i rörelse bara om inget tidigare objekt av samma klass setts nära samma position nyligen - en parkerad bil som flimrar ur detektionen en bildruta räknas inte längre som rörelse (jämför Frigates stationära objekt).
 - Version `0.17.8`: sök/filtrera i Historik (bil, person, djur, kamera…) och cache-busting av statiska filer så eventbilderna även dyker upp i telefonens webbläsare.
 - Historik: sökfält filtrerar HA-eventen direkt på kamera, klasser, detektioner och sammanfattning (flera ord = alla måste matcha).
 - Eventbilder på telefon: index.html hämtas nu via servern som ersätter `__VER__` med `config.VERSION`, så CSS/JS-URL:er får `?v=<version>` och telefonen inte längre visar gammal cachad kod utan bilder.
