@@ -532,6 +532,8 @@ document.getElementById("statsBtn").addEventListener("click", () => { loadStats(
 
 let eventRefreshInFlight = false;
 let eventRefreshTimer = null;
+let eventItems = [];   // senast hämtade HA-event (rådata, före sökfiltrering)
+let eventQuery = "";   // aktiv sökfras i Historik-fliken
 
 function setEventRefreshState(text, isError = false) {
   const meta = document.getElementById("eventRefreshMeta");
@@ -539,6 +541,44 @@ function setEventRefreshState(text, isError = false) {
     meta.textContent = text;
     meta.classList.toggle("err", isError);
   }
+}
+
+// Matchar ett event mot sökfrasen (kamera, klasser, detektioner, sammanfattning).
+function eventMatches(ev, query) {
+  if (!query) return true;
+  const hay = [
+    ev.camera || "",
+    (ev.classes || []).join(" "),
+    (ev.detections || []).map((d) => d.class || "").join(" "),
+    ev.summary || "",
+  ].join(" ").toLowerCase();
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return terms.every((t) => hay.includes(t));
+}
+
+function renderEvents() {
+  const box = document.getElementById("eventLogBox");
+  if (!box) return;
+  const shown = eventItems.filter((ev) => eventMatches(ev, eventQuery));
+  if (!shown.length) {
+    box.innerHTML = eventItems.length
+      ? `<p class="empty">Inga träffar på "${escapeHtml(eventQuery)}".</p>`
+      : '<p class="empty">Inga HA-event ännu.</p>';
+    return;
+  }
+  box.innerHTML = shown.map((event) => {
+    const classes = (event.classes || []).map(escapeHtml).join(", ") || "detektion";
+    const time = new Date(event.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
+    const detections = (event.detections || []).map((d) => `${escapeHtml(d.class || "objekt")} ${Math.round((Number(d.confidence) || 0) * 100)}%`).join(" · ");
+    return `<article class="event-log-item">
+      ${event.image_url ? `<a class="event-log-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /></a>` : ""}
+      <div class="event-log-icon">●</div>
+      <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
+      <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>
+      ${detections ? `<div class="event-log-detections">${detections}</div>` : ""}</div>
+      ${event.image_error ? `<div class="event-log-image-error">Bild saknas: ${escapeHtml(event.image_error)}</div>` : ""}
+    </article>`;
+  }).join("");
 }
 
 async function loadEvents() {
@@ -554,25 +594,8 @@ async function loadEvents() {
   try {
     const response = await fetch("/api/events?limit=50", { cache: "no-store" });
     if (!response.ok) throw new Error("HTTP " + response.status);
-    const events = await response.json();
-    if (!events.length) {
-      box.innerHTML = '<p class="empty">Inga HA-event ännu.</p>';
-      setEventRefreshState("Uppdaterad " + new Date().toLocaleTimeString("sv-SE"));
-      return;
-    }
-    box.innerHTML = events.map((event) => {
-      const classes = (event.classes || []).map(escapeHtml).join(", ") || "detektion";
-      const time = new Date(event.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
-      const detections = (event.detections || []).map((d) => `${escapeHtml(d.class || "objekt")} ${Math.round((Number(d.confidence) || 0) * 100)}%`).join(" · ");
-      return `<article class="event-log-item">
-        ${event.image_url ? `<a class="event-log-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /></a>` : ""}
-        <div class="event-log-icon">●</div>
-        <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
-        <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>
-        ${detections ? `<div class="event-log-detections">${detections}</div>` : ""}</div>
-        ${event.image_error ? `<div class="event-log-image-error">Bild saknas: ${escapeHtml(event.image_error)}</div>` : ""}
-      </article>`;
-    }).join("");
+    eventItems = await response.json();
+    renderEvents();
     setEventRefreshState("Uppdaterad " + new Date().toLocaleTimeString("sv-SE"));
   } catch (e) {
     box.innerHTML = '<p class="empty">Kunde inte hämta eventhistorik.</p>';
@@ -587,6 +610,14 @@ async function loadEvents() {
 }
 
 document.getElementById("eventsBtn").addEventListener("click", loadEvents);
+
+const eventSearchInput = document.getElementById("eventSearch");
+if (eventSearchInput) {
+  eventSearchInput.addEventListener("input", () => {
+    eventQuery = eventSearchInput.value.trim();
+    renderEvents();
+  });
+}
 
 /* ---- System-knappar ---- */
 async function systemAction(url, label, ask) {

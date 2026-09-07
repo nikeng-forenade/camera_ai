@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Camera AI</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=__VER__" />
 </head>
 <body>
   <header class="topbar">
@@ -139,6 +139,9 @@
             <p class="event-refresh-meta" id="eventRefreshMeta" aria-live="polite"></p>
           </div>
           <button id="eventsBtn" class="btn" type="button">↻ Uppdatera</button>
+        </div>
+        <div class="event-log-filter">
+          <input id="eventSearch" type="search" placeholder="Sök i historik: bil, person, djur, kamera…" autocomplete="off" aria-label="Sök i HA-eventhistoriken" />
         </div>
         <div id="eventLogBox" class="event-log-list">
           <p class="empty">Ladda för att se eventhistorik…</p>
@@ -501,6 +504,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=__VER__"></script>
 </body>
 </html>

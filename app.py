@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import httpx
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -618,7 +618,10 @@ def get_stats():
 
 @app.get("/")
 def index():
-    return FileResponse(config.BASE_DIR / "static" / "index.html")
+    # Ersätter __VER__-platshållare i statiska URL:er så att webbläsare (inkl.
+    # telefoner) hämtar färska filer vid varje ny version (cache-busting).
+    html = (config.BASE_DIR / "static" / "index.html").read_text(encoding="utf-8")
+    return HTMLResponse(html.replace("__VER__", config.VERSION))
 
 
 @app.get("/api/health")
