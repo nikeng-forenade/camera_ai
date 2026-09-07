@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-07
+- Version `0.17.14`: ?-hjälpknapp vid "Rörelsekänslighet" (Inställningar → Live-detektering) som visar guiden (1–5 / 8–15 sweet spot / 15–25 / >30) i en popover. Stängs genom att klicka utanför eller på knappen igen.
 - Version `0.17.13`: live pixel-rörelsemätare under känslighetsslidern. Servern mäter alltid en billig 128×72-pixeländring (`_motion_preview`, `status().motion_diff`) och Inställningar → Live-detektering visar "Rörelse nu: X · tröskel: Y" som uppdateras varje statuspoll och direkt när slidern dras (`updateDetGateLive`). Man ser alltså live om vald känslighet skulle utlösa YOLO innan man trycker Spara.
 - Version `0.17.12`: pixel-motion-gate (av/på, av som standard) + ihopfällbara sektioner i Inställningar.
   - Pixel-gate (Inställningar → Live-detektering → "Pixel-gate – kör YOLO bara vid rörelse"): när på hoppar YOLO över bilder som inte ändrats (nedskalad gråbild jämförs mot referens, "rörelsekänslighet" = tröskel). Mindre GPU-last och färre falsklarm från skuggor/träd. Av som standard. Config `MOTION_GATE_ENABLED`/`MOTION_GATE_THRESHOLD`; `_gate_motion` i camera_stream.

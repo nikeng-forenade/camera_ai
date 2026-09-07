@@ -1118,6 +1118,25 @@ loadStats();
   const gateThrEl = $id("detGateThr");
   if (gateThrEl) gateThrEl.addEventListener("input", updateDetGateLive);
 
+  /* Hjälp-popover för känsligheten (?-knappen) */
+  const helpBtn = $id("detGateHelpBtn");
+  const helpPop = $id("detGateHelp");
+  if (helpBtn && helpPop) {
+    helpBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const show = helpPop.hidden;
+      helpPop.hidden = !show;
+      helpBtn.classList.toggle("active", !show);
+    });
+    document.addEventListener("click", (e) => {
+      if (!helpPop.hidden && !helpBtn.contains(e.target) && !helpPop.contains(e.target)) {
+        helpPop.hidden = true;
+        helpBtn.classList.remove("active");
+      }
+    });
+  }
+
   /* ---- Inställningar: ihopfällbara sektioner ---- */
   function makeSettingsCollapsible() {
     const root = $id("view-settings");
