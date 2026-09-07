@@ -1067,6 +1067,8 @@ class CameraWorker:
             _draw_roi_line(img, roi)
         elif annotated_bgr is not None:
             img = annotated_bgr
+        elif raw_bgr is not None:
+            img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
         if img is not None:
             ok, buf = cv2.imencode(
                 ".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), q]

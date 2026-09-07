@@ -565,6 +565,7 @@ async function loadEvents() {
       const time = new Date(event.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
       const detections = (event.detections || []).map((d) => `${escapeHtml(d.class || "objekt")} ${Math.round((Number(d.confidence) || 0) * 100)}%`).join(" · ");
       return `<article class="event-log-item">
+        ${event.image_url ? `<a class="event-log-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /></a>` : ""}
         <div class="event-log-icon">●</div>
         <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
         <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>

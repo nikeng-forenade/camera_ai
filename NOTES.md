@@ -1,5 +1,12 @@
 # Ändringsnoteringar
 
+## 2026-09-07
+- Version `0.17.6`: synkar serverns GUI/API-version med HACS-integrationen och innehåller eventbildfixarna.
+- Eventbilder: säkerställer att bekräftade HA-event får en JPEG även när annoteringen saknas, med råbild som fallback.
+- Eventhistorik: eventet sparas även om snapshot-filen inte kunde skapas.
+- Eventhistorik: visar en liten annoterad bild från detektionstillfället när ett nytt live-event skapas.
+- Event-API:et exponerar sparade eventbilder som säkra `/media/...`-URL:er.
+
 ## 2026-09-04
 - HACS v0.17.6: Motion-entiteten uppdaterad till rörelsebaserad status för människor, djur och fordon.
 - HACS: Motion räknar nu faktisk förflyttning av människor, djur och fordon mellan bildrutor; närvaroräknarna är oförändrade.

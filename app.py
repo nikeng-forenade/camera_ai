@@ -87,27 +87,27 @@ def _live_event_publish(payload: dict) -> None:
             annotated_path = str(p)
         except OSError as exc:  # noqa: BLE001 - snapshot är valfri
             print(f"[event] kunde inte spara snapshot: {exc}")
-        if kind == "event":
-            EVENT_LOG.append({
-                "id": uuid.uuid4().hex,
-                "ts": payload.get("ts", time.time()),
-                "camera": payload.get("camera_name") or "Kamera",
-                "classes": payload.get("classes") or [],
-                "detections": detections,
-                "summary": summary,
-                "image": annotated_path,
-            })
-            try:
-                EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-                with EVENT_LOG_LOCK:
-                    tmp_path = EVENT_LOG_PATH.with_suffix(".json.tmp")
-                    tmp_path.write_text(
-                        json.dumps(list(EVENT_LOG), ensure_ascii=False, indent=2),
-                        encoding="utf-8",
-                    )
-                    tmp_path.replace(EVENT_LOG_PATH)
-            except OSError as exc:  # noqa: BLE001 - loggen får inte stoppa eventet
-                print(f"[event] kunde inte spara historik: {exc}")
+    if kind == "event":
+        EVENT_LOG.append({
+            "id": uuid.uuid4().hex,
+            "ts": payload.get("ts", time.time()),
+            "camera": payload.get("camera_name") or "Kamera",
+            "classes": payload.get("classes") or [],
+            "detections": detections,
+            "summary": summary,
+            "image": annotated_path,
+        })
+        try:
+            EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with EVENT_LOG_LOCK:
+                tmp_path = EVENT_LOG_PATH.with_suffix(".json.tmp")
+                tmp_path.write_text(
+                    json.dumps(list(EVENT_LOG), ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                tmp_path.replace(EVENT_LOG_PATH)
+        except OSError as exc:  # noqa: BLE001 - loggen får inte stoppa eventet
+            print(f"[event] kunde inte spara historik: {exc}")
     try:
         ha.publish_result(
             detections=detections,
@@ -560,7 +560,14 @@ def get_history(limit: int = 20):
 def get_events(limit: int = 50):
     """Senaste HA-detektionerna, newest first."""
     limit = min(50, max(1, limit))
-    response = JSONResponse(list(EVENT_LOG)[-limit:][::-1])
+    events = []
+    for event in list(EVENT_LOG)[-limit:][::-1]:
+        item = dict(event)
+        image = item.get("image")
+        if image:
+            item["image_url"] = f"/media/{Path(image).name}"
+        events.append(item)
+    response = JSONResponse(events)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     return response
