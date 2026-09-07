@@ -21,6 +21,13 @@ import cv2  # finns via ultralytics (requirements: opencv-python)
 import config
 from analyzer import annotate_frame_bgr
 
+# Watchdog: starta om workern om AI-inferensen hänger (ingen ny inferens).
+WATCHDOG_STALE_S = 90.0      # ingen inferens på så länge -> misstänkt hängning
+WATCHDOG_CHECKS = 3          # antal kontroller i rad innan åtgärd
+WATCHDOG_COOLDOWN_S = 600.0  # vänta minst så länge mellan omstarter
+WATCHDOG_MAX_RESETS = 3      # max omstarter innan vi ger upp och ber om service-omstart
+WATCHDOG_WINDOW_S = 1800.0   # tidsfönster för max_resets
+
 
 def _slugify(name: str) -> str:
     """Gör ett kamera-namn till ett säkert id (t.ex. 'Garden 2' -> 'garden-2')."""
@@ -305,6 +312,9 @@ class CameraWorker:
         self._stop = threading.Event()
         self._rtsp_thread: threading.Thread | None = None
         self._loop_thread: threading.Thread | None = None
+        self._wd_thread: threading.Thread | None = None
+        self._wd_last_restart: float = 0.0
+        self._wd_resets: list[float] = []   # tider för senaste AI-omstarter
 
         # --- Konfiguration (default från config/.env, kan överlagras per kamera) ---
         self.camera = self._camera_defaults()
@@ -392,6 +402,11 @@ class CameraWorker:
             "yolo_enabled": True,
             "ai_fps": float(config.YOLO_STREAM_FPS),
             "imgsz": int(config.YOLO_IMG_SIZE),
+            # Objektfilter (extra, utöver modellens conf): 0 = av.
+            "min_score": float(config.FILTER_MIN_SCORE),
+            "min_area": float(config.FILTER_MIN_AREA),   # andel av bildytan
+            "max_area": float(config.FILTER_MAX_AREA),
+            "class_scores": config.FILTER_CLASS_SCORES,  # "car=0.6, person=0.5"
         }
 
     @staticmethod
@@ -480,6 +495,59 @@ class CameraWorker:
                     del hist[: len(hist) - 48]
             return marked
 
+    @staticmethod
+    def _parse_class_scores(text: str) -> dict:
+        """Parsa "car=0.6, person=0.5" -> {"car": 0.6, "person": 0.5}."""
+        out: dict[str, float] = {}
+        for tok in (text or "").split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            if "=" in tok:
+                k, _, v = tok.partition("=")
+                try:
+                    out[k.strip().lower()] = float(v.strip())
+                except (TypeError, ValueError):
+                    pass
+        return out
+
+    def _apply_obj_filters(self, dets: list, width: int, height: int) -> list:
+        """Frigate-liknande objektfilter: extra min-konfidens + min/max-areal.
+
+        Gäller utöver modellens konfidens. ``min_score`` är global, men om
+        ``class_scores`` anger t.ex. "car=0.6" används det för den klassen.
+        ``min_area``/``max_area`` är andel av bildytan (0-1). Alla 0/av som
+        standard -> ingen beteendeändring.
+        """
+        with self._lock:
+            min_score = float(self.detect.get("min_score", 0.0) or 0.0)
+            min_area = float(self.detect.get("min_area", 0.0) or 0.0)
+            max_area = float(self.detect.get("max_area", 1.0) or 1.0)
+            class_scores = self._parse_class_scores(self.detect.get("class_scores", ""))
+        if not (min_score > 0 or min_area > 0 or max_area < 1 or class_scores):
+            return dets
+        area = float(width * height) if width and height else 0.0
+        out = []
+        for d in dets:
+            c = d.get("class")
+            conf = float(d.get("confidence", 0.0) or 0.0)
+            if c in class_scores:
+                if conf < float(class_scores[c]):
+                    continue
+            elif min_score > 0 and conf < min_score:
+                continue
+            box = d.get("box") or []
+            if area and len(box) >= 4:
+                w = float(box[2]) - float(box[0])
+                h = float(box[3]) - float(box[1])
+                frac = (w * h) / area
+                if min_area > 0 and frac < min_area:
+                    continue
+                if max_area < 1 and frac > max_area:
+                    continue
+            out.append(d)
+        return out
+
     def _cfg(self) -> dict:
         with self._lock:
             return {
@@ -514,6 +582,7 @@ class CameraWorker:
             )
             self._rtsp_thread.start()
             self._loop_thread.start()
+            self._start_watchdog()
 
     def stop(self, join: float = 3.0) -> None:
         with self._restart_lock:
@@ -521,11 +590,12 @@ class CameraWorker:
                 return
             self._running = False
             self._stop.set()
-            for t in (self._rtsp_thread, self._loop_thread):
+            for t in (self._rtsp_thread, self._loop_thread, self._wd_thread):
                 if t and t.is_alive():
                     t.join(timeout=join)
             self._rtsp_thread = None
             self._loop_thread = None
+            self._wd_thread = None
             self._raw_frame = None
             self._raw_ts = 0.0
             with self._lock:
@@ -553,8 +623,63 @@ class CameraWorker:
             )
             self._rtsp_thread.start()
             self._loop_thread.start()
+            self._start_watchdog()
 
     # -------------------------------------------------------------- RTSP-loop
+    def _start_watchdog(self) -> None:
+        """Starta watchdog-tråden (en gång) som kollar att AI-inferensen lever."""
+        if self._wd_thread and self._wd_thread.is_alive():
+            return
+        self._wd_thread = threading.Thread(
+            target=self._watchdog_loop, daemon=True, name="camera-watchdog"
+        )
+        self._wd_thread.start()
+
+    def _watchdog_loop(self) -> None:
+        """Startar om workern om YOLO-inferensen hänger (ingen ny inferens på länge)."""
+        stale = 0
+        while not self._stop.is_set():
+            if self._stop.wait(WATCHDOG_CHECKS * 5):
+                return
+            if not self._running:
+                stale = 0
+                continue
+            with self._lock:
+                cam_on = bool(self.camera.get("enabled"))
+                state = self.state
+                yolo_on = bool(self.detect.get("yolo_enabled", True))
+                last_inf = self.last_inference_ts
+                running_for = time.time() - self._started_ts
+            if not cam_on or state != CAM_ONLINE or not yolo_on or running_for < 60.0:
+                stale = 0
+                continue
+            age = time.time() - last_inf if last_inf else None
+            if age is not None and age <= WATCHDOG_STALE_S:
+                stale = 0
+                continue
+            stale += 1
+            if stale < WATCHDOG_CHECKS:
+                continue
+            stale = 0
+            now = time.time()
+            # Ge upp om det omstartats för många gånger nyligen -> be om service-omstart
+            self._wd_resets = [ts for ts in self._wd_resets if now - ts < WATCHDOG_WINDOW_S]
+            if len(self._wd_resets) >= WATCHDOG_MAX_RESETS:
+                with self._lock:
+                    self.yolo_state = YOLO_ERROR
+                    self.yolo_error = "AI-loop hänger upprepade gånger - starta om tjänsten"
+                print(f"[watchdog] {self.camera_id}: AI hänger upprepat, slutar auto-omstart")
+                return
+            if now - self._wd_last_restart < WATCHDOG_COOLDOWN_S:
+                continue
+            self._wd_last_restart = now
+            self._wd_resets.append(now)
+            print(f"[watchdog] {self.camera_id}: ingen AI-inferens på {WATCHDOG_STALE_S:.0f}s - startar om workern")
+            try:
+                self.restart()
+            except Exception as exc:  # noqa: BLE001 - watchdogen får aldrig krascha
+                print(f"[watchdog] {self.camera_id}: omstart misslyckades: {exc}")
+
     def _rtsp_loop(self) -> None:
         while not self._stop.is_set():
             cfg = self._cfg()["camera"]
@@ -726,6 +851,8 @@ class CameraWorker:
                     allowed = self._ev_classes
                     if allowed:
                         dets = [d for d in dets if d.get("class") in allowed]
+                    # Objektfilter: extra min-konfidens/area (globalt + per klass).
+                    dets = self._apply_obj_filters(dets, raw.shape[1], raw.shape[0])
                     # Filter: linje (ovanför/nedanför) OCH/ELLER zoner – oberoende.
                     # Är båda på måste detektionen klara BÅDA (t.ex. nedanför
                     # linjen OCH inte i en "övervaka INTE"-zon).

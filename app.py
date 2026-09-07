@@ -51,19 +51,32 @@ _BOOL_ENV = {
     "LIVE_SHOW_CONF", "LIVE_EVENT_ENABLED",
 }
 
+# .env-nycklar som ska sättas som STRÄNG (inte float) vid runtime-synk.
+_STR_ENV = {"CAMERA_FILTER_CLASS_SCORES"}
+# .env-nyckel -> config-attribut när namnen skiljer sig åt.
+_ENV_ATTR_ALIAS = {
+    "CAMERA_FILTER_MIN_SCORE": "FILTER_MIN_SCORE",
+    "CAMERA_FILTER_MIN_AREA": "FILTER_MIN_AREA",
+    "CAMERA_FILTER_MAX_AREA": "FILTER_MAX_AREA",
+    "CAMERA_FILTER_CLASS_SCORES": "FILTER_CLASS_SCORES",
+}
+
 
 def _sync_config_attrs(env_write: dict) -> None:
     """Sätt tillbaka sparade globala värden på config-modulen (runtime)."""
     for key, val in env_write.items():
-        if not hasattr(config, key):
+        attr = _ENV_ATTR_ALIAS.get(key, key)
+        if not hasattr(config, attr):
             continue
         try:
             if key in _BOOL_ENV:
-                setattr(config, key, str(val).strip().lower() in ("1", "true", "yes", "on"))
-            elif isinstance(getattr(config, key), int):
-                setattr(config, key, int(float(val)))
+                setattr(config, attr, str(val).strip().lower() in ("1", "true", "yes", "on"))
+            elif key in _STR_ENV or not isinstance(getattr(config, attr), (int, float)):
+                setattr(config, attr, str(val))
+            elif isinstance(getattr(config, attr), int):
+                setattr(config, attr, int(float(val)))
             else:
-                setattr(config, key, float(val))
+                setattr(config, attr, float(val))
         except (TypeError, ValueError):
             pass
 
@@ -114,6 +127,10 @@ def _live_event_publish(payload: dict) -> None:
                 tmp_path.replace(EVENT_LOG_PATH)
         except OSError as exc:  # noqa: BLE001 - loggen får inte stoppa eventet
             print(f"[event] kunde inte spara historik: {exc}")
+        try:
+            _prune_event_media()
+        except Exception as exc:  # noqa: BLE001 - städning får aldrig stoppa eventet
+            print(f"[event] mediastädning misslyckades: {exc}")
     try:
         ha.publish_result(
             detections=detections,
@@ -157,6 +174,31 @@ def _load_event_log() -> deque:
 
 EVENT_LOG: deque = _load_event_log()
 START_TIME = time.time()
+
+
+def _prune_event_media() -> int:
+    """Ta bort eventbilder (event_*.jpg) som inte längre refereras av loggen.
+
+    events.json håller max 50 event, så bilder för äldre rader tas bort för att
+    media/ inte ska växa oändligt. Körs vid start och efter varje nytt event.
+    """
+    referenced = set()
+    for ev in list(EVENT_LOG):
+        img = ev.get("image")
+        if img:
+            referenced.add(Path(img).name)
+    removed = 0
+    try:
+        for p in config.MEDIA_DIR.glob("event_*.jpg"):
+            if p.name not in referenced:
+                try:
+                    p.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return removed
 
 
 class _ConfigIn(BaseModel):
@@ -304,6 +346,13 @@ async def lifespan(_: FastAPI):
         print(f"[camera] {pool.count()} kameror i registret - aktiverade startade")
     except Exception as exc:  # noqa: BLE001 - API:t ska starta ändå
         print(f"[camera] worker start misslyckades: {exc}")
+    # Rensa gamla eventbilder som inte längre refereras av loggen (retention)
+    try:
+        removed = _prune_event_media()
+        if removed:
+            print(f"[media] städade {removed} gamla eventbilder vid start")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[media] städning vid start misslyckades: {exc}")
     yield
     # Graceful shutdown: stoppa trådar + frigör RTSP
     try:
@@ -1178,6 +1227,10 @@ def get_settings():
             "device": RUNTIME["device"],
             "ai_fps": float(det["ai_fps"]),
             "imgsz": int(det["imgsz"]),
+            "min_score": float(det.get("min_score", 0.0) or 0.0),
+            "min_area": float(det.get("min_area", 0.0) or 0.0),
+            "max_area": float(det.get("max_area", 1.0) or 1.0),
+            "class_scores": det.get("class_scores", ""),
             "model_options": list(_KNOWN_YOLO_MODELS),
             "device_options": list(_KNOWN_DEVICES),
             "imgsz_options": list(_KNOWN_IMGSZ),
@@ -1311,6 +1364,39 @@ def update_settings(payload: _SettingsIn):
                 imgsz = 0
             if imgsz not in _KNOWN_IMGSZ:
                 errors.append(f"Bildstorleken måste vara en av: {', '.join(map(str, _KNOWN_IMGSZ))}.")
+        # Objektfilter: extra min-konfidens + min/max-area + per-klass-konfidens
+        min_score = float(cur_det.get("min_score", 0.0) or 0.0)
+        if "min_score" in d:
+            try:
+                min_score = float(d["min_score"])
+            except (TypeError, ValueError):
+                min_score = -1.0
+            if not 0.0 <= min_score <= 1.0:
+                errors.append("Extra lägsta konfidens måste vara mellan 0 och 1.")
+        min_area = float(cur_det.get("min_area", 0.0) or 0.0)
+        if "min_area" in d:
+            try:
+                min_area = float(d["min_area"])
+            except (TypeError, ValueError):
+                min_area = -1.0
+            if not 0.0 <= min_area <= 1.0:
+                errors.append("Minsta storlek måste vara mellan 0 och 1 (andel av bildytan).")
+        max_area = float(cur_det.get("max_area", 1.0) or 1.0)
+        if "max_area" in d:
+            try:
+                max_area = float(d["max_area"])
+            except (TypeError, ValueError):
+                max_area = 2.0
+            if not 0.0 <= max_area <= 1.0:
+                errors.append("Max storlek måste vara mellan 0 och 1 (andel av bildytan).")
+        if min_area > max_area:
+            errors.append("Minsta storlek får inte vara större än max storlek.")
+        class_scores = str(cur_det.get("class_scores", "") or "").strip()
+        if "class_scores" in d:
+            parsed = CameraWorker._parse_class_scores(str(d.get("class_scores") or ""))
+            if any(v < 0.0 or v > 1.0 for v in parsed.values()):
+                errors.append("Klass-konfidenser måste ligga mellan 0 och 1 (t.ex. car=0.6, person=0.5).")
+            class_scores = ", ".join(f"{k}={v:g}" for k, v in sorted(parsed.items()))
         # Model/conf/device delas med stillbildsanalysen via analyzer + RUNTIME
         model_changed = False
         model = RUNTIME["model"]
@@ -1340,6 +1426,18 @@ def update_settings(payload: _SettingsIn):
             pending_det = {"yolo_enabled": yolo_en, "ai_fps": af, "imgsz": imgsz}
             env_write["YOLO_STREAM_FPS"] = str(af)
             env_write["YOLO_IMG_SIZE"] = str(imgsz)
+            if "min_score" in d:
+                pending_det["min_score"] = min_score
+                env_write["CAMERA_FILTER_MIN_SCORE"] = str(round(min_score, 3))
+            if "min_area" in d:
+                pending_det["min_area"] = min_area
+                env_write["CAMERA_FILTER_MIN_AREA"] = str(round(min_area, 4))
+            if "max_area" in d:
+                pending_det["max_area"] = max_area
+                env_write["CAMERA_FILTER_MAX_AREA"] = str(round(max_area, 4))
+            if "class_scores" in d:
+                pending_det["class_scores"] = class_scores
+                env_write["CAMERA_FILTER_CLASS_SCORES"] = class_scores
             if model_changed:
                 env_write["YOLO_MODEL"] = model
                 requires.append("yolo_reload")

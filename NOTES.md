@@ -1,6 +1,10 @@
 # Ändringsnoteringar
 
 ## 2026-09-07
+- Version `0.17.11`: objektfilter, AI-watchdog och auto-städning av eventbilder.
+  - Objektfilter (Inställningar → Live-detektering): extra lägsta konfidens, min/max-storlek (% av bildytan) och klass-specifik konfidens (t.ex. `car=0.6, person=0.5`) för att filtrera bort osäkra/pyttelika/enorma träffar (Frigate-style). `camera_stream._apply_obj_filters` + config `CAMERA_FILTER_MIN_SCORE/MIN_AREA/MAX_AREA/CLASS_SCORES`.
+  - AI-watchdog: om YOLO-inferensen hänger (ingen ny inferens på 90 s, 3 kontroller) startas kameraworkern om automatiskt (cooldown 10 min, max 3 ggr/30 min innan den ber om tjänsteomstart). `_watchdog_loop`/`_start_watchdog` i camera_stream.
+  - Media-städning: `media/event_*.jpg` som inte längre refereras av eventloggen (max 50 event) raderas vid start och efter varje nytt event (`_prune_event_media`).
 - Version `0.17.10`: Historik/eventlistan slutar skapa nya rader för samma stillastående objekt vid längre flimmer. `_event_locations_suppress` håller reda på var varje klass nyligen larmats (fönster = max 60 s, `clear_after` × 10) och undertrycker återlarm när objektet bara dyker upp igen på samma plats. Ny plats/ny ankomst larmar fortfarande.
 - Version `0.17.9`: Motion slutar trigga på parkerade bilar. `_mark_moving` fick ett tidsminne (`_motion_history`, fönster = eventens `clear_after`): ett objekt räknas som i rörelse bara om inget tidigare objekt av samma klass setts nära samma position nyligen - en parkerad bil som flimrar ur detektionen en bildruta räknas inte längre som rörelse (jämför Frigates stationära objekt).
 - Version `0.17.8`: sök/filtrera i Historik (bil, person, djur, kamera…) och cache-busting av statiska filer så eventbilderna även dyker upp i telefonens webbläsare.

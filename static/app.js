@@ -1063,6 +1063,10 @@ loadStats();
       if ($id("detAiFps")) { const v = Math.round(det.ai_fps || 4); $id("detAiFps").value = v; if ($id("detAiFpsVal")) $id("detAiFpsVal").textContent = v; }
       if ($id("detImgsz")) $id("detImgsz").value = String(det.imgsz || 640);
       if ($id("detDevice")) { ensureOption($id("detDevice"), det.device); $id("detDevice").value = det.device || "openvino:GPU"; }
+      if ($id("detMinScore")) $id("detMinScore").value = det.min_score || 0;
+      if ($id("detClassScores")) $id("detClassScores").value = det.class_scores || "";
+      if ($id("detMinArea")) $id("detMinArea").value = Math.round((det.min_area || 0) * 100);
+      if ($id("detMaxArea")) $id("detMaxArea").value = Math.round((det.max_area != null ? det.max_area : 1) * 100);
     }
     if (liv) {
       setChecked("liveEnabled", liv.enabled);
@@ -1692,12 +1696,19 @@ loadStats();
     $id("btnSaveDetect").addEventListener("click", async () => {
       const out = $id("detSaveMsg");
       setMsg(out, "Sparar…", false);
+      const minScore = Math.max(0, Math.min(1, parseFloat($id("detMinScore").value) || 0));
+      const minArea = Math.max(0, Math.min(1, (parseFloat($id("detMinArea").value) || 0) / 100));
+      const maxArea = Math.max(0, Math.min(1, (parseFloat($id("detMaxArea").value) || 100) / 100));
       const body = {
         detect: {
           yolo_enabled: $id("detYolo").checked,
           ai_fps: parseInt($id("detAiFps").value, 10) || 4,
           imgsz: parseInt($id("detImgsz").value, 10) || 640,
           device: $id("detDevice").value,
+          min_score: minScore,
+          min_area: minArea,
+          max_area: maxArea,
+          class_scores: ($id("detClassScores").value || "").trim(),
         },
       };
       try {

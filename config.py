@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.10"
+VERSION = "0.17.11"
 
 
 def model_path(name: str) -> str:
@@ -122,6 +122,13 @@ DEFAULT_CONF = float(os.getenv("YOLO_CONF", "0.30"))
 # Inference device: "cpu" (default), "0"/"gpu" (NVIDIA CUDA), or
 # "openvino"/"openvino:GPU" for Intel iGPU/Arc (needs OpenVINO installed).
 YOLO_DEVICE = os.getenv("YOLO_DEVICE", "cpu")
+
+# Objektfilter för live-detektering (extra utöver modellens konfidens).
+# CAMERA_FILTER_CLASS_SCORES exempel: "car=0.6, person=0.5"
+FILTER_MIN_SCORE = _env_float("CAMERA_FILTER_MIN_SCORE", 0.0, lo=0.0, hi=1.0)
+FILTER_MIN_AREA = _env_float("CAMERA_FILTER_MIN_AREA", 0.0, lo=0.0, hi=1.0)
+FILTER_MAX_AREA = _env_float("CAMERA_FILTER_MAX_AREA", 1.0, lo=0.0, hi=1.0)
+FILTER_CLASS_SCORES = os.getenv("CAMERA_FILTER_CLASS_SCORES", "")
 
 # Small vision LLM (describes the scene).
 #   llm_backend = "ollama" | "none"

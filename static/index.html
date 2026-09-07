@@ -376,6 +376,22 @@
             </select>
             <span class="hint">Intel GPU / OpenVINO rekommenderas på detta system. Vid GPU-fel sker automatisk fallback till CPU (visas i Dashboard).</span>
           </label>
+          <label>Extra lägsta konfidens (0 = av)
+            <input type="number" id="detMinScore" min="0" max="1" step="0.05" value="0" />
+            <span class="hint">Filtrerar bort låga träffar utöver modellens konfidens. T.ex. 0.5 = visa bara säkra träffar.</span>
+          </label>
+          <label>Klass-specifik konfidens
+            <input type="text" id="detClassScores" placeholder="car=0.6, person=0.5" />
+            <span class="hint">Per klass, komma-separerat. Filtrerar bort t.ex. osäkra bilar utan att påverka personer.</span>
+          </label>
+          <label>Minsta objektstorlek (%) (0 = av)
+            <input type="number" id="detMinArea" min="0" max="100" step="0.5" value="0" />
+            <span class="hint">Bort med pyttesmå objekt långt bort (t.ex. 0.5 % av bildytan).</span>
+          </label>
+          <label>Max objektstorlek (%) (100 = av)
+            <input type="number" id="detMaxArea" min="0" max="100" step="0.5" value="100" />
+            <span class="hint">Bort med enorma/helbildsobjekt (t.ex. kameran täckt).</span>
+          </label>
         </div>
         <div class="save-bar">
           <button id="btnSaveDetect" class="btn" type="button">💾 Spara detektering</button>
