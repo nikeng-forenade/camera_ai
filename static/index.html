@@ -392,6 +392,13 @@
             <input type="number" id="detMaxArea" min="0" max="100" step="0.5" value="100" />
             <span class="hint">Bort med enorma/helbildsobjekt (t.ex. kameran täckt).</span>
           </label>
+          <label class="chk">
+            <input type="checkbox" id="detGate" /> Pixel-gate – kör YOLO bara vid rörelse
+          </label>
+          <label>Rörelsekänslighet (1–100) <span id="detGateVal">10</span>
+            <input type="range" id="detGateThr" min="1" max="100" step="1" value="10" />
+            <span class="hint">Av som standard. Lägre värde = känsligare (mindre rörelse räcker). Sparar GPU när scenen är stilla, men för låg känslighet kan fördröja nya detektioner.</span>
+          </label>
         </div>
         <div class="save-bar">
           <button id="btnSaveDetect" class="btn" type="button">💾 Spara detektering</button>

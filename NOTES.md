@@ -1,6 +1,9 @@
 # Ändringsnoteringar
 
 ## 2026-09-07
+- Version `0.17.12`: pixel-motion-gate (av/på, av som standard) + ihopfällbara sektioner i Inställningar.
+  - Pixel-gate (Inställningar → Live-detektering → "Pixel-gate – kör YOLO bara vid rörelse"): när på hoppar YOLO över bilder som inte ändrats (nedskalad gråbild jämförs mot referens, "rörelsekänslighet" = tröskel). Mindre GPU-last och färre falsklarm från skuggor/träd. Av som standard. Config `MOTION_GATE_ENABLED`/`MOTION_GATE_THRESHOLD`; `_gate_motion` i camera_stream.
+  - Inställningar: varje kort fälls ihop/öppnas genom att klicka på rubrikraden (chevron) – läget sparas per sektion i webbläsaren (localStorage). `makeSettingsCollapsible` i app.js + `.settings-card-head`/`.card-collapse` i style.css.
 - Version `0.17.11`: objektfilter, AI-watchdog och auto-städning av eventbilder.
   - Objektfilter (Inställningar → Live-detektering): extra lägsta konfidens, min/max-storlek (% av bildytan) och klass-specifik konfidens (t.ex. `car=0.6, person=0.5`) för att filtrera bort osäkra/pyttelika/enorma träffar (Frigate-style). `camera_stream._apply_obj_filters` + config `CAMERA_FILTER_MIN_SCORE/MIN_AREA/MAX_AREA/CLASS_SCORES`.
   - AI-watchdog: om YOLO-inferensen hänger (ingen ny inferens på 90 s, 3 kontroller) startas kameraworkern om automatiskt (cooldown 10 min, max 3 ggr/30 min innan den ber om tjänsteomstart). `_watchdog_loop`/`_start_watchdog` i camera_stream.

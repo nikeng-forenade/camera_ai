@@ -48,7 +48,7 @@ pool = CameraPool(analyzer)  # flera live-kameror: RTSP -> YOLO -> Dashboard
 # config-modulen så att ny-/kommande kameror får samma runtime-värden.
 _BOOL_ENV = {
     "LIVE_STREAM_ENABLED", "LIVE_SHOW_BOXES", "LIVE_SHOW_LABELS",
-    "LIVE_SHOW_CONF", "LIVE_EVENT_ENABLED",
+    "LIVE_SHOW_CONF", "LIVE_EVENT_ENABLED", "MOTION_GATE_ENABLED",
 }
 
 # .env-nycklar som ska sättas som STRÄNG (inte float) vid runtime-synk.
@@ -1231,6 +1231,8 @@ def get_settings():
             "min_area": float(det.get("min_area", 0.0) or 0.0),
             "max_area": float(det.get("max_area", 1.0) or 1.0),
             "class_scores": det.get("class_scores", ""),
+            "motion_gate": bool(det.get("motion_gate", False)),
+            "motion_threshold": float(det.get("motion_threshold", 10.0) or 10.0),
             "model_options": list(_KNOWN_YOLO_MODELS),
             "device_options": list(_KNOWN_DEVICES),
             "imgsz_options": list(_KNOWN_IMGSZ),
@@ -1397,6 +1399,18 @@ def update_settings(payload: _SettingsIn):
             if any(v < 0.0 or v > 1.0 for v in parsed.values()):
                 errors.append("Klass-konfidenser måste ligga mellan 0 och 1 (t.ex. car=0.6, person=0.5).")
             class_scores = ", ".join(f"{k}={v:g}" for k, v in sorted(parsed.items()))
+        # Pixel-motion-gate: kör YOLO bara vid rörelse (av som standard)
+        motion_gate = bool(cur_det.get("motion_gate", False))
+        if "motion_gate" in d:
+            motion_gate = _to_bool(d.get("motion_gate", motion_gate), motion_gate)
+        motion_thr = float(cur_det.get("motion_threshold", 10.0) or 10.0)
+        if "motion_threshold" in d:
+            try:
+                motion_thr = float(d["motion_threshold"])
+            except (TypeError, ValueError):
+                motion_thr = -1.0
+            if not 1.0 <= motion_thr <= 255.0:
+                errors.append("Rörelsekänsligheten måste vara mellan 1 och 255.")
         # Model/conf/device delas med stillbildsanalysen via analyzer + RUNTIME
         model_changed = False
         model = RUNTIME["model"]
@@ -1438,6 +1452,12 @@ def update_settings(payload: _SettingsIn):
             if "class_scores" in d:
                 pending_det["class_scores"] = class_scores
                 env_write["CAMERA_FILTER_CLASS_SCORES"] = class_scores
+            if "motion_gate" in d:
+                pending_det["motion_gate"] = motion_gate
+                env_write["MOTION_GATE_ENABLED"] = "true" if motion_gate else "false"
+            if "motion_threshold" in d:
+                pending_det["motion_threshold"] = motion_thr
+                env_write["MOTION_GATE_THRESHOLD"] = str(round(motion_thr, 1))
             if model_changed:
                 env_write["YOLO_MODEL"] = model
                 requires.append("yolo_reload")

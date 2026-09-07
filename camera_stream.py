@@ -348,6 +348,7 @@ class CameraWorker:
         self.inference_ms: float = 0.0  # EMA
         self._raw_frame = None
         self._raw_ts = 0.0
+        self._gate_ref = None  # liten gråskalebild för pixel-rörelse-gaten
         self._boxes: list[dict] = []      # senaste YOLO-detektioner
         self._moving_boxes: list[dict] = []
         self._motion_history: dict[str, list[dict]] = {}  # var klasser setts nyligen (mot "static car")
@@ -407,6 +408,9 @@ class CameraWorker:
             "min_area": float(config.FILTER_MIN_AREA),   # andel av bildytan
             "max_area": float(config.FILTER_MAX_AREA),
             "class_scores": config.FILTER_CLASS_SCORES,  # "car=0.6, person=0.5"
+            # Pixel-motion-gate (av som standard): kör YOLO bara vid rörelse.
+            "motion_gate": bool(config.MOTION_GATE_ENABLED),
+            "motion_threshold": float(config.MOTION_GATE_THRESHOLD),
         }
 
     @staticmethod
@@ -547,6 +551,33 @@ class CameraWorker:
                     continue
             out.append(d)
         return out
+
+    def _gate_motion(self, frame, now: float) -> bool:
+        """Pixel-rörelse-gate: True = kör YOLO, False = hoppa över (still bild).
+
+        Jämför en liten nedskalad gråskalebild mot referensen från förra
+        inferensen. Vid rörelse uppdateras referensen och YOLO körs; är bilden
+        oförändrad behålls referensen så att nästa ändring fångas.
+        """
+        with self._lock:
+            thr = float(self.detect.get("motion_threshold", 10.0) or 10.0)
+        try:
+            small = cv2.resize(
+                cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
+                (128, 72),
+                interpolation=cv2.INTER_AREA,
+            )
+        except cv2.error:
+            return True  # kan inte analysera bilden - kör YOLO som vanligt
+        ref = self._gate_ref
+        if ref is None or ref.shape != small.shape:
+            self._gate_ref = small
+            return True
+        motion = float(cv2.mean(cv2.absdiff(small, ref))[0])
+        if motion >= thr:
+            self._gate_ref = small
+            return True
+        return False
 
     def _cfg(self) -> dict:
         with self._lock:
@@ -820,11 +851,17 @@ class CameraWorker:
 
             # --- YOLO-schemaläggning (analysera senaste bilden, kasta gamla) ---
             ai_interval = 1.0 / max(0.5, float(detect["ai_fps"]))
-            if (
+            yolo_due = (
                 detect["yolo_enabled"]
                 and (now - last_ai) >= ai_interval
                 and raw_ts != ai_ran_for_ts
-            ):
+            )
+            # Pixel-motion-gate (av som standard): hoppa över YOLO om scenen är still.
+            if yolo_due and bool(detect.get("motion_gate", False)):
+                if not self._gate_motion(raw, now):
+                    last_ai = now  # håll takten – kolla rörelse igen nästa AI-tick
+                    yolo_due = False
+            if yolo_due:
                 self.yolo_state = YOLO_RUNNING
                 res = self.analyzer.infer_frame(
                     raw,

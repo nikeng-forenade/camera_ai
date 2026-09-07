@@ -606,3 +606,27 @@ main { max-width: 1240px; }
 .btn.danger:hover { filter: brightness(1.1); }
 .settings-grid label.wide select { width: 100%; }
 
+/* Inställningar: ihopfällbara sektioner (klicka på rubriken) */
+.settings-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.settings-card-head h2 { margin: 0; }
+.settings-card-head .card-collapse {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 26px; height: 26px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 12px; line-height: 1;
+}
+.settings-card-head .card-collapse:hover { color: var(--text); border-color: var(--accent); }
+#view-settings .card [hidden] { display: none !important; }
+

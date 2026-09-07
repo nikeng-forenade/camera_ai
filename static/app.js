@@ -1067,6 +1067,8 @@ loadStats();
       if ($id("detClassScores")) $id("detClassScores").value = det.class_scores || "";
       if ($id("detMinArea")) $id("detMinArea").value = Math.round((det.min_area || 0) * 100);
       if ($id("detMaxArea")) $id("detMaxArea").value = Math.round((det.max_area != null ? det.max_area : 1) * 100);
+      setChecked("detGate", det.motion_gate);
+      if ($id("detGateThr")) { const v = Math.round(det.motion_threshold || 10); $id("detGateThr").value = v; if ($id("detGateVal")) $id("detGateVal").textContent = v; }
     }
     if (liv) {
       setChecked("liveEnabled", liv.enabled);
@@ -1090,10 +1092,56 @@ loadStats();
   }
 
   // Slider-textvärden
-  ["detAiFps", "liveFps", "liveQuality"].forEach((id) => {
+  ["detAiFps", "detGateThr", "liveFps", "liveQuality"].forEach((id) => {
     const el = $id(id), val = $id(id + "Val");
     if (el && val) el.addEventListener("input", () => { val.textContent = el.value; });
   });
+
+  /* ---- Inställningar: ihopfällbara sektioner ---- */
+  function makeSettingsCollapsible() {
+    const root = $id("view-settings");
+    if (!root || root.dataset.collapseReady) return;
+    root.dataset.collapseReady = "1";
+    const KEY = "caiSettingsCollapsed";
+    let store = {};
+    try { store = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { store = {}; }
+    root.querySelectorAll(":scope > .card").forEach((card) => {
+      const h2 = card.querySelector("h2");
+      if (!h2) return;
+      let header = h2;
+      while (header.parentElement && header.parentElement !== card) header = header.parentElement;
+      const body = [];
+      let el = header.nextElementSibling;
+      while (el) { body.push(el); el = el.nextElementSibling; }
+      if (!body.length) return;
+      const title = (h2.textContent || "sektion").trim();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "card-collapse";
+      btn.title = "Fäll ihop / öppna";
+      btn.setAttribute("aria-label", "Fäll ihop / öppna " + title);
+      header.appendChild(btn);
+      const apply = (collapsed) => {
+        card.classList.toggle("collapsed", collapsed);
+        body.forEach((node) => { node.hidden = collapsed; });
+        btn.textContent = collapsed ? "▸" : "▾";
+        btn.setAttribute("aria-expanded", String(!collapsed));
+        store[title] = collapsed;
+        try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* ignorera */ }
+      };
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        apply(!card.classList.contains("collapsed"));
+      });
+      header.addEventListener("click", (e) => {
+        if (e.target.closest("button, a, input, select, textarea, label")) return;
+        apply(!card.classList.contains("collapsed"));
+      });
+      header.classList.add("settings-card-head");
+      apply(!!store[title]);
+    });
+  }
+  makeSettingsCollapsible();
 
   /* ---- Inställningar: kameror (flera) ---- */
   function zonePolysFromCam(c) {
@@ -1709,6 +1757,8 @@ loadStats();
           min_area: minArea,
           max_area: maxArea,
           class_scores: ($id("detClassScores").value || "").trim(),
+          motion_gate: $id("detGate").checked,
+          motion_threshold: parseFloat($id("detGateThr").value) || 10,
         },
       };
       try {
