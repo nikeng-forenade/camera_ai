@@ -606,6 +606,10 @@ main { max-width: 1240px; }
 .btn.danger:hover { filter: brightness(1.1); }
 .settings-grid label.wide select { width: 100%; }
 
+/* Live-mätare för pixel-gatens känslighet */
+.gate-live { margin-top: 2px; font-size: 12.5px; }
+.gate-live.gate-fire { color: var(--green); font-weight: 600; }
+
 /* Inställningar: ihopfällbara sektioner (klicka på rubriken) */
 .settings-card-head {
   display: flex;

@@ -349,6 +349,9 @@ class CameraWorker:
         self._raw_frame = None
         self._raw_ts = 0.0
         self._gate_ref = None  # liten gråskalebild för pixel-rörelse-gaten
+        self._preview_ref = None      # separat referens för live-rörelsemätaren
+        self.motion_diff: float = 0.0  # senaste uppmätta pixeländring (GUI-live)
+        self.motion_diff_ts: float = 0.0
         self._boxes: list[dict] = []      # senaste YOLO-detektioner
         self._moving_boxes: list[dict] = []
         self._motion_history: dict[str, list[dict]] = {}  # var klasser setts nyligen (mot "static car")
@@ -551,6 +554,29 @@ class CameraWorker:
                     continue
             out.append(d)
         return out
+
+    def _motion_preview(self, frame) -> float:
+        """Billig live-mätning av hur mycket bilden ändrats (för GUI-trimning).
+
+        Jämför mot förra mätningen (bildruta-till-bildruta) och uppdaterar
+        referensen varje gång - ger ett "hur mycket rör sig nu"-värde som är
+        oberoende av om pixel-gaten är på eller av.
+        """
+        try:
+            small = cv2.resize(
+                cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
+                (128, 72),
+                interpolation=cv2.INTER_AREA,
+            )
+        except cv2.error:
+            return self.motion_diff
+        ref = self._preview_ref
+        if ref is None or ref.shape != small.shape:
+            self._preview_ref = small
+            return 0.0
+        diff = float(cv2.mean(cv2.absdiff(small, ref))[0])
+        self._preview_ref = small
+        return diff
 
     def _gate_motion(self, frame, now: float) -> bool:
         """Pixel-rörelse-gate: True = kör YOLO, False = hoppa över (still bild).
@@ -856,6 +882,14 @@ class CameraWorker:
                 and (now - last_ai) >= ai_interval
                 and raw_ts != ai_ran_for_ts
             )
+            # Live-mätning av pixeländring (billig, 128x72) – visas i GUI.
+            if (
+                detect["yolo_enabled"]
+                and (now - last_ai) >= ai_interval
+                and raw_ts != ai_ran_for_ts
+            ):
+                self.motion_diff = round(self._motion_preview(raw), 2)
+                self.motion_diff_ts = now
             # Pixel-motion-gate (av som standard): hoppa över YOLO om scenen är still.
             if yolo_due and bool(detect.get("motion_gate", False)):
                 if not self._gate_motion(raw, now):
@@ -1490,6 +1524,9 @@ class CameraWorker:
             "target_display_fps": int(live["display_fps"]),
             "jpeg_quality": int(live["jpeg_quality"]),
             "imgsz": int(detect["imgsz"]),
+            "motion_gate": bool(detect.get("motion_gate", False)),
+            "motion_threshold": float(detect.get("motion_threshold", 10.0)),
+            "motion_diff": round(getattr(self, "motion_diff", 0.0), 1),
             "live_enabled": bool(live["enabled"]),
             "detections": top,
             "detection_counts": counts,

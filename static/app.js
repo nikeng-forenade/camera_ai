@@ -685,6 +685,7 @@ loadStats();
   const camEditSelect = $id("camEditSelect");
   let activeCam = localStorage.getItem("camAiActive") || "";
   let editingId = null;   // kamera som redigeras i Inställningar (null = lägg till)
+  let lastMotionDiff = 0; // senaste uppmätta pixeländring (för live-mätaren)
 
   const CAMERA_LABELS = { disabled: "Inaktiv", connecting: "Ansluter…", online: "Online", reconnecting: "Återansluter…", offline: "Offline", error: "Fel" };
   const YOLO_LABELS = { stopped: "Stoppad", loading: "Laddar modell…", running: "Kör", error: "Fel" };
@@ -875,6 +876,12 @@ loadStats();
       if (s.yolo_error) rows.push(["YOLO-fel", s.yolo_error.slice(0, 80), "metric-err"]);
       if (s.camera_error && s.camera_state !== "online") rows.push(["Kameras fel", s.camera_error.slice(0, 80), "metric-err"]);
       statusTable.innerHTML = rows.map((r) => `<tr><td>${escapeHtml(r[0])}</td><td class="${r[2] || ""}">${escapeHtml(String(r[1]))}</td></tr>`).join("");
+    }
+
+    // Live pixel-rörelsemätare (för känslighetsslidern i Inställningar)
+    if (s) {
+      lastMotionDiff = (s.motion_diff != null) ? s.motion_diff : lastMotionDiff;
+      updateDetGateLive();
     }
 
     // Detected now (unik per klass)
@@ -1096,6 +1103,20 @@ loadStats();
     const el = $id(id), val = $id(id + "Val");
     if (el && val) el.addEventListener("input", () => { val.textContent = el.value; });
   });
+
+  /* ---- Live pixel-rörelsemätare (känslighetsslidern) ---- */
+  function updateDetGateLive() {
+    const liveEl = $id("detGateLive");
+    if (!liveEl) return;
+    const thrEl = $id("detGateThr");
+    const thr = thrEl ? (parseFloat(thrEl.value) || 10) : 10;
+    const diff = lastMotionDiff;
+    const fire = diff >= thr;
+    liveEl.textContent = "Rörelse nu: " + diff.toFixed(1) + " · tröskel: " + thr + (fire ? " → skulle utlösa YOLO" : " → under tröskeln (YOLO vilar)");
+    liveEl.classList.toggle("gate-fire", fire);
+  }
+  const gateThrEl = $id("detGateThr");
+  if (gateThrEl) gateThrEl.addEventListener("input", updateDetGateLive);
 
   /* ---- Inställningar: ihopfällbara sektioner ---- */
   function makeSettingsCollapsible() {
