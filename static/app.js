@@ -570,6 +570,7 @@ async function loadEvents() {
         <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
         <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>
         ${detections ? `<div class="event-log-detections">${detections}</div>` : ""}</div>
+        ${event.image_error ? `<div class="event-log-image-error">Bild saknas: ${escapeHtml(event.image_error)}</div>` : ""}
       </article>`;
     }).join("");
     setEventRefreshState("Uppdaterad " + new Date().toLocaleTimeString("sv-SE"));

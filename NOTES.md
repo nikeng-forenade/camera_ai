@@ -1,6 +1,8 @@
 # Ändringsnoteringar
 
 ## 2026-09-07
+- Version `0.17.7`: robustare eventbilder med rå-JPEG-fallback och synlig felorsak i Historik.
+- Eventbilder: lägger till rå-JPEG-fallback och visar orsaken i Historik om snapshot ändå saknas.
 - Version `0.17.6`: synkar serverns GUI/API-version med HACS-integrationen och innehåller eventbildfixarna.
 - Eventbilder: säkerställer att bekräftade HA-event får en JPEG även när annoteringen saknas, med råbild som fallback.
 - Eventhistorik: eventet sparas även om snapshot-filen inte kunde skapas.

@@ -79,6 +79,7 @@ def _live_event_publish(payload: dict) -> None:
     detections = payload.get("detections") or []
     summary = payload.get("summary") or ""
     annotated_path = None
+    image_error = None
     jpeg = payload.get("jpeg")
     if jpeg:
         try:
@@ -86,7 +87,11 @@ def _live_event_publish(payload: dict) -> None:
             p.write_bytes(jpeg)
             annotated_path = str(p)
         except OSError as exc:  # noqa: BLE001 - snapshot är valfri
+            image_error = str(exc)
             print(f"[event] kunde inte spara snapshot: {exc}")
+    else:
+        image_error = "Ingen JPEG mottogs från kameraworkern"
+        print(f"[event] snapshot saknas: {image_error}")
     if kind == "event":
         EVENT_LOG.append({
             "id": uuid.uuid4().hex,
@@ -96,6 +101,7 @@ def _live_event_publish(payload: dict) -> None:
             "detections": detections,
             "summary": summary,
             "image": annotated_path,
+            "image_error": image_error,
         })
         try:
             EVENT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)

@@ -1062,19 +1062,29 @@ class CameraWorker:
         # bortfiltrerade objekt synas på händelsebilden).
         img = None
         has_roi = bool(roi.get("line", {}).get("enabled") or roi.get("zones", {}).get("enabled"))
-        if has_roi and raw_bgr is not None:
-            img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
-            _draw_roi_line(img, roi)
-        elif annotated_bgr is not None:
-            img = annotated_bgr
-        elif raw_bgr is not None:
-            img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
+        try:
+            if has_roi and raw_bgr is not None:
+                img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
+                _draw_roi_line(img, roi)
+            elif annotated_bgr is not None:
+                img = annotated_bgr
+            elif raw_bgr is not None:
+                img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
+        except Exception as exc:  # noqa: BLE001 - råbilden är sista fallback
+            print(f"[event] annotering misslyckades, använder råbild: {exc}")
+            img = raw_bgr
         if img is not None:
             ok, buf = cv2.imencode(
                 ".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), q]
             )
             if ok:
                 jpeg = buf.tobytes()
+            elif raw_bgr is not None and img is not raw_bgr:
+                ok, buf = cv2.imencode(
+                    ".jpg", raw_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), q]
+                )
+                if ok:
+                    jpeg = buf.tobytes()
         with self._lock:
             self.last_event = summary
             self.last_event_ts = now
