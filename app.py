@@ -42,7 +42,7 @@ from analyzer import (
     summarize_detections,
     yolo_model_installed,
 )
-from camera_stream import CameraPool, CameraWorker, test_rtsp
+from camera_stream import CameraPool, CameraWorker, scan_camera, test_rtsp
 from ha_client import HAClient
 
 analyzer = YoloAnalyzer()
@@ -1007,6 +1007,7 @@ class _CameraTestIn(BaseModel):
     password: str | None = None
     path: str | None = None
     full_url: str | None = None
+    port: int | None = None
 
 
 class _SettingsIn(BaseModel):
@@ -1024,6 +1025,7 @@ class _CameraTestIn(BaseModel):
     password: str | None = None
     path: str | None = None
     full_url: str | None = None
+    port: int | None = None
 
 
 class _CameraIn(BaseModel):
@@ -1368,6 +1370,24 @@ def camera_test(payload: _CameraTestIn | None = None):
     path = str(body.get("path") or cfg.get("path") or "/Preview_01_sub")
     full_url = str(body.get("full_url") or cfg.get("full_url") or "")
     return test_rtsp(host, user, password, path, full_url)
+
+
+@app.post("/api/camera/scan")
+async def camera_scan(payload: _CameraTestIn | None = None):
+    """Skanna en RTSP-kamera efter main-/sub-strömmar (som Blue Iris).
+
+    Provar vanliga RTSP-sökvägar och returnerar vilka som svarar + upplösning.
+    """
+    body = payload.model_dump(exclude_unset=True) if payload else {}
+    host = str(body.get("host") or "")
+    user = str(body.get("user") or "")
+    password = str(body.get("password") or "")
+    full_url = str(body.get("full_url") or "")
+    port = int(body.get("port") or 554)
+    if not host and not full_url:
+        return JSONResponse({"ok": False, "error": "Ange kamera-IP."}, status_code=400)
+    result = await asyncio.to_thread(scan_camera, host, user, password, full_url, port)
+    return JSONResponse(result)
 
 
 @app.get("/api/settings")

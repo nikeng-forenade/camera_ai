@@ -297,6 +297,98 @@ def test_rtsp(
             cap.release()
 
 
+# Vanliga RTSP-sökvägar att prova vid en kamera-skanning (som Blue Iris).
+_SCAN_PATHS = (
+    "/h264Preview_01_main", "/h264Preview_01_sub",
+    "/h265Preview_01_main", "/h265Preview_01_sub",
+    "/Preview_01_main", "/Preview_01_sub",
+    "/Profile000_MainStream", "/Profile001_SubStream",
+    "/Streaming/Channels/101", "/Streaming/Channels/102",
+)
+
+
+def _classify_stream(path: str) -> str:
+    """Gissa om en sökväg är main- eller sub-strömmar (efter Reolink-konvention)."""
+    p = path.lower()
+    if "main" in p or "profile000" in p or "channels/101" in p:
+        return "main"
+    if "sub" in p or "profile001" in p or "channels/102" in p:
+        return "sub"
+    return "main"
+
+
+def _host_with_port(host: str, port: int) -> str:
+    """Lägg till RTSP-port om host saknar den (och inte är en full URL)."""
+    h = (host or "").strip()
+    if not h or not port:
+        return h
+    if "://" in h:
+        return h
+    # Om sista segmentet redan innehåller ":" är en port angiven -> använd som den är
+    if ":" in h.split("/")[-1]:
+        return h
+    return f"{h}:{port}"
+
+
+def scan_camera(
+    host: str = "",
+    user: str = "",
+    password: str = "",
+    full_url: str = "",
+    port: int = 554,
+    timeout: float = 2.5,
+) -> dict:
+    """Prova vanliga RTSP-sökvägar och rapportera vilka som svarar (som Blue Iris).
+
+    Returnerar {ok, host, streams:[{path, role, width, height}], best_main,
+    best_sub}.
+    """
+    streams: list[dict] = []
+    base = _host_with_port(host, port)
+    for path in _SCAN_PATHS:
+        url = build_rtsp_url(base, user, password, path, full_url)
+        if not url:
+            continue
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        try:
+            for prop in ("CAP_PROP_OPEN_TIMEOUT_MSEC", "CAP_PROP_READ_TIMEOUT_MSEC"):
+                p = getattr(cv2, prop, None)
+                if p:
+                    try:
+                        cap.set(p, int(timeout * 1000))
+                    except cv2.error:
+                        pass
+            if not cap.isOpened():
+                continue
+            w = h = 0
+            ok = False
+            start = time.time()
+            while time.time() - start < timeout:
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    ok = True
+                    h, w = frame.shape[:2]
+                    break
+            if ok:
+                streams.append({
+                    "path": path,
+                    "role": _classify_stream(path),
+                    "width": int(w),
+                    "height": int(h),
+                })
+        except Exception:  # noqa: BLE001 - en skanning får aldrig krascha
+            continue
+        finally:
+            cap.release()
+    return {
+        "ok": True,
+        "host": base,
+        "streams": streams,
+        "best_main": next((s["path"] for s in streams if s["role"] == "main"), ""),
+        "best_sub": next((s["path"] for s in streams if s["role"] == "sub"), ""),
+    }
+
+
 class CameraWorker:
     """En live-kamera: RTSP-läsning + schemalagd YOLO + annoterad JPEG-cache.
 

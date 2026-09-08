@@ -1740,6 +1740,85 @@ loadStats();
     });
   }
 
+  if ($id("btnTestMain")) {
+    $id("btnTestMain").addEventListener("click", async () => {
+      const btn = $id("btnTestMain"), out = $id("camTestResult");
+      btn.disabled = true;
+      setMsg(out, "Testar main-ström…", false);
+      const camPath = ($id("camPath") ? $id("camPath").value : "").trim();
+      let mainPath = ($id("camMainPath") ? $id("camMainPath").value : "").trim();
+      // Härled main från sub om inget anges (…_sub → …_main)
+      if (!mainPath && camPath.includes("_sub")) mainPath = camPath.replace("_sub", "_main");
+      if (!mainPath) {
+        setMsg(out, "Kan inte härleda main-ström – fyll i kamera-IP och/eller main-sökväg.", false);
+        btn.disabled = false;
+        return;
+      }
+      const body = { path: mainPath };
+      if (editingId) body.camera_id = editingId;
+      const pw = $id("camPass") ? $id("camPass").value : "";
+      if (pw) body.password = pw;
+      try {
+        const r = await fetchJson("/api/camera/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (r.ok) {
+          out.innerHTML = "🖥️ Main OK: " + escapeHtml((r.width || "?") + "x" + (r.height || "?")) +
+            ", FPS: " + escapeHtml(String(r.fps != null ? r.fps : "?")) +
+            ", Kod: " + escapeHtml(r.codec || "?") + " · <code>" + escapeHtml(mainPath) + "</code>";
+          out.classList.add("ok");
+        } else {
+          out.innerHTML = "❌ Main-ström misslyckades: " + escapeHtml(r.error || "okänt") +
+            " · <code>" + escapeHtml(mainPath) + "</code>";
+          out.classList.remove("ok");
+        }
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+      btn.disabled = false;
+    });
+  }
+
+  if ($id("btnScanCam")) {
+    $id("btnScanCam").addEventListener("click", async () => {
+      const btn = $id("btnScanCam"), out = $id("camTestResult");
+      btn.disabled = true;
+      setMsg(out, "Skannar kameran efter strömmar…", false);
+      const body = {
+        host: ($id("camHost") ? $id("camHost").value : "").trim(),
+        user: ($id("camUser") ? $id("camUser").value : "").trim(),
+      };
+      const pw = $id("camPass") ? $id("camPass").value : "";
+      if (pw) body.password = pw;
+      try {
+        const r = await fetchJson("/api/camera/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const streams = r.streams || [];
+        if (streams.length) {
+          const rows = streams.map((s) =>
+            `<li>${s.role === "main" ? "🖥️ Main" : "📱 Sub"} <code>${escapeHtml(s.path)}</code> — ${escapeHtml(s.width + "x" + s.height)}</li>`
+          ).join("");
+          out.innerHTML = "✅ Hittade " + streams.length + " ström(mar):<ul class='cam-scan-list'>" + rows + "</ul>";
+          out.classList.add("ok");
+          // Fyll i sökvägarna automatiskt (sub → YOLO, main → LPR)
+          if (r.best_sub && $id("camPath")) $id("camPath").value = r.best_sub;
+          if (r.best_main && $id("camMainPath")) $id("camMainPath").value = r.best_main;
+        } else {
+          out.innerHTML = "❌ Inga strömmar hittades. Kontrollera IP/användarnamn/lösenord.";
+          out.classList.remove("ok");
+        }
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+      btn.disabled = false;
+    });
+  }
+
   /* ---- Inställningar: detektionsfilter (linje ELLER flera rutor/zoner) ---- */
   const roiPreviewEl = $id("roiPreview");
   let zoneOp = null; // null | {type:'line'} | {type:'handle',z,i} | {type:'rect',sx,sy} | {type:'move',z,sx,sy,base}
