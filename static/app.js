@@ -1107,6 +1107,7 @@ loadStats();
       if ($id("detMaxArea")) $id("detMaxArea").value = Math.round((det.max_area != null ? det.max_area : 1) * 100);
       setChecked("detGate", det.motion_gate);
       setChecked("detLpr", det.lpr_enabled);
+      if ($id("detLprEngine")) $id("detLprEngine").value = det.lpr_engine || "easyocr";
       if ($id("detGateThr")) { const v = Math.round(det.motion_threshold || 5); $id("detGateThr").value = v; if ($id("detGateVal")) $id("detGateVal").textContent = v; }
     }
     if (liv) {
@@ -1839,6 +1840,24 @@ loadStats();
         const res = await saveSettingsJson(body);
         const reload = (res.requires || []).includes("yolo_reload");
         setMsg(out, reload ? "✓ Sparat – YOLO laddas om (kan ta några sekunder)…" : "✓ Sparat (live)", true);
+        loadSettingsPage();
+        pollStatus();
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+
+  if ($id("btnSaveLpr")) {
+    $id("btnSaveLpr").addEventListener("click", async () => {
+      const out = $id("lprSaveMsg");
+      setMsg(out, "Sparar…", false);
+      try {
+        await saveSettingsJson({ detect: {
+          lpr_enabled: $id("detLpr").checked,
+          lpr_engine: $id("detLprEngine").value,
+        } });
+        setMsg(out, "✓ Sparat (live)", true);
         loadSettingsPage();
         pollStatus();
       } catch (e) {

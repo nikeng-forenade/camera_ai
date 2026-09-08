@@ -402,10 +402,6 @@
           <label class="chk">
             <input type="checkbox" id="detGate" /> Pixel-gate – kör YOLO bara vid rörelse
           </label>
-          <label class="chk">
-            <input type="checkbox" id="detLpr" /> Läs registreringsnummer (LPR)
-            <span class="hint">Valfritt: EasyOCR körs på fordonsrutor och kräver bra bildkvalitet.</span>
-          </label>
           <label>Rörelsekänslighet (1–100)
             <button type="button" class="qmark" id="detGateHelpBtn" aria-label="Hjälp – vad ska jag sätta?" title="Vad ska jag sätta?">?</button>
             <span id="detGateVal">5</span>
@@ -426,6 +422,26 @@
         <div class="save-bar">
           <button id="btnSaveDetect" class="btn" type="button">💾 Spara detektering</button>
           <span id="detSaveMsg" class="save-msg"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>🔎 Registreringsskyltar (LPR)</h2>
+        <div class="settings-grid">
+          <label class="chk">
+            <input type="checkbox" id="detLpr" /> Aktivera registreringsskyltsläsning
+          </label>
+          <label>OCR-motor
+            <select id="detLprEngine">
+              <option value="easyocr">EasyOCR – enklare och lättare</option>
+              <option value="paddleocr">PaddleOCR – bättre för små texter</option>
+            </select>
+            <span class="hint">Körs på fordonsrutor efter vanlig YOLO-detektering. Kräver bra bildkvalitet och rätt OCR-paket installerat.</span>
+          </label>
+        </div>
+        <div class="save-bar">
+          <button id="btnSaveLpr" class="btn" type="button">💾 Spara LPR</button>
+          <span id="lprSaveMsg" class="save-msg"></span>
         </div>
       </section>
 

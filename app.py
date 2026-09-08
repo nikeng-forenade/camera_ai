@@ -1234,6 +1234,8 @@ def get_settings():
             "motion_gate": bool(det.get("motion_gate", False)),
             "motion_threshold": float(det.get("motion_threshold", 5.0) or 5.0),
             "lpr_enabled": bool(det.get("lpr_enabled", False)),
+            "lpr_engine": str(det.get("lpr_engine", config.LPR_ENGINE)),
+            "lpr_engine_options": ["easyocr", "paddleocr"],
             "model_options": list(_KNOWN_YOLO_MODELS),
             "device_options": list(_KNOWN_DEVICES),
             "imgsz_options": list(_KNOWN_IMGSZ),
@@ -1416,6 +1418,11 @@ def update_settings(payload: _SettingsIn):
         lpr_enabled = bool(cur_det.get("lpr_enabled", False))
         if "lpr_enabled" in d:
             lpr_enabled = _to_bool(d.get("lpr_enabled"), lpr_enabled)
+        lpr_engine = str(cur_det.get("lpr_engine", config.LPR_ENGINE) or config.LPR_ENGINE).lower()
+        if "lpr_engine" in d:
+            lpr_engine = str(d.get("lpr_engine") or "").strip().lower()
+            if lpr_engine not in ("easyocr", "paddleocr"):
+                errors.append("OCR-motorn måste vara easyocr eller paddleocr.")
         # Model/conf/device delas med stillbildsanalysen via analyzer + RUNTIME
         model_changed = False
         model = RUNTIME["model"]
@@ -1466,6 +1473,9 @@ def update_settings(payload: _SettingsIn):
             if "lpr_enabled" in d:
                 pending_det["lpr_enabled"] = lpr_enabled
                 env_write["LPR_ENABLED"] = "true" if lpr_enabled else "false"
+            if "lpr_engine" in d:
+                pending_det["lpr_engine"] = lpr_engine
+                env_write["LPR_ENGINE"] = lpr_engine
             if model_changed:
                 env_write["YOLO_MODEL"] = model
                 requires.append("yolo_reload")

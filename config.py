@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.21"
+VERSION = "0.17.22"
 
 
 def model_path(name: str) -> str:
@@ -137,6 +137,9 @@ MOTION_GATE_THRESHOLD = _env_float("MOTION_GATE_THRESHOLD", 5.0, lo=1.0, hi=255.
 # Optional license-plate OCR. Disabled because OCR is CPU-heavy and needs a
 # suitable camera angle; EasyOCR downloads its language model on first use.
 LPR_ENABLED = _env_bool("LPR_ENABLED", False)
+LPR_ENGINE = os.getenv("LPR_ENGINE", "easyocr").strip().lower()
+if LPR_ENGINE not in ("easyocr", "paddleocr"):
+    LPR_ENGINE = "easyocr"
 LPR_MIN_CONF = _env_float("LPR_MIN_CONF", 0.45, lo=0.1, hi=1.0)
 LPR_INTERVAL = _env_float("LPR_INTERVAL", 1.0, lo=0.2, hi=10.0)
 LPR_LANGUAGE = os.getenv("LPR_LANGUAGE", "en").strip() or "en"

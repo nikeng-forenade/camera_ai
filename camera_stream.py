@@ -426,6 +426,7 @@ class CameraWorker:
             "motion_gate": bool(config.MOTION_GATE_ENABLED),
             "motion_threshold": float(config.MOTION_GATE_THRESHOLD),
             "lpr_enabled": bool(config.LPR_ENABLED),
+            "lpr_engine": config.LPR_ENGINE,
         }
 
     @staticmethod
@@ -606,7 +607,9 @@ class CameraWorker:
             if self._plate_reader is None:
                 from license_plate import PlateReader
 
-                self._plate_reader = PlateReader(config.LPR_LANGUAGE, config.LPR_MIN_CONF)
+                self._plate_reader = PlateReader(
+                    config.LPR_ENGINE, config.LPR_LANGUAGE, config.LPR_MIN_CONF
+                )
             for detection in candidates:
                 plate = self._plate_reader.read_vehicle(frame, detection.get("box"))
                 if plate:
@@ -1294,6 +1297,8 @@ class CameraWorker:
 
     def update_detect(self, values: dict) -> None:
         with self._lock:
+            if "lpr_engine" in values and values["lpr_engine"] != self.detect.get("lpr_engine"):
+                self._plate_reader = None
             for k, v in values.items():
                 if k in self.detect:
                     self.detect[k] = v
@@ -1643,6 +1648,7 @@ class CameraWorker:
             "motion_threshold": float(detect.get("motion_threshold", 5.0)),
             "motion_diff": round(getattr(self, "motion_diff", 0.0), 1),
             "lpr_enabled": bool(detect.get("lpr_enabled", False)),
+            "lpr_engine": str(detect.get("lpr_engine", config.LPR_ENGINE)),
             "lpr_last_plate": self._lpr_last_plate,
             "lpr_error": self._lpr_error,
             "live_enabled": bool(live["enabled"]),
