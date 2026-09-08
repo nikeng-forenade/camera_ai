@@ -493,7 +493,19 @@ OCR_INSTALL: dict = {
 _ocr_install_lock = threading.Lock()
 
 
+def _ocr_engine_installed(engine: str) -> bool:
+    return (
+        importlib.util.find_spec("easyocr") is not None
+        if engine == "easyocr"
+        else importlib.util.find_spec("paddleocr") is not None
+        and importlib.util.find_spec("paddle") is not None
+    )
+
+
 def _ocr_install_worker(engine: str) -> None:
+    if _ocr_engine_installed(engine):
+        OCR_INSTALL.update(state="completed", status=f"{engine} redan installerad", error=None)
+        return
     packages = ["easyocr"] if engine == "easyocr" else ["paddleocr", "paddlepaddle"]
     try:
         for package in packages:
@@ -517,6 +529,9 @@ def install_lpr_engine(payload: dict):
     if engine not in ("easyocr", "paddleocr"):
         raise HTTPException(400, "engine måste vara easyocr eller paddleocr")
     if OCR_INSTALL["state"] == "running":
+        return {"started": False, **OCR_INSTALL}
+    if _ocr_engine_installed(engine):
+        OCR_INSTALL.update(state="completed", engine=engine, status=f"{engine} redan installerad", error=None)
         return {"started": False, **OCR_INSTALL}
     with _ocr_install_lock:
         OCR_INSTALL.update(state="running", engine=engine, status="Startar installation …", error=None)

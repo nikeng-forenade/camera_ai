@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.31`: LPR-installationsknappen kontrollerar nu först om vald OCR-motor redan finns. EasyOCR visar direkt klar/installerad i stället för att starta en ny pip-installation.
 - Version `0.17.30`: LPR visar nu installeringsstatus för EasyOCR och PaddleOCR/PaddlePaddle direkt i Inställningar, inklusive saknas/installerad och pågående installationsstatus.
 - Version `0.17.29`: pixel-gaten använder nu även lokal rörelse, så mindre objekt som personer inte filtreras bort bara för att de ändrar färre pixlar än en bil. Global rörelse och zonmaskering behålls.
 - Version `0.17.28`: LPR-sektionen har nu knappar för att installera vald OCR-motor från GUI:t. EasyOCR installeras separat; PaddleOCR installerar både `paddleocr` och `paddlepaddle`. Installationen sker i bakgrunden och LPR aktiveras inte automatiskt.

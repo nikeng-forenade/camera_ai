@@ -1917,6 +1917,10 @@ loadStats();
           body: JSON.stringify({ engine }),
         });
         await pollLprInstall();
+        if ($id("lprInstallStatus") && $id("lprInstallStatus").textContent.includes("redan installerad")) {
+          $id("btnInstallLpr").disabled = false;
+          return;
+        }
         lprInstallTimer = setInterval(pollLprInstall, 2000);
       } catch (e) {
         $id("lprInstallStatus").textContent = "❌ " + e.message;
