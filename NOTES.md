@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.24`: mobil-dashboardens System/Runtime- och GPU-kort ligger nu i samma fulla bredd som Detected now.
 - Version `0.17.23`: separat LPR-historik med registreringsnummer, kamera, tid, confidence och snapshot. Sparas i `data/lpr.json` och visas under Historik.
 - Version `0.17.22`: egen LPR-sektion i Inställningar med val mellan EasyOCR och PaddleOCR. Motorn laddas först när LPR aktiveras; vanlig YOLO påverkas inte när LPR är av.
 - Version `0.17.21`: valbar LPR-prototyp med EasyOCR på filtrerade fordonsrutor. Registreringsnummer visas i live-detektioner och skickas vidare som attribut i HA-resultat. Avstängd som standard; aktiveras via Inställningar → Live-detektering eller `LPR_ENABLED=true`.
