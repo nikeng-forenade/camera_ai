@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.18`: pixel-gaten kalibrerar automatiskt bakgrundsbrus under 10 sekunder efter start/reconnect. Den effektiva tröskeln blir minst användarens val och höjs vid behov till cirka tre gånger uppmätt bakgrundsrörelse; det sparade värdet ändras inte.
 - Version `0.17.17`: pixel-gaten respekterar röda maskzoner före YOLO och har en fem sekunders startgate efter start/reconnect så kamerans första bildflöde inte blockeras av gate-logiken.
 - Version `0.17.16`: pixel-gate-fix. Referensbilderna nollställs vid RTSP-reconnect så första bilden från en ny stream inte jämförs med föregående stream. Ogiltig känslighet faller tillbaka till 5, och standarden sänks från 10 till 5 för att inte filtrera bort små/lokala rörelser.
 - Version `0.17.15`: lägsta konfidens för Historik/HA-händelser (`events.min_conf` / `LIVE_EVENT_MIN_CONF`, default 0.6, 0–1). En svag gissning (t.ex. "bird 55 %" på ett litet avlägset djur) skapar inte längre en händelserad – bara detektioner med konfidens ≥ tröskeln räknas som "närvarande" av eventtrackern och hamnar i Historik/sammanfattning. Live-boxarna (överlägget) ändras inte – tröskeln gäller bara event. GUI: Inställningar → HA-event → "Lägsta konfidens för händelse (%)". Fälten: `_eval_events` (present + ev_dets filtreras med `min_conf`), `_event_defaults`, `status().event_min_conf`, `/api/settings` (GET/PUT), `example.env`.

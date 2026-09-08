@@ -352,6 +352,10 @@ class CameraWorker:
         self._raw_ts = 0.0
         self._gate_ref = None  # liten gråskalebild för pixel-rörelse-gaten
         self._gate_start_until = 0.0
+        self._gate_calibration_until = 0.0
+        self._gate_calibration_samples: list[float] = []
+        self._gate_calibrated_threshold: float | None = None
+        self._gate_calibrated_threshold: float | None = None
         self._preview_ref = None      # separat referens för live-rörelsemätaren
         self.motion_diff: float = 0.0  # senaste uppmätta pixeländring (GUI-live)
         self.motion_diff_ts: float = 0.0
@@ -605,15 +609,26 @@ class CameraWorker:
         if ref is None or ref.shape != small.shape:
             self._gate_ref = small
             return True
-        if now < self._gate_start_until:
-            self._gate_ref = small
-            return True
         diff = cv2.absdiff(small, ref)
         gate_mask = self._gate_pixel_mask(roi, small.shape)
         if gate_mask is not None and cv2.countNonZero(gate_mask) == 0:
             self._gate_ref = small
             return False
         motion = float(cv2.mean(diff, mask=gate_mask)[0]) if gate_mask is not None else float(cv2.mean(diff)[0])
+        if now < self._gate_calibration_until:
+            self._gate_calibration_samples.append(motion)
+            self._gate_ref = small
+            return True
+        if now < self._gate_start_until:
+            self._gate_ref = small
+            return True
+        if self._gate_calibrated_threshold is None and self._gate_calibration_samples:
+            baseline = float(np.percentile(self._gate_calibration_samples, 90))
+            self._gate_calibrated_threshold = max(thr, baseline * 3.0, 1.0)
+            self._gate_calibration_samples.clear()
+            thr = self._gate_calibrated_threshold
+        elif self._gate_calibrated_threshold is not None:
+            thr = self._gate_calibrated_threshold
         if motion >= thr:
             self._gate_ref = small
             return True
@@ -803,6 +818,9 @@ class CameraWorker:
                 self._gate_ref = None
                 self._preview_ref = None
                 self._gate_start_until = time.time() + 5.0
+                self._gate_calibration_until = time.time() + 10.0
+                self._gate_calibration_samples.clear()
+                self._gate_calibrated_threshold = None
             cap = None
             try:
                 cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
@@ -1590,7 +1608,7 @@ class CameraWorker:
             "jpeg_quality": int(live["jpeg_quality"]),
             "imgsz": int(detect["imgsz"]),
             "motion_gate": bool(detect.get("motion_gate", False)),
-            "motion_threshold": float(detect.get("motion_threshold", 10.0)),
+            "motion_threshold": float(detect.get("motion_threshold", 5.0)),
             "motion_diff": round(getattr(self, "motion_diff", 0.0), 1),
             "live_enabled": bool(live["enabled"]),
             "detections": top,
