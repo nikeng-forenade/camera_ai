@@ -530,6 +530,23 @@ async function loadStats() {
 
 document.getElementById("statsBtn").addEventListener("click", () => { loadStats(); loadEvents(); });
 
+async function loadLpr() {
+  const box = document.getElementById("lprLogBox");
+  if (!box) return;
+  try {
+    const rows = await fetch("/api/lpr?limit=100", { cache: "no-store" }).then((r) => r.json());
+    box.innerHTML = rows.length ? rows.map((row) => {
+      const time = new Date(row.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
+      return `<article class="event-log-item">
+        ${row.image_url ? `<a class="event-log-image-link" href="${escapeHtml(row.image_url)}" target="_blank" rel="noopener"><img class="event-log-image" src="${escapeHtml(row.image_url)}" alt="LPR-bild" loading="lazy" /></a>` : ""}
+        <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(row.plate || "Okänd skylt")}</strong><time>${time}</time></div>
+        <div class="event-log-title">${escapeHtml(row.camera || "Kamera")}</div><div class="event-log-detail">Konfidens ${Math.round((Number(row.confidence) || 0) * 100)}%</div></div>
+      </article>`;
+    }).join("") : '<p class="empty">Ingen LPR-träff ännu.</p>';
+  } catch (e) { box.innerHTML = '<p class="empty">Kunde inte hämta LPR-historik.</p>'; }
+}
+document.getElementById("lprBtn")?.addEventListener("click", loadLpr);
+
 let eventRefreshInFlight = false;
 let eventRefreshTimer = null;
 let eventItems = [];   // senast hämtade HA-event (rådata, före sökfiltrering)
@@ -655,6 +672,7 @@ loadStats();
     if (name === "historik") {
       loadStats();
       loadEvents();
+      loadLpr();
     }
     window.scrollTo({ top: 0 });
   }

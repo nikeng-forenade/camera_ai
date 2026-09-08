@@ -359,6 +359,8 @@ class CameraWorker:
         self._lpr_last_ts = 0.0
         self._lpr_last_plate: str | None = None
         self._lpr_error: str | None = None
+        self._lpr_seen: dict[str, float] = {}
+        self._lpr_callback = None
         self._gate_calibrated_threshold: float | None = None
         self._preview_ref = None      # separat referens för live-rörelsemätaren
         self.motion_diff: float = 0.0  # senaste uppmätta pixeländring (GUI-live)
@@ -616,6 +618,18 @@ class CameraWorker:
                     detection["license_plate"] = plate["text"]
                     detection["license_plate_confidence"] = plate["confidence"]
                     self._lpr_last_plate = plate["text"]
+                    previous = self._lpr_seen.get(plate["text"], 0.0)
+                    if now - previous >= 30.0:
+                        self._lpr_seen[plate["text"]] = now
+                        callback = self._lpr_callback
+                        if callback is not None:
+                            callback({
+                                "plate": plate["text"],
+                                "confidence": plate["confidence"],
+                                "camera_name": self.camera["name"],
+                                "ts": now,
+                                "jpeg": self._jpeg,
+                            })
             self._lpr_error = None
         except Exception as exc:  # noqa: BLE001 - optional feature must not stop YOLO
             self._lpr_error = str(exc)
@@ -1321,6 +1335,10 @@ class CameraWorker:
         with self._lock:
             self._event_callback = fn
 
+    def on_lpr(self, fn) -> None:
+        with self._lock:
+            self._lpr_callback = fn
+
     def update_events(self, values: dict) -> None:
         with self._lock:
             for k, v in values.items():
@@ -1703,6 +1721,12 @@ class CameraPool:
         self._workers: dict[str, CameraWorker] = {}
         self._order: list[str] = []
         self._event_cb = None
+        self._lpr_cb = None
+
+    def on_lpr(self, fn) -> None:
+        self._lpr_cb = fn
+        for worker in self.all():
+            worker.on_lpr(fn)
 
     # ------------------------------------------------------------- register
     def load(self) -> None:
@@ -1768,6 +1792,8 @@ class CameraPool:
             self._order.append(cid)
         if self._event_cb is not None:
             w.on_event(self._event_cb)
+        if self._lpr_cb is not None:
+            w.on_lpr(self._lpr_cb)
         if start and bool(w.camera.get("enabled")):
             w.start()
         return w

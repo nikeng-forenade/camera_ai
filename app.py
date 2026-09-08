@@ -160,6 +160,8 @@ RUNTIME = {
 HISTORY: deque = deque(maxlen=50)
 EVENT_LOG_PATH = config.BASE_DIR / "data" / "events.json"
 EVENT_LOG_LOCK = threading.Lock()
+LPR_LOG_PATH = config.BASE_DIR / "data" / "lpr.json"
+LPR_LOG_LOCK = threading.Lock()
 
 
 def _load_event_log() -> deque:
@@ -173,6 +175,47 @@ def _load_event_log() -> deque:
 
 
 EVENT_LOG: deque = _load_event_log()
+
+
+def _load_lpr_log() -> deque:
+    try:
+        items = json.loads(LPR_LOG_PATH.read_text(encoding="utf-8"))
+        if isinstance(items, list):
+            return deque(items[-100:], maxlen=100)
+    except (OSError, ValueError, TypeError):
+        pass
+    return deque(maxlen=100)
+
+
+LPR_LOG: deque = _load_lpr_log()
+
+
+def _lpr_publish(payload: dict) -> None:
+    image = None
+    jpeg = payload.get("jpeg")
+    if jpeg:
+        try:
+            path = config.MEDIA_DIR / f"lpr_{int(time.time() * 1000)}.jpg"
+            path.write_bytes(jpeg)
+            image = str(path)
+        except OSError:
+            pass
+    LPR_LOG.append({
+        "id": uuid.uuid4().hex,
+        "ts": payload.get("ts", time.time()),
+        "camera": payload.get("camera_name") or "Kamera",
+        "plate": payload.get("plate") or "",
+        "confidence": payload.get("confidence", 0.0),
+        "image": image,
+    })
+    try:
+        LPR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with LPR_LOG_LOCK:
+            tmp = LPR_LOG_PATH.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(list(LPR_LOG), ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(LPR_LOG_PATH)
+    except OSError as exc:
+        print(f"[lpr] kunde inte spara historik: {exc}")
 START_TIME = time.time()
 
 
@@ -332,6 +375,7 @@ async def lifespan(_: FastAPI):
     try:
         pool.load()
         pool.on_event(_live_event_publish)
+        pool.on_lpr(_lpr_publish)
         pool.start_all()
         # Ström (video till GUI) ska vara AV vid uppstart - men YOLO + HA-event
         # fortsätter. Starta manuellt, eller sätt LIVE_STREAM_AUTOSTART=true.
@@ -625,6 +669,20 @@ def get_events(limit: int = 50):
     response = JSONResponse(events)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.get("/api/lpr")
+def get_lpr(limit: int = 100):
+    limit = min(100, max(1, limit))
+    items = []
+    for item in list(LPR_LOG)[-limit:][::-1]:
+        value = dict(item)
+        if value.get("image"):
+            value["image_url"] = f"/media/{Path(value['image']).name}"
+        items.append(value)
+    response = JSONResponse(items)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response
 
 
