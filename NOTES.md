@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.39`: LPR använder nu en högupplöst bild från huvudströmmen när YOLO fångat ett fordon på sub-strömmen. Boxen skalas till main-upplösning och OCR körs på den skarpare bilden (hämtas i bakgrunden, blockerar inte YOLO). Main-sökvägen härleds automatiskt (`_sub` → `_main`).
 - Version `0.17.38`: bättre skyltläsning – snävare skyltzon (nedre centrala delen av fordonsrutan) + CLAHE-kontrastförstärkning, så tecken som N/E/D läses säkrare (t.ex. `RND 594` i stället för `RED594`).
 - Version `0.17.37`: LPR-test-sidan kan nu hämta en REN bild (utan boxar/linjer) från vald kamera via "📷 Hämta ren bild" (`/api/live/{cam}/snapshot.jpg?clean=1`), så OCR:en inte störs av överlagringar från en dashboard-skärmdump.
 - Version `0.17.36`: LPR-skyltläsning fixad för sub-strömmar. YOLO-boxen paddas nu (extra nedåt) så skylten inte klipps av, och vid behov beskärs den undre/centrala skyltzonen. Uppskalning upp till 4×.

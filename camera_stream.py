@@ -351,6 +351,9 @@ class CameraWorker:
         self.inference_ms: float = 0.0  # EMA
         self._raw_frame = None
         self._raw_ts = 0.0
+        self._main_frame = None   # högupplöst bild från huvudströmmen (för LPR)
+        self._main_ts = 0.0
+        self._main_grab_running = False  # bakgrunds-grab av main-bild pågår?
         self._gate_ref = None  # liten gråskalebild för pixel-rörelse-gaten
         self._gate_start_until = 0.0
         self._gate_calibration_until = 0.0
@@ -595,8 +598,74 @@ class CameraWorker:
         self._preview_ref = small
         return diff
 
+    def _main_rtsp_url(self) -> str:
+        """RTSP-URL för huvudströmmen (högre upplösning) – härleds från sub."""
+        cfg = self.camera
+        path = (cfg.get("main_path") or "").strip()
+        if not path:
+            p = (cfg.get("path") or "/Preview_01_sub").strip()
+            if "_sub" in p:
+                path = p.replace("_sub", "_main")
+            else:
+                return ""  # okänd konvention – fall tillbaka till sub-bilden
+        return build_rtsp_url(
+            cfg.get("host"), cfg.get("user"), cfg.get("password"), path, cfg.get("full_url")
+        )
+
+    def _grab_main_frame(self):
+        """Trigga en bakgrunds-hämtning av en högupplöst bild från huvudströmmen.
+
+        Returnerar senast cachade main-bild (om färsk), annars None – blockerar
+        aldrig YOLO-loopen. Hämtningen körs i en separat tråd (max ~1/s).
+        """
+        now = time.time()
+        if self._main_frame is not None and (now - self._main_ts) < 2.0:
+            return self._main_frame
+        with self._lock:
+            if self._main_grab_running:
+                return self._main_frame
+            self._main_grab_running = True
+        threading.Thread(
+            target=self._grab_main_frame_worker, daemon=True, name="camera-main"
+        ).start()
+        return self._main_frame
+
+    def _grab_main_frame_worker(self):
+        """Faktisk RTSP-öppning + frame-läsning i bakgrunden."""
+        import cv2
+
+        try:
+            url = self._main_rtsp_url()
+            if not url:
+                return
+            cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+            try:
+                if not cap.isOpened():
+                    return
+                frame = None
+                # Läs några frames så vi får den senaste (bufferten är kort)
+                for _ in range(12):
+                    ret, f = cap.read()
+                    if ret and f is not None:
+                        frame = f
+                if frame is not None:
+                    with self._lock:
+                        self._main_frame = frame
+                        self._main_ts = time.time()
+            finally:
+                cap.release()
+        except Exception:  # noqa: BLE001 - bakgrunds-hämtning får aldrig krascha
+            pass
+        finally:
+            with self._lock:
+                self._main_grab_running = False
+
     def _read_license_plates(self, frame, dets: list[dict], now: float) -> None:
-        """Run optional OCR on filtered vehicle detections at a low rate."""
+        """Run optional OCR on filtered vehicle detections at a low rate.
+
+        YOLO körs på sub-strömmen; LPR använder om möjligt en högupplöst bild
+        från huvudströmmen (skalad box) för bättre skyltläsning.
+        """
         with self._lock:
             enabled = bool(self.detect.get("lpr_enabled", False))
         if not enabled or now - self._lpr_last_ts < float(config.LPR_INTERVAL):
@@ -613,8 +682,25 @@ class CameraWorker:
                 self._plate_reader = PlateReader(
                     config.LPR_ENGINE, config.LPR_LANGUAGE, config.LPR_MIN_CONF
                 )
+            # Föredra en högupplöst bild från huvudströmmen för OCR.
+            main_frame = self._grab_main_frame()
+            lpr_frame = main_frame if main_frame is not None else frame
+            sx = 1.0
+            sy = 1.0
+            if main_frame is not None and frame is not None:
+                sx = main_frame.shape[1] / max(1, frame.shape[1])
+                sy = main_frame.shape[0] / max(1, frame.shape[0])
             for detection in candidates:
-                plate = self._plate_reader.read_vehicle(frame, detection.get("box"))
+                box = detection.get("box")
+                scaled_box = box
+                if box and (sx != 1.0 or sy != 1.0):
+                    scaled_box = [
+                        float(box[0]) * sx,
+                        float(box[1]) * sy,
+                        float(box[2]) * sx,
+                        float(box[3]) * sy,
+                    ]
+                plate = self._plate_reader.read_vehicle(lpr_frame, scaled_box)
                 if plate:
                     detection["license_plate"] = plate["text"]
                     detection["license_plate_confidence"] = plate["confidence"]
@@ -882,6 +968,8 @@ class CameraWorker:
             with self._lock:
                 self._gate_ref = None
                 self._preview_ref = None
+                self._main_frame = None
+                self._main_ts = 0.0
                 self._gate_start_until = time.time() + 5.0
                 self._gate_calibration_until = time.time() + 10.0
                 self._gate_calibration_samples.clear()
