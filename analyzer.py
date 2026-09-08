@@ -163,6 +163,8 @@ def annotate_frame_bgr(frame, detections, draw=None):
         label = ""
         if show_label:
             label = str(d.get("class", ""))
+            if d.get("license_plate"):
+                label += " " + str(d["license_plate"])
             if show_conf:
                 label += f" {d.get('confidence', 0.0) * 100:.0f}%"
         elif show_conf:

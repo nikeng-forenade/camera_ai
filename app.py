@@ -1233,6 +1233,7 @@ def get_settings():
             "class_scores": det.get("class_scores", ""),
             "motion_gate": bool(det.get("motion_gate", False)),
             "motion_threshold": float(det.get("motion_threshold", 5.0) or 5.0),
+            "lpr_enabled": bool(det.get("lpr_enabled", False)),
             "model_options": list(_KNOWN_YOLO_MODELS),
             "device_options": list(_KNOWN_DEVICES),
             "imgsz_options": list(_KNOWN_IMGSZ),
@@ -1412,6 +1413,9 @@ def update_settings(payload: _SettingsIn):
                 motion_thr = -1.0
             if not 1.0 <= motion_thr <= 255.0:
                 errors.append("Rörelsekänsligheten måste vara mellan 1 och 255.")
+        lpr_enabled = bool(cur_det.get("lpr_enabled", False))
+        if "lpr_enabled" in d:
+            lpr_enabled = _to_bool(d.get("lpr_enabled"), lpr_enabled)
         # Model/conf/device delas med stillbildsanalysen via analyzer + RUNTIME
         model_changed = False
         model = RUNTIME["model"]
@@ -1459,6 +1463,9 @@ def update_settings(payload: _SettingsIn):
             if "motion_threshold" in d:
                 pending_det["motion_threshold"] = motion_thr
                 env_write["MOTION_GATE_THRESHOLD"] = str(round(motion_thr, 1))
+            if "lpr_enabled" in d:
+                pending_det["lpr_enabled"] = lpr_enabled
+                env_write["LPR_ENABLED"] = "true" if lpr_enabled else "false"
             if model_changed:
                 env_write["YOLO_MODEL"] = model
                 requires.append("yolo_reload")

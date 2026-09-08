@@ -355,6 +355,10 @@ class CameraWorker:
         self._gate_calibration_until = 0.0
         self._gate_calibration_samples: list[float] = []
         self._gate_calibrated_threshold: float | None = None
+        self._plate_reader = None
+        self._lpr_last_ts = 0.0
+        self._lpr_last_plate: str | None = None
+        self._lpr_error: str | None = None
         self._gate_calibrated_threshold: float | None = None
         self._preview_ref = None      # separat referens för live-rörelsemätaren
         self.motion_diff: float = 0.0  # senaste uppmätta pixeländring (GUI-live)
@@ -421,6 +425,7 @@ class CameraWorker:
             # Pixel-motion-gate (av som standard): kör YOLO bara vid rörelse.
             "motion_gate": bool(config.MOTION_GATE_ENABLED),
             "motion_threshold": float(config.MOTION_GATE_THRESHOLD),
+            "lpr_enabled": bool(config.LPR_ENABLED),
         }
 
     @staticmethod
@@ -585,6 +590,32 @@ class CameraWorker:
         diff = float(cv2.mean(cv2.absdiff(small, ref))[0])
         self._preview_ref = small
         return diff
+
+    def _read_license_plates(self, frame, dets: list[dict], now: float) -> None:
+        """Run optional OCR on filtered vehicle detections at a low rate."""
+        with self._lock:
+            enabled = bool(self.detect.get("lpr_enabled", False))
+        if not enabled or now - self._lpr_last_ts < float(config.LPR_INTERVAL):
+            return
+        self._lpr_last_ts = now
+        vehicles = {"car", "truck", "bus", "motorcycle"}
+        candidates = [d for d in dets if d.get("class") in vehicles]
+        if not candidates:
+            return
+        try:
+            if self._plate_reader is None:
+                from license_plate import PlateReader
+
+                self._plate_reader = PlateReader(config.LPR_LANGUAGE, config.LPR_MIN_CONF)
+            for detection in candidates:
+                plate = self._plate_reader.read_vehicle(frame, detection.get("box"))
+                if plate:
+                    detection["license_plate"] = plate["text"]
+                    detection["license_plate_confidence"] = plate["confidence"]
+                    self._lpr_last_plate = plate["text"]
+            self._lpr_error = None
+        except Exception as exc:  # noqa: BLE001 - optional feature must not stop YOLO
+            self._lpr_error = str(exc)
 
     def _gate_motion(self, frame, now: float, roi: dict | None = None) -> bool:
         """Pixel-rörelse-gate: True = kör YOLO, False = hoppa över (still bild).
@@ -1003,6 +1034,7 @@ class CameraWorker:
                         kept = self._apply_line(kept, roi["line"], raw.shape[1], raw.shape[0])
                     if roi["zones"]["enabled"]:
                         kept = self._apply_zones(kept, roi["zones"], raw.shape[1], raw.shape[0])
+                    self._read_license_plates(raw, kept, now)
                     kept = self._mark_moving(kept, raw.shape[1], raw.shape[0], now)
                     with self._lock:
                         self._boxes = kept
@@ -1610,6 +1642,9 @@ class CameraWorker:
             "motion_gate": bool(detect.get("motion_gate", False)),
             "motion_threshold": float(detect.get("motion_threshold", 5.0)),
             "motion_diff": round(getattr(self, "motion_diff", 0.0), 1),
+            "lpr_enabled": bool(detect.get("lpr_enabled", False)),
+            "lpr_last_plate": self._lpr_last_plate,
+            "lpr_error": self._lpr_error,
             "live_enabled": bool(live["enabled"]),
             "detections": top,
             "detection_counts": counts,

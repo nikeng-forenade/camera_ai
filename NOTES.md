@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.21`: valbar LPR-prototyp med EasyOCR på filtrerade fordonsrutor. Registreringsnummer visas i live-detektioner och skickas vidare som attribut i HA-resultat. Avstängd som standard; aktiveras via Inställningar → Live-detektering eller `LPR_ENABLED=true`.
 - Version `0.17.20`: tydligare mobil-dashboard med kompakt header, svepbara flikar, större touchytor, fullbredds-livebild och mindre statusbrus på små skärmar.
 - Version `0.17.19`: Dashboard v2 med bättre mobil layout, snabbstatus för kamera/YOLO/detektion, fullskärmsknapp för livebild och mer kompakt status på små skärmar. Layouten är scoped till `dashboard-v2` så den gamla dashboard-layouten kan återställas enkelt.
 - Version `0.17.18`: pixel-gaten kalibrerar automatiskt bakgrundsbrus under 10 sekunder efter start/reconnect. Den effektiva tröskeln blir minst användarens val och höjs vid behov till cirka tre gånger uppmätt bakgrundsrörelse; det sparade värdet ändras inte.

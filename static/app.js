@@ -890,6 +890,10 @@ loadStats();
         rows.push(["HA-event", "Av"]);
       }
       if (s.yolo_error) rows.push(["YOLO-fel", s.yolo_error.slice(0, 80), "metric-err"]);
+      if (s.lpr_enabled) {
+        rows.push(["LPR", s.lpr_last_plate || "Aktiv – väntar på skylt", s.lpr_error ? "metric-err" : "metric-ok"]);
+        if (s.lpr_error) rows.push(["LPR-fel", s.lpr_error.slice(0, 80), "metric-err"]);
+      }
       if (s.camera_error && s.camera_state !== "online") rows.push(["Kameras fel", s.camera_error.slice(0, 80), "metric-err"]);
       statusTable.innerHTML = rows.map((r) => `<tr><td>${escapeHtml(r[0])}</td><td class="${r[2] || ""}">${escapeHtml(String(r[1]))}</td></tr>`).join("");
     }
@@ -914,7 +918,7 @@ loadStats();
         if (detNowAge) detNowAge.textContent = "";
       } else {
         detNowList.innerHTML = uniq.map((d) =>
-          `<li><span>${escapeHtml(d.class)}${counts[d.class] > 1 ? " ×" + counts[d.class] : ""}</span><span class="conf">${Math.round((d.confidence || 0) * 100)}%</span></li>`
+          `<li><span>${escapeHtml(d.class)}${d.license_plate ? " · " + escapeHtml(d.license_plate) : ""}${counts[d.class] > 1 ? " ×" + counts[d.class] : ""}</span><span class="conf">${Math.round((d.confidence || 0) * 100)}%</span></li>`
         ).join("");
         if (detNowAge) detNowAge.textContent = s.last_detection_ts ? "Senaste: " + new Date(s.last_detection_ts * 1000).toLocaleTimeString("sv-SE") : "";
       }
@@ -1102,6 +1106,7 @@ loadStats();
       if ($id("detMinArea")) $id("detMinArea").value = Math.round((det.min_area || 0) * 100);
       if ($id("detMaxArea")) $id("detMaxArea").value = Math.round((det.max_area != null ? det.max_area : 1) * 100);
       setChecked("detGate", det.motion_gate);
+      setChecked("detLpr", det.lpr_enabled);
       if ($id("detGateThr")) { const v = Math.round(det.motion_threshold || 5); $id("detGateThr").value = v; if ($id("detGateVal")) $id("detGateVal").textContent = v; }
     }
     if (liv) {
@@ -1827,6 +1832,7 @@ loadStats();
           class_scores: ($id("detClassScores").value || "").trim(),
           motion_gate: $id("detGate").checked,
           motion_threshold: parseFloat($id("detGateThr").value) || 5,
+          lpr_enabled: $id("detLpr").checked,
         },
       };
       try {
