@@ -663,7 +663,17 @@ class CameraWorker:
         if gate_mask is not None and cv2.countNonZero(gate_mask) == 0:
             self._gate_ref = small
             return False
-        motion = float(cv2.mean(diff, mask=gate_mask)[0]) if gate_mask is not None else float(cv2.mean(diff)[0])
+        global_motion = (
+            float(cv2.mean(diff, mask=gate_mask)[0])
+            if gate_mask is not None
+            else float(cv2.mean(diff)[0])
+        )
+        # Medelvärdet missar små objekt: en person kan ändra många färre
+        # pixlar än en bil. En lokal komponent gör att tydlig rörelse i en
+        # mindre del av bilden ändå passerar gaten, medan svagt brus dämpas.
+        values = diff[gate_mask > 0] if gate_mask is not None else diff.reshape(-1)
+        local_motion = float(np.percentile(values, 95)) * 0.35 if values.size else 0.0
+        motion = max(global_motion, local_motion)
         if now < self._gate_calibration_until:
             self._gate_calibration_samples.append(motion)
             self._gate_ref = small
