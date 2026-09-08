@@ -513,14 +513,20 @@ def _ocr_install_worker(engine: str) -> None:
     try:
         for package in packages:
             OCR_INSTALL.update(phase="download", package=package, status=f"Laddar ner {package} …")
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", package],
-                capture_output=True,
-                text=True,
-                timeout=1800,
-            )
+            pip_args = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check"]
+            # System-Python kan sakna skrivrättighet till site-packages på
+            # Windows. En venv använder vanlig pip; annars används --user.
+            if sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+                pip_args.append("--user")
+            pip_args.append(package)
+            result = subprocess.run(pip_args, capture_output=True, text=True, timeout=1800)
             if result.returncode != 0:
-                raise RuntimeError((result.stderr or result.stdout or f"pip kunde inte installera {package}")[-1000:])
+                detail = (result.stderr or result.stdout or f"pip kunde inte installera {package}")[-1000:]
+                if "access is denied" in detail.lower() or "permission denied" in detail.lower():
+                    raise PermissionError(
+                        f"Ingen behörighet att installera {package}. Kör appen i en venv eller som användare."
+                    )
+                raise RuntimeError(detail)
             OCR_INSTALL.update(phase="install", status=f"Installerar {package} …")
         OCR_INSTALL.update(state="completed", phase="complete", status=f"{engine} installerad", error=None, error_code=None)
     except Exception as exc:  # noqa: BLE001 - visas i GUI

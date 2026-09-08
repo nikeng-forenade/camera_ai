@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.33`: LPR-installationen använder nu `pip --user` när appen körs med system-Python, vilket undviker Windows Access Denied mot skyddad system-`site-packages`. Virtuella miljöer använder fortsatt vanlig pip-installation.
 - Version `0.17.32`: LPR-installationen visar nu tydliga faser (`download`, `install`, `complete`, `error`) och felkod i GUI:t i stället för en generell “installerar”-text.
 - Version `0.17.31`: LPR-installationsknappen kontrollerar nu först om vald OCR-motor redan finns. EasyOCR visar direkt klar/installerad i stället för att starta en ny pip-installation.
 - Version `0.17.30`: LPR visar nu installeringsstatus för EasyOCR och PaddleOCR/PaddlePaddle direkt i Inställningar, inklusive saknas/installerad och pågående installationsstatus.
