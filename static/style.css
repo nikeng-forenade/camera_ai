@@ -347,6 +347,7 @@ input[type="range"] { accent-color: var(--accent); }
 .save-bar { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
 .save-msg { font-size: 12.5px; color: var(--muted); }
 .save-msg.ok { color: var(--green); }
+.save-msg.err { color: var(--red); }
 
 /* Ollama-modeller */
 .model-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
@@ -395,6 +396,12 @@ input[type="range"] { accent-color: var(--accent); }
 .hint.warn { color: var(--yellow); }
 .system-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .link { color: var(--accent); text-decoration: underline; }
+
+/* LPR-test */
+.lpr-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-top: 14px; }
+.lpr-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.lpr-controls select, .lpr-controls input { min-width: 130px; }
+.dropzone .preview { display: block; max-width: 100%; max-height: 320px; border-radius: 8px; margin: 12px auto 0; }
 
 /* Result cards */
 .results { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }

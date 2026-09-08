@@ -42,16 +42,16 @@ och installera vald motor innan LPR aktiveras i GUI:t:
 
 ```powershell
 cd C:\camera_ai
-\.venv\Scripts\python.exe -m pip install easyocr
-\.venv\Scripts\python.exe -c "import easyocr; print('EasyOCR OK')"
+.\.venv\Scripts\python.exe -m pip install easyocr
+.\.venv\Scripts\python.exe -c "import easyocr; print('EasyOCR OK')"
 ```
 
 Alternativt:
 
 ```powershell
 cd C:\camera_ai
-\.venv\Scripts\python.exe -m pip install paddleocr paddlepaddle
-\.venv\Scripts\python.exe -c "import paddleocr; import paddle; print('PaddleOCR OK')"
+.\.venv\Scripts\python.exe -m pip install paddleocr paddlepaddle
+.\.venv\Scripts\python.exe -c "import paddleocr; import paddle; print('PaddleOCR OK')"
 ```
 
 Starta sedan om Camera AI och välj motorn under **Inställningar →

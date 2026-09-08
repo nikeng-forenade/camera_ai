@@ -486,6 +486,98 @@ function escapeHtml(str) {
   }[c]));
 }
 
+/* ---- LPR-test ---- */
+(() => {
+  const dz = document.getElementById("lprDropzone");
+  const input = document.getElementById("lprFileInput");
+  const dzInner = document.getElementById("lprDzInner");
+  const preview = document.getElementById("lprPreview");
+  const runBtn = document.getElementById("lprRun");
+  const msg = document.getElementById("lprMsg");
+  const resultsEl = document.getElementById("lprResults");
+  if (!dz || !runBtn) return;
+  let file = null;
+
+  dz.addEventListener("click", () => input.click());
+  dz.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); }
+  });
+  input.addEventListener("change", () => setFile(input.files[0]));
+
+  ["dragenter", "dragover"].forEach((ev) =>
+    dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("drag"); })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("drag"); })
+  );
+  dz.addEventListener("drop", (e) => setFile(e.dataTransfer.files[0]));
+
+  function setFile(f) {
+    if (!f || !f.type.startsWith("image/")) {
+      msg.textContent = "Välj en bild (JPG/PNG/WEBP/BMP).";
+      return;
+    }
+    file = f;
+    if (dzInner) dzInner.hidden = true;
+    preview.src = URL.createObjectURL(f);
+    preview.hidden = false;
+    msg.textContent = "";
+  }
+
+  runBtn.addEventListener("click", async () => {
+    if (!file) { msg.textContent = "Välj först en bild att testa."; return; }
+    runBtn.disabled = true;
+    runBtn.classList.add("is-loading");
+    msg.textContent = "Analyserar… (första OCR-start kan ta en stund)";
+    const form = new FormData();
+    form.append("file", file);
+    form.append("engine", document.getElementById("lprEngine").value);
+    form.append("min_conf", document.getElementById("lprMinConf").value);
+    try {
+      const res = await fetch("/api/lpr/test", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      renderLpr(data);
+      msg.textContent = "Klart.";
+      msg.classList.remove("err");
+    } catch (err) {
+      msg.textContent = "Fel: " + (err.message || "okänt fel");
+      msg.classList.add("err");
+    } finally {
+      runBtn.disabled = false;
+      runBtn.classList.remove("is-loading");
+    }
+  });
+
+  function renderLpr(data) {
+    const plates = data.plates || [];
+    const dets = data.detections || [];
+    const plateHtml = plates.length
+      ? `<ul class="detection-list">${plates
+          .map((p) => `<li><span>🚗 ${escapeHtml(p.text)}</span><span class="conf">${(Number(p.confidence) * 100).toFixed(0)}%</span></li>`)
+          .join("")}</ul>`
+      : `<p class="empty">Ingen registreringsskylt hittades på fordonen.</p>`;
+    const metaHtml = `<div class="meta"><span>${escapeHtml(data.engine)}</span><span>${escapeHtml(data.model || "")} · ${data.inference_ms} ms</span></div>`;
+    const vehHtml = dets.length
+      ? `<p class="hint">${dets.length} fordon i bilden · ${plates.length} med skylt.</p>`
+      : `<p class="empty">Inga fordon detekterades i bilden.</p>`;
+    const errHtml = data.error
+      ? `<div class="error-banner">❌ ${escapeHtml(data.error)}</div>`
+      : "";
+    resultsEl.innerHTML = `
+      <div class="card result">
+        ${metaHtml}
+        ${data.annotated_url ? `<img src="${escapeHtml(data.annotated_url)}" alt="annoterad LPR-bild" />` : ""}
+        <div class="body">
+          <h3>Registreringsskyltar</h3>
+          ${plateHtml}
+          ${vehHtml}
+          ${errHtml}
+        </div>
+      </div>`;
+  }
+})();
+
 /* ---- Stats & history ---- */
 function statCard(label, value) {
   return `<div class="stat-card"><span class="stat-label">${escapeHtml(label)}</span><span class="stat-value">${escapeHtml(String(value))}</span></div>`;

@@ -1956,6 +1956,131 @@ def _run_pipeline(upload_path, model: str, conf: float | None, use_llm: bool, pr
     return response
 
 
+# --------------------------------------------------------------------------
+# LPR-test: ladda upp en bild, kör YOLO -> fordon -> OCR-skylt (test-sida).
+# --------------------------------------------------------------------------
+_LPR_TEST_READER = None
+_LPR_TEST_READER_ENGINE = None
+_LPR_TEST_READER_LOCK = threading.Lock()
+_VEHICLE_CLASSES = {"car", "truck", "bus", "motorcycle", "vehicle"}
+
+
+def _get_lpr_test_reader(engine: str):
+    """Cached PlateReader for the LPR test page (OCR-laddning är tung)."""
+    global _LPR_TEST_READER, _LPR_TEST_READER_ENGINE
+    engine = (engine or config.LPR_ENGINE).strip().lower()
+    if engine not in ("easyocr", "paddleocr"):
+        engine = config.LPR_ENGINE
+    with _LPR_TEST_READER_LOCK:
+        if _LPR_TEST_READER is None or _LPR_TEST_READER_ENGINE != engine:
+            from license_plate import PlateReader
+
+            _LPR_TEST_READER = PlateReader(
+                engine=engine,
+                language=config.LPR_LANGUAGE,
+                min_conf=config.LPR_MIN_CONF,
+            )
+            _LPR_TEST_READER_ENGINE = engine
+        return _LPR_TEST_READER
+
+
+@app.post("/api/lpr/test")
+async def lpr_test(
+    file: UploadFile = File(...),
+    engine: str = Form(""),
+    min_conf: float | None = Form(None),
+):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED:
+        raise HTTPException(
+            400,
+            f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED))}",
+        )
+    filename = f"{uuid.uuid4().hex}{ext}"
+    upload_path = config.UPLOAD_DIR / filename
+    upload_path.write_bytes(await file.read())
+    result = await asyncio.to_thread(_run_lpr_test, upload_path, engine, min_conf)
+    return JSONResponse(result)
+
+
+def _run_lpr_test(upload_path, engine: str, min_conf: float | None) -> dict:
+    """YOLO fordon -> OCR-skylt -> annoterad bild med skylttext."""
+    import cv2
+
+    reader = _get_lpr_test_reader(engine)
+    if min_conf is not None:
+        reader.min_conf = min(1.0, max(0.1, float(min_conf)))
+    result = analyzer.analyze(upload_path)
+    detections = result.get("detections") or []
+    try:
+        frame = cv2.imread(str(upload_path))
+    except Exception:  # noqa: BLE001 - utan bild kan vi inte rita/OCR:a
+        frame = None
+
+    done = []
+    for d in detections:
+        entry = dict(d)
+        if d.get("class") in _VEHICLE_CLASSES and frame is not None:
+            try:
+                plate = reader.read_vehicle(frame, d.get("box"))
+            except Exception as exc:  # noqa: BLE001 - OCR får inte stoppa testet
+                plate = None
+                entry["plate_error"] = str(exc)
+            entry["plate"] = plate["text"] if plate else None
+            entry["plate_confidence"] = plate["confidence"] if plate else None
+        else:
+            entry["plate"] = None
+            entry["plate_confidence"] = None
+        done.append(entry)
+
+    annotated_path = None
+    if frame is not None and detections:
+        for d in done:
+            box = d.get("box")
+            if not box or len(box) < 4:
+                continue
+            x1, y1, x2, y2 = (int(round(float(v))) for v in box[:4])
+            if d.get("plate"):
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 0), 2)
+                label = f"{d['plate']} {round(float(d['plate_confidence'] or 0) * 100)}%"
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                top = max(0, y1 - th - 12)
+                cv2.rectangle(frame, (x1, top), (x1 + tw + 4, y1), (0, 200, 0), -1)
+                cv2.putText(
+                    frame, label, (x1 + 2, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2, cv2.LINE_AA,
+                )
+            else:
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 165, 255), 1)
+        try:
+            out = config.MEDIA_DIR / f"lpr_{int(time.time() * 1000)}.jpg"
+            cv2.imwrite(str(out), frame)
+            annotated_path = str(out)
+        except Exception:  # noqa: BLE001 - fallback till YOLO-annoteringen
+            annotated_path = result.get("annotated")
+    else:
+        annotated_path = result.get("annotated")
+
+    return {
+        "engine": reader.engine,
+        "detections": done,
+        "plates": [
+            {
+                "text": p.get("plate"),
+                "confidence": p.get("plate_confidence"),
+                "class": p.get("class"),
+                "box": p.get("box"),
+            }
+            for p in done
+            if p.get("plate")
+        ],
+        "annotated_url": f"/media/{Path(annotated_path).name}" if annotated_path else None,
+        "model": result.get("model"),
+        "inference_ms": result.get("inference_ms"),
+        "error": result.get("error"),
+    }
+
+
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
 
 
