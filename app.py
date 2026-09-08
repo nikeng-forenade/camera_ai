@@ -8,6 +8,7 @@ import asyncio
 import base64
 import binascii
 import hmac
+import importlib.util
 import subprocess
 import sys
 import json
@@ -525,7 +526,13 @@ def install_lpr_engine(payload: dict):
 
 @app.get("/api/lpr/install/status")
 def lpr_install_status():
-    return dict(OCR_INSTALL)
+    status = dict(OCR_INSTALL)
+    status["installed"] = {
+        "easyocr": importlib.util.find_spec("easyocr") is not None,
+        "paddleocr": importlib.util.find_spec("paddleocr") is not None,
+        "paddlepaddle": importlib.util.find_spec("paddle") is not None,
+    }
+    return status
 
 
 class _PullIn(BaseModel):

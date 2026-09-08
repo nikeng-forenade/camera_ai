@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.30`: LPR visar nu installeringsstatus för EasyOCR och PaddleOCR/PaddlePaddle direkt i Inställningar, inklusive saknas/installerad och pågående installationsstatus.
 - Version `0.17.29`: pixel-gaten använder nu även lokal rörelse, så mindre objekt som personer inte filtreras bort bara för att de ändrar färre pixlar än en bil. Global rörelse och zonmaskering behålls.
 - Version `0.17.28`: LPR-sektionen har nu knappar för att installera vald OCR-motor från GUI:t. EasyOCR installeras separat; PaddleOCR installerar både `paddleocr` och `paddlepaddle`. Installationen sker i bakgrunden och LPR aktiveras inte automatiskt.
 - Version `0.17.27`: valbart GUI-skydd under Inställningar → GUI-skydd med Basic Auth och PBKDF2-hashat lösenord. Skyddar GUI, API, snapshots och livebilder. HACS config flow kan spara samma credentials och skickar dem på alla API-anrop. Avstängt som standard.

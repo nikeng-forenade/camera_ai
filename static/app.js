@@ -1126,6 +1126,7 @@ loadStats();
       setChecked("detGate", det.motion_gate);
       setChecked("detLpr", det.lpr_enabled);
       if ($id("detLprEngine")) $id("detLprEngine").value = det.lpr_engine || "easyocr";
+      refreshLprModuleStatus();
       if ($id("detGateThr")) { const v = Math.round(det.motion_threshold || 5); $id("detGateThr").value = v; if ($id("detGateVal")) $id("detGateVal").textContent = v; }
     }
     if (liv) {
@@ -1892,6 +1893,7 @@ loadStats();
     const pollLprInstall = async () => {
       try {
         const status = await fetchJson("/api/lpr/install/status");
+        renderLprModuleStatus(status);
         const label = status.status || status.state || "";
         const out = $id("lprInstallStatus");
         if (out) {
@@ -1921,6 +1923,23 @@ loadStats();
         $id("btnInstallLpr").disabled = false;
       }
     });
+  }
+
+  function renderLprModuleStatus(status) {
+    const out = $id("lprModuleStatus");
+    if (!out) return;
+    const installed = status.installed || {};
+    const item = (label, ok) => `<span class="lpr-module ${ok ? "installed" : "missing"}">${ok ? "✓" : "!"} ${label}: ${ok ? "installerad" : "saknas"}</span>`;
+    out.innerHTML = item("EasyOCR", installed.easyocr) + item("PaddleOCR", installed.paddleocr && installed.paddlepaddle);
+    out.dataset.state = status.state || "idle";
+  }
+
+  async function refreshLprModuleStatus() {
+    try {
+      const status = await fetchJson("/api/lpr/install/status");
+      renderLprModuleStatus(status);
+      if ($id("lprInstallStatus") && status.state === "failed") $id("lprInstallStatus").textContent = "❌ " + (status.error || status.status || "Installationen misslyckades");
+    } catch (e) { /* status visas nästa gång servern svarar */ }
   }
 
   if ($id("btnSaveAuth")) {
