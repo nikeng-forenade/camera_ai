@@ -1430,18 +1430,12 @@ class CameraWorker:
         jpeg = None
         with self._lock:
             q = int(self.live.get("jpeg_quality", 80))
-        # Med detektionsfilter ritas bara godkända boxar (annars skulle
-        # bortfiltrerade objekt synas på händelsebilden).
-        img = None
-        has_roi = bool(roi.get("line", {}).get("enabled") or roi.get("zones", {}).get("enabled"))
+        # Historik-/eventbilden ska vara ren. Livebilden fortsätter visa
+        # boxar och ROI, men sparade bilder ska inte få överlägg på sig.
+        img = raw_bgr if raw_bgr is not None else annotated_bgr
         try:
-            if has_roi and raw_bgr is not None:
-                img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
-                _draw_roi_line(img, roi)
-            elif annotated_bgr is not None:
-                img = annotated_bgr
-            elif raw_bgr is not None:
-                img = annotate_frame_bgr(raw_bgr, ev_dets, draw)
+            if img is None:
+                img = raw_bgr
         except Exception as exc:  # noqa: BLE001 - råbilden är sista fallback
             print(f"[event] annotering misslyckades, använder råbild: {exc}")
             img = raw_bgr

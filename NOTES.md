@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.25`: sparade Historik-/HA-eventbilder använder nu råbild utan YOLO-boxar, detektionslinjer eller zonöverlägg. Livebilden påverkas inte.
 - Version `0.17.24`: mobil-dashboardens System/Runtime- och GPU-kort ligger nu i samma fulla bredd som Detected now.
 - Version `0.17.23`: separat LPR-historik med registreringsnummer, kamera, tid, confidence och snapshot. Sparas i `data/lpr.json` och visas under Historik.
 - Version `0.17.22`: egen LPR-sektion i Inställningar med val mellan EasyOCR och PaddleOCR. Motorn laddas först när LPR aktiveras; vanlig YOLO påverkas inte när LPR är av.
