@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.49`: HACS-integrationen visar nu LPR – nya sensorer `sensor.camera_ai_last_plate` (senast uppläst skylt, global) och `sensor.camera_ai_<kamera>_last_plate` (per kamera) med attribut `plate`, `confidence`, `timestamp`, `count`. Hämtas från serverns `GET /api/lpr`.
 - Version `0.17.48`: zonetiketter (ZON 1/2) nu mindre – en liten ruta i zonens hörn.
 - Version `0.17.47`: dashboardens kameraväljare är nu också knappar (som i Inställningar) – en ny kamera ger en ny knapp.
 - Version `0.17.46`: per-kamera LPR-inställningar – välj om LPR ska köra på kameran och vilken ström (huvudström hög upplösning / sub). Global LPR måste även vara på.

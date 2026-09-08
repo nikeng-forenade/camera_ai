@@ -66,6 +66,12 @@ class CameraAIClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def lpr(self, limit: int = 50) -> list[dict]:
+        """Senast upplästa registreringsskyltarna för historik och diagnostik."""
+        resp = await self._request("GET", "/api/lpr", params={"limit": limit}, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+
     async def analyze_file(
         self,
         image_path: Path,

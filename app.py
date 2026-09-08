@@ -215,6 +215,16 @@ def _lpr_publish(payload: dict) -> None:
         "confidence": payload.get("confidence", 0.0),
         "image": image,
     })
+    # Publicera skylten direkt till HA (MQTT-discovery / REST) så den når HA
+    # även utan polling. Får aldrig stoppa LPR-workern.
+    try:
+        ha.publish_lpr(
+            plate=payload.get("plate"),
+            confidence=payload.get("confidence", 0.0),
+            camera=payload.get("camera_name"),
+        )
+    except Exception as exc:  # noqa: BLE001 - LPR är valfritt, krascha inte
+        print(f"[ha] lpr-publish misslyckades: {exc}")
     try:
         LPR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with LPR_LOG_LOCK:

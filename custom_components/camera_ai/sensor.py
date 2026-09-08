@@ -31,6 +31,7 @@ async def async_setup_entry(
         CameraAIDescriptionSensor(coordinator, entry),
         CameraAIEventCountSensor(coordinator, entry),
         CameraAILastEventSensor(coordinator, entry),
+        CameraAILastPlateSensor(coordinator, entry),
     ]
     for cam in server_cameras(coordinator.data):
         if not cam.get("camera_id"):
@@ -40,6 +41,7 @@ async def async_setup_entry(
             CameraAIPeopleSensor(coordinator, entry, cam),
             CameraAIAnimalSensor(coordinator, entry, cam),
             CameraAIVehicleSensor(coordinator, entry, cam),
+            CameraAIPlateSensor(coordinator, entry, cam),
         ]
     async_add_entities(entities)
 
@@ -135,6 +137,15 @@ def _events(coordinator) -> list[dict]:
     return [event for event in ((coordinator.data or {}).get("events") or []) if isinstance(event, dict)]
 
 
+def _lpr(coordinator) -> list[dict]:
+    """Senast upplästa registreringsskyltarna (nyaste först)."""
+    return [item for item in ((coordinator.data or {}).get("lpr") or []) if isinstance(item, dict)]
+
+
+def _lpr_for_camera(coordinator, cam_name: str) -> list[dict]:
+    return [item for item in _lpr(coordinator) if (item.get("camera") or "") == cam_name]
+
+
 class CameraAIEventCountSensor(CameraAIServerEntity, SensorEntity):
     """Antal detektionsevent från den senaste timmen."""
 
@@ -178,6 +189,35 @@ class CameraAILastEventSensor(CameraAIServerEntity, SensorEntity):
             "timestamp": event.get("ts"),
             "camera": event.get("camera"),
             "classes": event.get("classes") or [],
+        }
+
+
+class CameraAILastPlateSensor(CameraAIServerEntity, SensorEntity):
+    """Senast upplästa registreringsskylten från valfri kamera."""
+
+    _attr_icon = "mdi:car-key"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_lpr_last_plate"
+        self._attr_name = "LPR last plate"
+
+    @property
+    def native_value(self) -> str:
+        items = _lpr(self.coordinator)
+        return str(items[0].get("plate") or "Inget") if items else "Inget"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        items = _lpr(self.coordinator)
+        if not items:
+            return {"plate": None, "camera": None, "timestamp": None, "confidence": None}
+        item = items[0]
+        return {
+            "plate": item.get("plate"),
+            "camera": item.get("camera"),
+            "timestamp": item.get("ts"),
+            "confidence": item.get("confidence"),
         }
 
 
@@ -265,3 +305,44 @@ class CameraAIVehicleSensor(CameraAICameraEntity, SensorEntity):
     @property
     def native_value(self) -> int:
         return detection_counts(self.camera()).get("vehicles", 0)
+
+
+class CameraAIPlateSensor(CameraAICameraEntity, SensorEntity):
+    """Senast upplästa registreringsskylten för den här kameran."""
+
+    _attr_icon = "mdi:car-key"
+
+    def __init__(self, coordinator, entry: ConfigEntry, cam: dict) -> None:
+        super().__init__(coordinator, entry, cam)
+        self._attr_unique_id = f"{entry.entry_id}_{self._cam_id}_lpr_last_plate"
+        self._attr_name = "LPR last plate"
+
+    @property
+    def native_value(self) -> str:
+        items = _lpr_for_camera(self.coordinator, self._cam_name)
+        return str(items[0].get("plate") or "Inget") if items else "Inget"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        items = _lpr_for_camera(self.coordinator, self._cam_name)
+        counts = detection_counts(self.camera())
+        if not items:
+            return {
+                "camera_id": self._cam_id,
+                "camera_name": self._cam_name,
+                "plate": None,
+                "confidence": None,
+                "timestamp": None,
+                "count": 0,
+                "vehicles": counts["vehicles"],
+            }
+        item = items[0]
+        return {
+            "camera_id": self._cam_id,
+            "camera_name": self._cam_name,
+            "plate": item.get("plate"),
+            "confidence": item.get("confidence"),
+            "timestamp": item.get("ts"),
+            "count": len(items),
+            "vehicles": counts["vehicles"],
+        }

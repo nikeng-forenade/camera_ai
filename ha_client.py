@@ -9,6 +9,7 @@ Two transports, both make HA "see" detection results — no custom component nee
      - sensor.camera_ai_<id>_last_detection   (JSON: classes + confidence)
      - sensor.camera_ai_<id>_description      (LLM scene description)
      - image.camera_ai_<id>_snapshot          (annotated snapshot)
+     - sensor.camera_ai_<id>_lpr              (last license-plate read)
 
 2. REST API  (alternative)
    Pushes a state entity update and fires a `camera_ai_result` event that
@@ -127,7 +128,7 @@ class HAClient:
             "name": "Camera AI",
             "manufacturer": "Camera AI",
             "model": "Reolink + YOLO + LLM",
-            "sw_version": "0.17.48",
+            "sw_version": "0.17.49",
         }
         configs = {
             f"{prefix}/binary_sensor/camera_ai_{cam}/config": {
@@ -161,6 +162,15 @@ class HAClient:
                 "image_topic": f"{self._base}/snapshot",
                 "availability_topic": av,
                 "unique_id": f"camera_ai_{cam}_snapshot",
+                "device": device,
+            },
+            f"{prefix}/sensor/camera_ai_{cam}_lpr/config": {
+                "name": "LPR last plate",
+                "state_topic": f"{self._base}/lpr",
+                "value_template": "{{ value_json.plate }}",
+                "json_attributes_topic": f"{self._base}/lpr",
+                "availability_topic": av,
+                "unique_id": f"camera_ai_{cam}_lpr",
                 "device": device,
             },
         }
@@ -235,3 +245,53 @@ class HAClient:
             headers=headers,
             timeout=10,
         ).raise_for_status()
+
+    def publish_lpr(
+        self,
+        plate: str | None,
+        confidence: float = 0.0,
+        camera: str | None = None,
+    ) -> None:
+        """Send a license-plate read to Home Assistant (MQTT or REST)."""
+        if not self.available():
+            log.debug("[ha] disabled, skipping lpr publish")
+            return
+        payload = {
+            "plate": plate or "",
+            "confidence": round(float(confidence or 0.0), 4),
+            "camera": camera,
+            "ts": int(time.time()),
+        }
+        if self.cfg.HA_TRANSPORT == "mqtt":
+            if not (self._mqtt and self._mqtt.is_connected()):
+                raise RuntimeError("MQTT not connected — check HA_MQTT_* env vars and the broker")
+            self._mqtt.publish(f"{self._base}/lpr", json.dumps(payload))
+        elif self.cfg.HA_TRANSPORT == "rest":
+            if not (self.cfg.HA_REST_URL and self.cfg.HA_REST_TOKEN):
+                raise RuntimeError("HA_REST_URL / HA_REST_TOKEN not set")
+            url = self.cfg.HA_REST_URL.rstrip("/")
+            headers = {
+                "Authorization": f"Bearer {self.cfg.HA_REST_TOKEN}",
+                "Content-Type": "application/json",
+            }
+            # 1) update a state entity
+            requests.post(
+                f"{url}/api/states/sensor.camera_ai_{self.camera_id}_lpr",
+                json={
+                    "state": payload["plate"] or "Inget",
+                    "attributes": {
+                        "plate": payload["plate"],
+                        "confidence": payload["confidence"],
+                        "camera": payload["camera"],
+                    },
+                },
+                headers=headers,
+                timeout=10,
+            ).raise_for_status()
+            # 2) fire an event automations can listen for
+            requests.post(
+                f"{url}/api/events/camera_ai_lpr",
+                json=payload,
+                headers=headers,
+                timeout=10,
+            ).raise_for_status()

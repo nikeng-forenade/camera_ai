@@ -115,6 +115,12 @@ class CameraAICoordinator(DataUpdateCoordinator[dict]):
             _LOGGER.debug("Kunde inte hämta Camera AI-eventhistorik: %s", err)
             events = list((self.data or {}).get("events") or [])
 
+        try:
+            lpr = await self.client.lpr()
+        except Exception as err:  # noqa: BLE001 - historik är diagnostik, inte kärnstatus
+            _LOGGER.debug("Kunde inte hämta Camera AI LPR-historik: %s", err)
+            lpr = list((self.data or {}).get("lpr") or [])
+
         cams = cam_st.get("cameras") or []
         ids = {str(c.get("camera_id")) for c in cams if c.get("camera_id")}
         # Kamera tillagd/borttagen på servern → skapa/ta bort entiteter genom en
@@ -133,6 +139,7 @@ class CameraAICoordinator(DataUpdateCoordinator[dict]):
         data["cameras"] = cams
         data["camera_default"] = cam_st.get("default")
         data["events"] = events
+        data["lpr"] = lpr
         return data
 
 
