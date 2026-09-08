@@ -23,7 +23,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.36"
+VERSION = "0.17.37"
 
 def model_path(name: str) -> str:
     """Resolve a model file name to an absolute path (bundled or next to the app)."""

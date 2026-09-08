@@ -524,6 +524,42 @@ function escapeHtml(str) {
     msg.textContent = "";
   }
 
+  // Fyll kameralistan och tillåt att hämta en REN bild (utan boxar/linjer).
+  const camSel = document.getElementById("lprCamera");
+  const fetchBtn = document.getElementById("lprFetchClean");
+  async function loadLprCameras() {
+    if (!camSel) return;
+    try {
+      const data = await fetch("/api/cameras/list").then((r) => r.json());
+      const cams = data.cameras || [];
+      camSel.innerHTML = cams.length
+        ? cams.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("")
+        : `<option value="">Inga kameror</option>`;
+    } catch (e) { /* ignore */ }
+  }
+  loadLprCameras();
+
+  fetchBtn?.addEventListener("click", async () => {
+    const cam = camSel ? camSel.value : "";
+    if (!cam) { msg.textContent = "Välj en kamera först."; return; }
+    fetchBtn.disabled = true;
+    msg.textContent = "Hämtar ren bild…";
+    msg.classList.remove("err");
+    try {
+      const res = await fetch(`/api/live/${encodeURIComponent(cam)}/snapshot.jpg?clean=1`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const f = new File([blob], `clean_${cam}_${Date.now()}.jpg`, { type: "image/jpeg" });
+      setFile(f);
+      msg.textContent = "Ren bild hämtad från kameran (utan boxar).";
+    } catch (err) {
+      msg.textContent = "Kunde inte hämta ren bild: " + (err.message || "okänt fel");
+      msg.classList.add("err");
+    } finally {
+      fetchBtn.disabled = false;
+    }
+  });
+
   runBtn.addEventListener("click", async () => {
     if (!file) { msg.textContent = "Välj först en bild att testa."; return; }
     runBtn.disabled = true;
