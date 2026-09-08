@@ -1457,6 +1457,8 @@ loadStats();
       user: $id("camUser").value || "",
       path: ($id("camPath").value || "").trim(),
       main_path: ($id("camMainPath").value || "").trim(),
+      lpr_enabled: $id("camLprEnabled") ? $id("camLprEnabled").checked : true,
+      lpr_stream: $id("camLprStream") ? $id("camLprStream").value : "main",
       reconnect: $id("camReconnect").checked,
       reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
       autostart: $id("camAutostart").checked,
@@ -1632,6 +1634,8 @@ loadStats();
       if ($id("camPass")) $id("camPass").value = "";
       if ($id("camPath")) $id("camPath").value = "/Preview_01_sub";
       if ($id("camMainPath")) $id("camMainPath").value = "";
+      setChecked("camLprEnabled", true);
+      if ($id("camLprStream")) $id("camLprStream").value = "main";
       setChecked("camReconnect", true);
       if ($id("camReconnectDelay")) $id("camReconnectDelay").value = 5;
       setChecked("camAutostart", true);
@@ -1648,6 +1652,8 @@ loadStats();
     if ($id("camPass")) $id("camPass").value = "";
     if ($id("camPath")) $id("camPath").value = c.path || "/Preview_01_sub";
     if ($id("camMainPath")) $id("camMainPath").value = c.main_path || "";
+    setChecked("camLprEnabled", c.lpr_enabled !== false);
+    if ($id("camLprStream")) $id("camLprStream").value = c.lpr_stream || "main";
     setChecked("camReconnect", c.reconnect !== false);
     if ($id("camReconnectDelay")) $id("camReconnectDelay").value = (c.reconnect_delay != null) ? c.reconnect_delay : 5;
     setChecked("camAutostart", c.autostart !== false);

@@ -1036,6 +1036,8 @@ class _CameraIn(BaseModel):
     password: str | None = None
     path: str | None = None
     main_path: str | None = None
+    lpr_enabled: bool | None = None
+    lpr_stream: str | None = None
     full_url: str | None = None
     reconnect: bool | None = None
     reconnect_delay: int | None = None

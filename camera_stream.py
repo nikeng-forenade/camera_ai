@@ -528,6 +528,9 @@ class CameraWorker:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
+            "main_path": "",
+            "lpr_enabled": True,   # per-kamera: kör LPR (följer global LPR på/av)
+            "lpr_stream": "main",  # per-kamera: "main" (högupplöst) | "sub"
 # Detektionszoner (en eller flera polygoner); gamla linjer (roi_*) stöds fortfarande
     "roi_enabled": False,
     "roi_y": 0.5,
@@ -836,7 +839,11 @@ class CameraWorker:
         """
         with self._lock:
             enabled = bool(self.detect.get("lpr_enabled", False))
-        if not enabled or now - self._lpr_last_ts < float(config.LPR_INTERVAL):
+            cam_lpr = bool(self.camera.get("lpr_enabled", True))
+            lpr_stream = str(self.camera.get("lpr_stream", "main")).strip().lower()
+        # Per-kamera-inställning: bara kör LPR om både global LPR och denna kamera
+        # är på. `lpr_stream` = "sub" → använd sub-bilden, annars main (högupplöst).
+        if not enabled or not cam_lpr or now - self._lpr_last_ts < float(config.LPR_INTERVAL):
             return
         self._lpr_last_ts = now
         vehicles = {"car", "truck", "bus", "motorcycle"}
@@ -850,8 +857,8 @@ class CameraWorker:
                 self._plate_reader = PlateReader(
                     config.LPR_ENGINE, config.LPR_LANGUAGE, config.LPR_MIN_CONF
                 )
-            # Föredra en högupplöst bild från huvudströmmen för OCR.
-            main_frame = self._grab_main_frame()
+            # Föredra en högupplöst bild från huvudströmmen (om lpr_stream = main).
+            main_frame = self._grab_main_frame() if lpr_stream != "sub" else None
             lpr_frame = main_frame if main_frame is not None else frame
             sx = 1.0
             sy = 1.0
@@ -1824,6 +1831,8 @@ class CameraWorker:
             "user": c.get("user") or "",
             "path": c.get("path") or "/Preview_01_sub",
             "main_path": c.get("main_path") or "",
+            "lpr_enabled": bool(c.get("lpr_enabled", True)),
+            "lpr_stream": str(c.get("lpr_stream") or "main"),
             "password_configured": bool((c.get("password") or "") or ("@" in full)),
             "full_url_configured": bool(full),
             "reconnect": bool(c.get("reconnect")),
@@ -1983,6 +1992,7 @@ class CameraWorker:
 _CAMERA_FIELDS = (
     "enabled", "name", "host", "user", "password", "path", "main_path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
+    "lpr_enabled", "lpr_stream",
     "roi_enabled", "roi_y", "roi_side",
     "zone_enabled", "zone_polys", "zone_kinds", "zone_points", "zone_mode",
 )
@@ -2145,6 +2155,9 @@ class CameraPool:
             values["main_path"] = ("/" + p) if p and not p.startswith("/") else p
             if not values["main_path"]:
                 values.pop("main_path", None)
+        if values.get("lpr_stream") is not None:
+            s = str(values["lpr_stream"]).strip().lower()
+            values["lpr_stream"] = s if s in ("main", "sub") else "main"
         if values.get("full_url") is not None:
             values["full_url"] = str(values["full_url"]).strip()
 
