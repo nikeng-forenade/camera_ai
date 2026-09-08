@@ -1,5 +1,8 @@
 # Ändringsnoteringar
 
+## 2026-09-08
+- Version `0.17.15`: lägsta konfidens för Historik/HA-händelser (`events.min_conf` / `LIVE_EVENT_MIN_CONF`, default 0.6, 0–1). En svag gissning (t.ex. "bird 55 %" på ett litet avlägset djur) skapar inte längre en händelserad – bara detektioner med konfidens ≥ tröskeln räknas som "närvarande" av eventtrackern och hamnar i Historik/sammanfattning. Live-boxarna (överlägget) ändras inte – tröskeln gäller bara event. GUI: Inställningar → HA-event → "Lägsta konfidens för händelse (%)". Fälten: `_eval_events` (present + ev_dets filtreras med `min_conf`), `_event_defaults`, `status().event_min_conf`, `/api/settings` (GET/PUT), `example.env`.
+
 ## 2026-09-07
 - Version `0.17.14`: ?-hjälpknapp vid "Rörelsekänslighet" (Inställningar → Live-detektering) som visar guiden (1–5 / 8–15 sweet spot / 15–25 / >30) i en popover. Stängs genom att klicka utanför eller på knappen igen.
 - Version `0.17.13`: live pixel-rörelsemätare under känslighetsslidern. Servern mäter alltid en billig 128×72-pixeländring (`_motion_preview`, `status().motion_diff`) och Inställningar → Live-detektering visar "Rörelse nu: X · tröskel: Y" som uppdateras varje statuspoll och direkt när slidern dras (`updateDetGateLive`). Man ser alltså live om vald känslighet skulle utlösa YOLO innan man trycker Spara.

@@ -172,9 +172,12 @@ API i korthet: `GET/PUT /api/settings`, `GET /api/cameras/status`,
 Nya detektioner i live-strömmen kan skickas till HA som händelser. En händelse
 skapas bara när en klass blir **närvarande** (eller kommer tillbaka efter att ha
 varit borta i "vila"-tiden) – en statisk/parkerad bil ger alltså **bara en
-händelse**, inte ett ständigt larm. Inställningar under **Inställningar →
-HA-event** (klasser, vila innan återaktivering, ON-tid, min-intervall,
-start-grace) eller i `.env` (`LIVE_EVENT_*`).
+händelse**, inte ett ständigt larm. Bara detektioner med minst **lägsta
+konfidens** för händelser (default 60 %) skapar rader i Historik/HA – svaga
+gissningar (t.ex. "bird 55 %" på ett litet avlägset djur) ignoreras. Inställningar
+under **Inställningar → HA-event** (klasser, lägsta konfidens, vila innan
+återaktivering, ON-tid, min-intervall, start-grace) eller i `.env`
+(`LIVE_EVENT_*`).
 
 Så här får du in det i HA:
 

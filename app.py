@@ -1248,6 +1248,7 @@ def get_settings():
         "events": {
             "enabled": bool(ev["enabled"]),
             "classes": ev["classes"],
+            "min_conf": float(ev["min_conf"]),
             "clear_after": float(ev["clear_after"]),
             "hold": float(ev["hold"]),
             "min_interval": float(ev["min_interval"]),
@@ -1528,10 +1529,12 @@ def update_settings(payload: _SettingsIn):
         hd = _clamp(e.get("hold", cur_ev["hold"]), cur_ev["hold"], 1.0, 300.0, "ON-tid i HA")
         mi = _clamp(e.get("min_interval", cur_ev["min_interval"]), cur_ev["min_interval"], 0.5, 300.0, "Minsta intervall")
         sg = _clamp(e.get("startup_grace", cur_ev["startup_grace"]), cur_ev["startup_grace"], 0.0, 120.0, "Start-grace")
+        mc = _clamp(e.get("min_conf", cur_ev["min_conf"]), cur_ev["min_conf"], 0.0, 1.0, "Lägsta konfidens för händelse")
         if not errors:
             pending_events = {
                 "enabled": en,
                 "classes": classes,
+                "min_conf": mc,
                 "clear_after": ca,
                 "hold": hd,
                 "min_interval": mi,
@@ -1540,6 +1543,7 @@ def update_settings(payload: _SettingsIn):
             env_write.update({
                 "LIVE_EVENT_ENABLED": "true" if en else "false",
                 "LIVE_EVENT_CLASSES": classes,
+                "LIVE_EVENT_MIN_CONF": str(round(mc, 2)),
                 "LIVE_EVENT_CLEAR_AFTER": str(round(ca, 1)),
                 "LIVE_EVENT_HOLD": str(round(hd, 1)),
                 "LIVE_EVENT_MIN_INTERVAL": str(round(mi, 2)),

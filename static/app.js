@@ -1093,6 +1093,7 @@ loadStats();
       if ($id("evHold")) $id("evHold").value = (ev.hold != null) ? ev.hold : 10;
       if ($id("evMinInterval")) $id("evMinInterval").value = (ev.min_interval != null) ? ev.min_interval : 5;
       if ($id("evStartupGrace")) $id("evStartupGrace").value = (ev.startup_grace != null) ? ev.startup_grace : 5;
+      if ($id("evMinConf")) $id("evMinConf").value = Math.round(((ev.min_conf != null ? ev.min_conf : 0.6) || 0) * 100);
     }
     renderStatus(s.runtime || null);
     loadCameras();
@@ -1882,10 +1883,12 @@ loadStats();
     $id("btnSaveEvents").addEventListener("click", async () => {
       const out = $id("evSaveMsg");
       setMsg(out, "Sparar…", false);
+      const mcRaw = parseFloat($id("evMinConf").value);
       const body = {
         events: {
           enabled: $id("evEnabled").checked,
           classes: evCsv(),
+          min_conf: (isNaN(mcRaw) ? 60 : mcRaw) / 100,
           clear_after: parseFloat($id("evClearAfter").value) || 5,
           hold: parseFloat($id("evHold").value) || 10,
           min_interval: parseFloat($id("evMinInterval").value) || 5,

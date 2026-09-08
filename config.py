@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.14"
+VERSION = "0.17.15"
 
 
 def model_path(name: str) -> str:
@@ -209,6 +209,10 @@ LIVE_EVENT_ENABLED = _env_bool("LIVE_EVENT_ENABLED", False)
 LIVE_EVENT_CLASSES = (
     os.getenv("LIVE_EVENT_CLASSES", "person,car,cat,dog") or "person"
 ).strip()
+# Lägsta konfidens (0-1) för att en detektion ska få skapa en Historik/HA-
+# händelse. Svaga gissningar (t.ex. "bird 55 %" på ett litet avlägset djur)
+# skapar inga händelser - bara säkra detektioner. 0 = av (alla räknas).
+LIVE_EVENT_MIN_CONF = _env_float("LIVE_EVENT_MIN_CONF", 0.6, lo=0.0, hi=1.0)
 # Hur länge klassen måste vara borta innan den räknas som "lämnad" (re-arms).
 LIVE_EVENT_CLEAR_AFTER = _env_float("LIVE_EVENT_CLEAR_AFTER", 5.0, lo=1.0, hi=120.0)
 # Hur länge binary_sensorn i HA är ON per händelse.

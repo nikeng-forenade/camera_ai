@@ -477,6 +477,10 @@
             <input type="number" id="evStartupGrace" min="0" max="120" value="5" />
             <span class="hint">Ignorera händelser de första sekunderna efter start – så redan parkerade objekt inte larmar direkt efter omstart.</span>
           </label>
+          <label>Lägsta konfidens för händelse (%)
+            <input type="number" id="evMinConf" min="0" max="100" step="1" value="60" />
+            <span class="hint">Detektioner under denna konfidens skapar ingen Historik/HA-händelse – svaga gissningar (t.ex. felaktiga "bird 55 %" på ett litet djur) ignoreras. 0 = alla detektioner räknas.</span>
+          </label>
         </div>
         <p class="hint">Kräver att Home Assistant är aktiverat (HA_ENABLED=1, se README) och att kameran är igång. Lösenord/HA-token skickas aldrig till webbläsaren.</p>
         <div class="save-bar">

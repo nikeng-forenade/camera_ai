@@ -432,6 +432,7 @@ class CameraWorker:
         return {
             "enabled": config.LIVE_EVENT_ENABLED,
             "classes": config.LIVE_EVENT_CLASSES,
+            "min_conf": float(config.LIVE_EVENT_MIN_CONF),
             "clear_after": float(config.LIVE_EVENT_CLEAR_AFTER),
             "hold": float(config.LIVE_EVENT_HOLD),
             "min_interval": float(config.LIVE_EVENT_MIN_INTERVAL),
@@ -1263,10 +1264,18 @@ class CameraWorker:
             cb = self._event_callback
             camera_name = self.camera["name"]
             classes = set(self._ev_classes)
+            min_conf = float(cfg.get("min_conf", 0.0) or 0.0)
         if not enabled or cb is None:
             return
         with self._lock:
-            present = {d.get("class") for d in dets if d.get("class") in classes}
+            # Bara detektioner med tillräcklig konfidens räknas som "närvarande" -
+            # svaga gissningar (t.ex. "bird 55 %") ska inte kunna skapa händelser.
+            present = {
+                d.get("class")
+                for d in dets
+                if d.get("class") in classes
+                and float(d.get("confidence", 0.0) or 0.0) >= min_conf
+            }
             fired = self._evt.update(present, now, float(cfg.get("clear_after", 5.0)))
             grace_until = self._started_ts + float(cfg.get("startup_grace", 0.0))
             if fired and now >= grace_until:
@@ -1285,7 +1294,12 @@ class CameraWorker:
             return  # låt redan närvarande objekt "landa" innan man larmar
         if not can_pub:
             return
-        ev_dets = [d for d in dets if d.get("class") in fired]
+        ev_dets = [
+            d
+            for d in dets
+            if d.get("class") in fired
+            and float(d.get("confidence", 0.0) or 0.0) >= min_conf
+        ]
         if self._event_locations_suppress(ev_dets, now):
             return  # samma stillastående objekt som flimrar - inget nytt larm
         summary = self._event_summary(ev_dets)
@@ -1550,6 +1564,7 @@ class CameraWorker:
             "event_hold": float(events["hold"]),
             "event_min_interval": float(events["min_interval"]),
             "event_startup_grace": float(events["startup_grace"]),
+            "event_min_conf": float(events["min_conf"]),
             "last_event": self.last_event,
             "last_event_ts": self.last_event_ts,
             "event_count": self.event_count,
