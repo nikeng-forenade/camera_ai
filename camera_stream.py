@@ -345,6 +345,7 @@ class CameraWorker:
         self.last_frame_ts: float = 0.0
         self.last_detection_ts: float = 0.0
         self.last_inference_ts: float = 0.0
+        self.last_ai_activity_ts: float = 0.0
         self.last_reconnect_ts: float = 0.0
         self.reconnect_count: int = 0
         self.inference_ms: float = 0.0  # EMA
@@ -813,12 +814,18 @@ class CameraWorker:
                 cam_on = bool(self.camera.get("enabled"))
                 state = self.state
                 yolo_on = bool(self.detect.get("yolo_enabled", True))
+                motion_gate = bool(self.detect.get("motion_gate", False))
                 last_inf = self.last_inference_ts
+                last_activity = self.last_ai_activity_ts
                 running_for = time.time() - self._started_ts
             if not cam_on or state != CAM_ONLINE or not yolo_on or running_for < 60.0:
                 stale = 0
                 continue
-            age = time.time() - last_inf if last_inf else None
+            # Med pixel-gate kan YOLO korrekt vila länge. En gate-kontroll på
+            # en ny frame är då ett giltigt livstecken, men när gaten är av
+            # krävs fortsatt riktig inferens.
+            heartbeat = max(last_inf, last_activity) if motion_gate else last_inf
+            age = time.time() - heartbeat if heartbeat else None
             if age is not None and age <= WATCHDOG_STALE_S:
                 stale = 0
                 continue
@@ -839,7 +846,7 @@ class CameraWorker:
                 continue
             self._wd_last_restart = now
             self._wd_resets.append(now)
-            print(f"[watchdog] {self.camera_id}: ingen AI-inferens på {WATCHDOG_STALE_S:.0f}s - startar om workern")
+            print(f"[watchdog] {self.camera_id}: ingen AI-aktivitet på {WATCHDOG_STALE_S:.0f}s - startar om workern")
             try:
                 self.restart()
             except Exception as exc:  # noqa: BLE001 - watchdogen får aldrig krascha
@@ -1010,6 +1017,7 @@ class CameraWorker:
             # Pixel-motion-gate (av som standard): hoppa över YOLO om scenen är still.
             if yolo_due and bool(detect.get("motion_gate", False)):
                 gate_roi = self._roi_cfg()
+                self.last_ai_activity_ts = now
                 if not self._gate_motion(raw, now, gate_roi):
                     last_ai = now  # håll takten – kolla rörelse igen nästa AI-tick
                     yolo_due = False
