@@ -35,6 +35,31 @@ Reolink → RTSP sub → Camera worker → YOLO (AI FPS) → MJPEG → Dashboard
 Krav: Windows 10/11 eller Server 2025, **Intel Arc B50 Pro** med drivrutin,
 Python 3.12 (x64), Git och [Ollama](https://ollama.com).
 
+### Installera LPR/OCR manuellt
+
+LPR använder samma Python-venv som Camera AI. Kör PowerShell från projektmappen
+och installera vald motor innan LPR aktiveras i GUI:t:
+
+```powershell
+cd C:\camera_ai
+\.venv\Scripts\python.exe -m pip install easyocr
+\.venv\Scripts\python.exe -c "import easyocr; print('EasyOCR OK')"
+```
+
+Alternativt:
+
+```powershell
+cd C:\camera_ai
+\.venv\Scripts\python.exe -m pip install paddleocr paddlepaddle
+\.venv\Scripts\python.exe -c "import paddleocr; import paddle; print('PaddleOCR OK')"
+```
+
+Starta sedan om Camera AI och välj motorn under **Inställningar →
+Registreringsskyltar (LPR)**. GUI:t visar om motorn är installerad. Använd
+inte systemets `python`; `start.bat` och Task Scheduler använder
+`.venv\Scripts\pythonw.exe`. För Task Scheduler som kör som `SYSTEM`, installera
+paketen i `.venv` innan aktiviteten startas om.
+
 > **Enklaste vägen (server, headless):** `windows\install.ps1` installerar allt
 > i ett — hämtar senaste koden, Python 3.12 (via winget), Ollama + `moondream`
 > (via winget), beroenden, `.env` och den schemalagda aktiviteten `CameraAI`.
