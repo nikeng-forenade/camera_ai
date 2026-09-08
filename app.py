@@ -1232,7 +1232,7 @@ def get_settings():
             "max_area": float(det.get("max_area", 1.0) or 1.0),
             "class_scores": det.get("class_scores", ""),
             "motion_gate": bool(det.get("motion_gate", False)),
-            "motion_threshold": float(det.get("motion_threshold", 10.0) or 10.0),
+            "motion_threshold": float(det.get("motion_threshold", 5.0) or 5.0),
             "model_options": list(_KNOWN_YOLO_MODELS),
             "device_options": list(_KNOWN_DEVICES),
             "imgsz_options": list(_KNOWN_IMGSZ),
@@ -1404,7 +1404,7 @@ def update_settings(payload: _SettingsIn):
         motion_gate = bool(cur_det.get("motion_gate", False))
         if "motion_gate" in d:
             motion_gate = _to_bool(d.get("motion_gate", motion_gate), motion_gate)
-        motion_thr = float(cur_det.get("motion_threshold", 10.0) or 10.0)
+        motion_thr = float(cur_det.get("motion_threshold", 5.0) or 5.0)
         if "motion_threshold" in d:
             try:
                 motion_thr = float(d["motion_threshold"])

@@ -397,16 +397,16 @@
           </label>
           <label>Rörelsekänslighet (1–100)
             <button type="button" class="qmark" id="detGateHelpBtn" aria-label="Hjälp – vad ska jag sätta?" title="Vad ska jag sätta?">?</button>
-            <span id="detGateVal">10</span>
-            <input type="range" id="detGateThr" min="1" max="100" step="1" value="10" />
+            <span id="detGateVal">5</span>
+            <input type="range" id="detGateThr" min="1" max="100" step="1" value="5" />
             <span class="hint">Av som standard. Lägre värde = känsligare (mindre rörelse räcker). Sparar GPU när scenen är stilla, men för låg känslighet kan fördröja nya detektioner.</span>
           </label>
           <div class="help-pop" id="detGateHelp" hidden>
             <strong>Vad ska jag sätta?</strong>
             <ul>
               <li><b>1–5</b> – väldigt känslig: nästan allt räknas som rörelse (då vinner du lite på gaten).</li>
-              <li><b>8–15</b> – <b>sweet spot</b> för de flesta utekameror: fångar bilar/personer men ignorerar lite brus och långsamma skuggor.</li>
-              <li><b>15–25</b> – tålmodig: kräver tydlig rörelse; bra om mycket träd/grenar vajar eller starkt bildbrus.</li>
+              <li><b>5–10</b> – <b>sweet spot</b> för de flesta utekameror: fångar bilar/personer men ignorerar lite brus och långsamma skuggor.</li>
+              <li><b>10–25</b> – tålmodig: kräver tydlig rörelse; bra om mycket träd/grenar vajar eller starkt bildbrus.</li>
               <li><b>&gt;30</b> – bara för mycket stökiga scener (missar lätt små/långsamma rörelser).</li>
             </ul>
           </div>

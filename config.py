@@ -20,7 +20,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.15"
+VERSION = "0.17.16"
 
 
 def model_path(name: str) -> str:
@@ -132,7 +132,7 @@ FILTER_CLASS_SCORES = os.getenv("CAMERA_FILTER_CLASS_SCORES", "")
 
 # Pixel-motion-gate (av som standard): kör YOLO bara när bilden ändrats.
 MOTION_GATE_ENABLED = _env_bool("MOTION_GATE_ENABLED", False)
-MOTION_GATE_THRESHOLD = _env_float("MOTION_GATE_THRESHOLD", 10.0, lo=1.0, hi=255.0)
+MOTION_GATE_THRESHOLD = _env_float("MOTION_GATE_THRESHOLD", 5.0, lo=1.0, hi=255.0)
 
 # Small vision LLM (describes the scene).
 #   llm_backend = "ollama" | "none"

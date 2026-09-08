@@ -10,6 +10,7 @@ statusfältet så GUI/API fungerar även utan kamera.
 from __future__ import annotations
 
 import json
+import math
 import re
 import threading
 import time
@@ -587,7 +588,9 @@ class CameraWorker:
         oförändrad behålls referensen så att nästa ändring fångas.
         """
         with self._lock:
-            thr = float(self.detect.get("motion_threshold", 10.0) or 10.0)
+            thr = float(self.detect.get("motion_threshold", 5.0) or 5.0)
+            if not math.isfinite(thr) or thr < 1.0:
+                thr = 5.0
         try:
             small = cv2.resize(
                 cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY),
@@ -753,6 +756,11 @@ class CameraWorker:
                 continue
 
             self._set_state(CAM_CONNECTING, f"Ansluter till {cfg['name']} …")
+            # En reconnect kan ge samma upplosning men en helt ny scen.
+            # Jamfor aldrig den forsta bilden med data fran forra streamen.
+            with self._lock:
+                self._gate_ref = None
+                self._preview_ref = None
             cap = None
             try:
                 cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)

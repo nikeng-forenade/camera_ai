@@ -1075,7 +1075,7 @@ loadStats();
       if ($id("detMinArea")) $id("detMinArea").value = Math.round((det.min_area || 0) * 100);
       if ($id("detMaxArea")) $id("detMaxArea").value = Math.round((det.max_area != null ? det.max_area : 1) * 100);
       setChecked("detGate", det.motion_gate);
-      if ($id("detGateThr")) { const v = Math.round(det.motion_threshold || 10); $id("detGateThr").value = v; if ($id("detGateVal")) $id("detGateVal").textContent = v; }
+      if ($id("detGateThr")) { const v = Math.round(det.motion_threshold || 5); $id("detGateThr").value = v; if ($id("detGateVal")) $id("detGateVal").textContent = v; }
     }
     if (liv) {
       setChecked("liveEnabled", liv.enabled);
@@ -1110,7 +1110,7 @@ loadStats();
     const liveEl = $id("detGateLive");
     if (!liveEl) return;
     const thrEl = $id("detGateThr");
-    const thr = thrEl ? (parseFloat(thrEl.value) || 10) : 10;
+    const thr = thrEl ? (parseFloat(thrEl.value) || 5) : 5;
     const diff = lastMotionDiff;
     const fire = diff >= thr;
     liveEl.textContent = "Rörelse nu: " + diff.toFixed(1) + " · tröskel: " + thr + (fire ? " → skulle utlösa YOLO" : " → under tröskeln (YOLO vilar)");
@@ -1799,7 +1799,7 @@ loadStats();
           max_area: maxArea,
           class_scores: ($id("detClassScores").value || "").trim(),
           motion_gate: $id("detGate").checked,
-          motion_threshold: parseFloat($id("detGateThr").value) || 10,
+          motion_threshold: parseFloat($id("detGateThr").value) || 5,
         },
       };
       try {
