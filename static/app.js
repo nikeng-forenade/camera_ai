@@ -682,6 +682,11 @@ loadStats();
   const streamHint = $id("streamHint");
   const liveOverlay = $id("liveOverlay");
   const camSelect = $id("camSelect");
+  const dashQuickCamera = $id("dashQuickCamera");
+  const dashQuickYolo = $id("dashQuickYolo");
+  const dashQuickDetections = $id("dashQuickDetections");
+  const dashQuickInference = $id("dashQuickInference");
+  const btnLiveFullscreen = $id("btnLiveFullscreen");
   const camEditSelect = $id("camEditSelect");
   let activeCam = localStorage.getItem("camAiActive") || "";
   let editingId = null;   // kamera som redigeras i Inställningar (null = lägg till)
@@ -770,6 +775,10 @@ loadStats();
       if (detNowList) detNowList.innerHTML = `<li class="empty-li"><span class="empty">—</span></li>`;
       if (detNowAge) detNowAge.textContent = "";
       if (gpuWarnCard) gpuWarnCard.hidden = true;
+      if (dashQuickCamera) dashQuickCamera.textContent = "—";
+      if (dashQuickYolo) dashQuickYolo.textContent = "—";
+      if (dashQuickDetections) dashQuickDetections.textContent = "—";
+      if (dashQuickInference) dashQuickInference.textContent = "—";
       return;
     }
     // Live-bild: visa bara när strömmen är på. Status syns alltid i sidopanel.
@@ -803,6 +812,13 @@ loadStats();
         ? (s.resolution ? s.resolution + " · " : "") + (s.codec || "") + (s.source_fps ? " · " + s.source_fps.toFixed(1) + " FPS" : "")
         : (s.camera_detail || "");
     }
+    if (dashQuickCamera) dashQuickCamera.textContent = CAMERA_LABELS[s.camera_state] || s.camera_state || "—";
+    if (dashQuickYolo) dashQuickYolo.textContent = YOLO_LABELS[s.yolo_state] || s.yolo_state || "—";
+    if (dashQuickDetections) {
+      const total = Object.values(s.detection_counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+      dashQuickDetections.textContent = total ? String(total) : "Inga";
+    }
+    if (dashQuickInference) dashQuickInference.textContent = ageText(s.last_inference_age);
 
     // Start/Stopp-knapp: "ström" = bara videon till GUI. Worker + YOLO +
     // HA-event fortsätter alltid på servern så länge kameran är aktiverad.
@@ -995,6 +1011,17 @@ loadStats();
   }
   const btnRefreshAllCams = $id("btnRefreshAllCams");
   if (btnRefreshAllCams) btnRefreshAllCams.addEventListener("click", () => pollStatus());
+
+  if (btnLiveFullscreen) {
+    btnLiveFullscreen.addEventListener("click", async () => {
+      const viewer = document.querySelector(".live-viewer");
+      if (!viewer) return;
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await viewer.requestFullscreen();
+      } catch (e) { /* webbläsaren kan neka fullskärm */ }
+    });
+  }
 
   async function saveSettingsJson(payload) {
     const res = await fetch("/api/settings", {

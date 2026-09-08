@@ -32,7 +32,7 @@
 
   <main>
     <!-- ============================ DASHBOARD ============================ -->
-    <section id="view-dashboard" class="view active">
+    <section id="view-dashboard" class="view active dashboard-v2">
       <div class="dash-grid">
         <div class="dash-live">
           <div class="card live-card">
@@ -48,8 +48,15 @@
               <img id="liveImg" alt="Live-kamera" />
               <div class="live-overlay" id="liveOverlay"></div>
             </div>
+            <div class="dash-quickstats" aria-label="Snabbstatus">
+              <div class="dash-quickstat"><span class="dash-quick-label">Kamera</span><strong id="dashQuickCamera">—</strong></div>
+              <div class="dash-quickstat"><span class="dash-quick-label">YOLO</span><strong id="dashQuickYolo">—</strong></div>
+              <div class="dash-quickstat"><span class="dash-quick-label">Detekterar</span><strong id="dashQuickDetections">—</strong></div>
+              <div class="dash-quickstat"><span class="dash-quick-label">Senaste körning</span><strong id="dashQuickInference">—</strong></div>
+            </div>
             <div class="live-controls">
               <button id="btnStreamToggle" class="btn" type="button">▶ Starta</button>
+              <button id="btnLiveFullscreen" class="btn btn-secondary" type="button" title="Visa livebild i fullskärm">⛶ Fullskärm</button>
               <span id="streamHint" class="hint"></span>
               <span class="live-toggles">
                 <label class="toggle"><input type="checkbox" id="dashBoxes" checked /> Boxar</label>

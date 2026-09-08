@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.19`: Dashboard v2 med bättre mobil layout, snabbstatus för kamera/YOLO/detektion, fullskärmsknapp för livebild och mer kompakt status på små skärmar. Layouten är scoped till `dashboard-v2` så den gamla dashboard-layouten kan återställas enkelt.
 - Version `0.17.18`: pixel-gaten kalibrerar automatiskt bakgrundsbrus under 10 sekunder efter start/reconnect. Den effektiva tröskeln blir minst användarens val och höjs vid behov till cirka tre gånger uppmätt bakgrundsrörelse; det sparade värdet ändras inte.
 - Version `0.17.17`: pixel-gaten respekterar röda maskzoner före YOLO och har en fem sekunders startgate efter start/reconnect så kamerans första bildflöde inte blockeras av gate-logiken.
 - Version `0.17.16`: pixel-gate-fix. Referensbilderna nollställs vid RTSP-reconnect så första bilden från en ny stream inte jämförs med föregående stream. Ogiltig känslighet faller tillbaka till 5, och standarden sänks från 10 till 5 för att inte filtrera bort små/lokala rörelser.
