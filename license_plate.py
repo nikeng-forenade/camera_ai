@@ -93,37 +93,48 @@ class PlateReader:
         crop = frame[y1:y2, x1:x2]
         if crop.size == 0:
             return None
-        best = self._ocr_crops(crop)
-        if best:
-            return best
-        # Fallback: beskära den undre/centrala skyltzonen och OCR:a den.
         ch, cw = crop.shape[:2]
-        plate_zone = crop[int(ch * 0.55):, int(cw * 0.08):int(cw * 0.92)]
-        return self._ocr_crops(plate_zone)
+        # Snävare skyltzon (nedre centrala delen) ger skylten fler pixlar och
+        # bättre igenkänning än hela fordonsrutan. Testas först, hela rutan som
+        # fallback om skylten sitter annorlunda.
+        tight = crop[int(ch * 0.50):, int(cw * 0.06):int(cw * 0.94)]
+        best = None
+        for cand in (tight, crop):
+            if cand is None or cand.size == 0:
+                continue
+            best = self._ocr_crops(cand, best)
+            if best and best["confidence"] >= 0.5:
+                break
+        return best
 
-    def _ocr_crops(self, crop):
-        """OCR på flera uppskalningar, behåll bästa plåtformade träff."""
+    def _ocr_crops(self, crop, current=None):
+        """OCR på flera uppskalningar + kontrastvariant, behåll bästa träff."""
         import cv2
 
         if crop is None or crop.size == 0:
-            return None
+            return current
+        # Kontrastförstärkt gråskalevariant (CLAHE) hjälper på skyltar.
+        try:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+            variants = [crop, cv2.cvtColor(clahe, cv2.COLOR_GRAY2BGR)]
+        except Exception:  # noqa: BLE001
+            variants = [crop]
         scales = [2.0, 3.0, 4.0] if max(crop.shape[:2]) < 900 else [1.0, 2.0]
-        best = None
-        for scale in scales:
-            if scale != 1.0:
-                scaled = cv2.resize(
-                    crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
+        best = current
+        for src in variants:
+            for scale in scales:
+                scaled = src if scale == 1.0 else cv2.resize(
+                    src, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
                 )
-            else:
-                scaled = crop
-            results = self._read_text(scaled)
-            for raw_text, confidence in results or []:
-                text = self.normalize(raw_text)
-                score = float(confidence or 0.0)
-                if text and score >= self.min_conf and (best is None or score > best["confidence"]):
-                    best = {"text": text, "confidence": round(score, 4)}
-            if best:
-                break
+                results = self._read_text(scaled)
+                for raw_text, confidence in results or []:
+                    text = self.normalize(raw_text)
+                    score = float(confidence or 0.0)
+                    if text and score >= self.min_conf and (best is None or score > best["confidence"]):
+                        best = {"text": text, "confidence": round(score, 4)}
+                if best and best["confidence"] >= 0.72:
+                    return best
         return best
 
     @staticmethod
