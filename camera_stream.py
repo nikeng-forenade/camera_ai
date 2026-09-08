@@ -18,6 +18,7 @@ from collections import deque
 from urllib.parse import quote
 
 import cv2  # finns via ultralytics (requirements: opencv-python)
+import numpy as np
 
 import config
 from analyzer import annotate_frame_bgr
@@ -350,6 +351,7 @@ class CameraWorker:
         self._raw_frame = None
         self._raw_ts = 0.0
         self._gate_ref = None  # liten gråskalebild för pixel-rörelse-gaten
+        self._gate_start_until = 0.0
         self._preview_ref = None      # separat referens för live-rörelsemätaren
         self.motion_diff: float = 0.0  # senaste uppmätta pixeländring (GUI-live)
         self.motion_diff_ts: float = 0.0
@@ -580,7 +582,7 @@ class CameraWorker:
         self._preview_ref = small
         return diff
 
-    def _gate_motion(self, frame, now: float) -> bool:
+    def _gate_motion(self, frame, now: float, roi: dict | None = None) -> bool:
         """Pixel-rörelse-gate: True = kör YOLO, False = hoppa över (still bild).
 
         Jämför en liten nedskalad gråskalebild mot referensen från förra
@@ -603,11 +605,50 @@ class CameraWorker:
         if ref is None or ref.shape != small.shape:
             self._gate_ref = small
             return True
-        motion = float(cv2.mean(cv2.absdiff(small, ref))[0])
+        if now < self._gate_start_until:
+            self._gate_ref = small
+            return True
+        diff = cv2.absdiff(small, ref)
+        gate_mask = self._gate_pixel_mask(roi, small.shape)
+        if gate_mask is not None and cv2.countNonZero(gate_mask) == 0:
+            self._gate_ref = small
+            return False
+        motion = float(cv2.mean(diff, mask=gate_mask)[0]) if gate_mask is not None else float(cv2.mean(diff)[0])
         if motion >= thr:
             self._gate_ref = small
             return True
         return False
+
+    @staticmethod
+    def _gate_pixel_mask(roi: dict | None, shape: tuple[int, int]):
+        """Return watched pixels only; red mask zones never wake YOLO."""
+        if not roi or not roi.get("zones", {}).get("enabled"):
+            return None
+        height, width = shape
+        mask = np.full((height, width), 255, dtype=np.uint8)
+        items = roi["zones"].get("items") or []
+        watch = [item["points"] for item in items if item.get("kind") == "watch"]
+        ignored = [item["points"] for item in items if item.get("kind") == "mask"]
+        if watch:
+            mask.fill(0)
+            polygons = watch
+        else:
+            polygons = []
+        for points in polygons:
+            pts = np.array(
+                [[round(float(x) * (width - 1)), round(float(y) * (height - 1))] for x, y in points],
+                dtype=np.int32,
+            )
+            if len(pts) >= 3:
+                cv2.fillPoly(mask, [pts], 255)
+        for points in ignored:
+            pts = np.array(
+                [[round(float(x) * (width - 1)), round(float(y) * (height - 1))] for x, y in points],
+                dtype=np.int32,
+            )
+            if len(pts) >= 3:
+                cv2.fillPoly(mask, [pts], 0)
+        return mask
 
     def _cfg(self) -> dict:
         with self._lock:
@@ -761,6 +802,7 @@ class CameraWorker:
             with self._lock:
                 self._gate_ref = None
                 self._preview_ref = None
+                self._gate_start_until = time.time() + 5.0
             cap = None
             try:
                 cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
@@ -901,7 +943,8 @@ class CameraWorker:
                 self.motion_diff_ts = now
             # Pixel-motion-gate (av som standard): hoppa över YOLO om scenen är still.
             if yolo_due and bool(detect.get("motion_gate", False)):
-                if not self._gate_motion(raw, now):
+                gate_roi = self._roi_cfg()
+                if not self._gate_motion(raw, now, gate_roi):
                     last_ai = now  # håll takten – kolla rörelse igen nästa AI-tick
                     yolo_due = False
             if yolo_due:
