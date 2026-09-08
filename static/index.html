@@ -317,9 +317,13 @@
             <input type="password" id="camPass" placeholder="••••••••" autocomplete="new-password" />
             <span id="camPassHint" class="hint"></span>
           </label>
-          <label>Ström-sökväg
+          <label>Ström-sökväg (sub – YOLO)
             <input type="text" id="camPath" placeholder="/Preview_01_sub" />
           </label>
+          <label>Main-ström sökväg (valfri – LPR)
+            <input type="text" id="camMainPath" placeholder="/Preview_01_main" />
+          </label>
+          <p class="hint">Lämna main tomt så härleds den automatiskt från sub (…_sub → …_main). Fyll i endast om din kamera avviker.</p>
           <label class="chk">
             <input type="checkbox" id="camReconnect" /> Auto-återanslut
           </label>

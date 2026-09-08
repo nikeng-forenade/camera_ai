@@ -1655,6 +1655,7 @@ class CameraWorker:
             "host": c.get("host") or "",
             "user": c.get("user") or "",
             "path": c.get("path") or "/Preview_01_sub",
+            "main_path": c.get("main_path") or "",
             "password_configured": bool((c.get("password") or "") or ("@" in full)),
             "full_url_configured": bool(full),
             "reconnect": bool(c.get("reconnect")),
@@ -1805,7 +1806,7 @@ class CameraWorker:
 # Registret sparas i config.CAMERAS_FILE (data/cameras.json), som bevaras av
 # install/update (data/ exkluderas i robocopy). Fält = worker.camera.
 _CAMERA_FIELDS = (
-    "enabled", "name", "host", "user", "password", "path", "full_url",
+    "enabled", "name", "host", "user", "password", "path", "main_path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
     "roi_enabled", "roi_y", "roi_side",
     "zone_enabled", "zone_polys", "zone_kinds", "zone_points", "zone_mode",
@@ -1964,6 +1965,11 @@ class CameraPool:
         if values.get("path") is not None:
             p = str(values["path"]).strip() or "/Preview_01_sub"
             values["path"] = p if p.startswith("/") else "/" + p
+        if values.get("main_path") is not None:
+            p = str(values["main_path"]).strip()
+            values["main_path"] = ("/" + p) if p and not p.startswith("/") else p
+            if not values["main_path"]:
+                values.pop("main_path", None)
         if values.get("full_url") is not None:
             values["full_url"] = str(values["full_url"]).strip()
 

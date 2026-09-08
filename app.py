@@ -1033,6 +1033,7 @@ class _CameraIn(BaseModel):
     user: str | None = None
     password: str | None = None
     path: str | None = None
+    main_path: str | None = None
     full_url: str | None = None
     reconnect: bool | None = None
     reconnect_delay: int | None = None
