@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.42`: fix kameraskanning – använder nu kamerans sparade inloggning (lösenordsfältet är tomt för befintliga kameror), och main-sökvägen härleds automatiskt från sub om skanningen inte hittar den. `main_path` sparas nu även för befintliga kameror.
 - Version `0.17.41`: kameraskanning (som Blue Iris) – "🔍 Skanna strömmar" provar vanliga RTSP-sökvägar och fyller i sub/main automatiskt. Ny "🖥️ Testa main"-knapp som verifierar att main-strömmen är korrekt (upplösning/FPS/kod).
 - Version `0.17.40`: valfri inställning "Main-ström sökväg" under Kameror. Lämnas den tom härleds main automatiskt från sub (`_sub` → `_main`); fyll i den bara om kameran avviker.
 - Version `0.17.39`: LPR använder nu en högupplöst bild från huvudströmmen när YOLO fångat ett fordon på sub-strömmen. Boxen skalas till main-upplösning och OCR körs på den skarpare bilden (hämtas i bakgrunden, blockerar inte YOLO). Main-sökvägen härleds automatiskt (`_sub` → `_main`).

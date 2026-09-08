@@ -1377,12 +1377,15 @@ async def camera_scan(payload: _CameraTestIn | None = None):
     """Skanna en RTSP-kamera efter main-/sub-strömmar (som Blue Iris).
 
     Provar vanliga RTSP-sökvägar och returnerar vilka som svarar + upplösning.
+    Använder kamerans sparade inloggning om `camera_id` ges.
     """
     body = payload.model_dump(exclude_unset=True) if payload else {}
-    host = str(body.get("host") or "")
-    user = str(body.get("user") or "")
-    password = str(body.get("password") or "")
-    full_url = str(body.get("full_url") or "")
+    w = pool.get(str(body["camera_id"])) if body.get("camera_id") else None
+    cfg = w.camera if w is not None else {}
+    host = str(body.get("host") or cfg.get("host") or "")
+    user = str(body.get("user") or cfg.get("user") or "")
+    password = body["password"] if "password" in body else (cfg.get("password") or "")
+    full_url = str(body.get("full_url") or cfg.get("full_url") or "")
     port = int(body.get("port") or 554)
     if not host and not full_url:
         return JSONResponse({"ok": False, "error": "Ange kamera-IP."}, status_code=400)

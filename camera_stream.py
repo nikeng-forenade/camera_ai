@@ -1366,7 +1366,7 @@ class CameraWorker:
         """Uppdatera kamera-inställningar i minnet (utan omstart)."""
         with self._lock:
             for k, v in values.items():
-                if k in self.camera and k != "password_configured":
+                if k in _CAMERA_FIELDS:
                     self.camera[k] = v
 
     def _roi_cfg(self) -> dict:

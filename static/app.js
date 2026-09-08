@@ -1786,10 +1786,12 @@ loadStats();
       const btn = $id("btnScanCam"), out = $id("camTestResult");
       btn.disabled = true;
       setMsg(out, "Skannar kameran efter strömmar…", false);
-      const body = {
-        host: ($id("camHost") ? $id("camHost").value : "").trim(),
-        user: ($id("camUser") ? $id("camUser").value : "").trim(),
-      };
+      const body = {};
+      if (editingId) body.camera_id = editingId;
+      const h = ($id("camHost") ? $id("camHost").value : "").trim();
+      const u = ($id("camUser") ? $id("camUser").value : "").trim();
+      if (h) body.host = h;
+      if (u) body.user = u;
       const pw = $id("camPass") ? $id("camPass").value : "";
       if (pw) body.password = pw;
       try {
@@ -1807,7 +1809,12 @@ loadStats();
           out.classList.add("ok");
           // Fyll i sökvägarna automatiskt (sub → YOLO, main → LPR)
           if (r.best_sub && $id("camPath")) $id("camPath").value = r.best_sub;
-          if (r.best_main && $id("camMainPath")) $id("camMainPath").value = r.best_main;
+          let mainPath = r.best_main || "";
+          // Om main inte hittades av skanningen, härled den från sub (…_sub → …_main)
+          if (!mainPath && r.best_sub && r.best_sub.includes("_sub")) {
+            mainPath = r.best_sub.replace("_sub", "_main");
+          }
+          if (mainPath && $id("camMainPath")) $id("camMainPath").value = mainPath;
         } else {
           out.innerHTML = "❌ Inga strömmar hittades. Kontrollera IP/användarnamn/lösenord.";
           out.classList.remove("ok");
