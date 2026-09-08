@@ -84,16 +84,25 @@ class PlateReader:
         crop = frame[y1:y2, x1:x2]
         if crop.size == 0:
             return None
-        scale = 2 if max(crop.shape[:2]) < 900 else 1
-        if scale > 1:
-            crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        results = self._read_text(crop)
+        # Skylten är ofta liten i sub-strömmar (640x360). Testa flera
+        # uppskalningar och behåll bästa träff; små skyltar kräver 3x.
+        scales = [2.0, 3.0] if max(crop.shape[:2]) < 900 else [1.0]
         best = None
-        for raw_text, confidence in results or []:
-            text = self.normalize(raw_text)
-            score = float(confidence or 0.0)
-            if text and score >= self.min_conf and (best is None or score > best["confidence"]):
-                best = {"text": text, "confidence": round(score, 4)}
+        for scale in scales:
+            if scale != 1.0:
+                scaled = cv2.resize(
+                    crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
+                )
+            else:
+                scaled = crop
+            results = self._read_text(scaled)
+            for raw_text, confidence in results or []:
+                text = self.normalize(raw_text)
+                score = float(confidence or 0.0)
+                if text and score >= self.min_conf and (best is None or score > best["confidence"]):
+                    best = {"text": text, "confidence": round(score, 4)}
+            if best:
+                break
         return best
 
     @staticmethod

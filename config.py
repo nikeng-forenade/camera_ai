@@ -165,7 +165,7 @@ LPR_ENABLED = _env_bool("LPR_ENABLED", False)
 LPR_ENGINE = os.getenv("LPR_ENGINE", "easyocr").strip().lower()
 if LPR_ENGINE not in ("easyocr", "paddleocr"):
     LPR_ENGINE = "easyocr"
-LPR_MIN_CONF = _env_float("LPR_MIN_CONF", 0.45, lo=0.1, hi=1.0)
+LPR_MIN_CONF = _env_float("LPR_MIN_CONF", 0.30, lo=0.1, hi=1.0)
 LPR_INTERVAL = _env_float("LPR_INTERVAL", 1.0, lo=0.2, hi=10.0)
 LPR_LANGUAGE = os.getenv("LPR_LANGUAGE", "en").strip() or "en"
 
