@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.45`: kamerorna i Inställningar är nu knappar (inte dropdown) – en ny kamera ger en ny knapp, klicka för att redigera.
 - Version `0.17.44`: System / Runtime visar main-strömsinfo; Dashboard har "🖥️ Visa main"-knapp (hämtar högupplöst main-bild via `/snapshot.jpg?main=1`). Mindre zonetiketter (ZON 1/2).
 - Version `0.17.43`: kameraskanning deduplicerar nu strömmar (samma main/sub svarar på flera alias h264/h265/Preview) – visar bara bästa main + bästa sub (`h264Preview` föredras).
 - Version `0.17.42`: fix kameraskanning – använder nu kamerans sparade inloggning (lösenordsfältet är tomt för befintliga kameror), och main-sökvägen härleds automatiskt från sub om skanningen inte hittar den. `main_path` sparas nu även för befintliga kameror.

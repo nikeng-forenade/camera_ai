@@ -299,9 +299,10 @@
           <button id="btnAddCamera" class="btn" type="button">➕ Lägg till kamera</button>
         </div>
         <div class="settings-grid">
-          <label class="wide">Redigera kamera
-            <select id="camEditSelect"><option value="">Laddar…</option></select>
-          </label>
+          <div class="wide">
+            <p class="hint">Välj kamera att redigera (klicka på en knapp).</p>
+            <div class="cam-btn-row" id="camBtnRow"></div>
+          </div>
           <label class="chk">
             <input type="checkbox" id="camEnabled" /> Aktiverad (kör kontinuerligt på servern)
           </label>

@@ -3,7 +3,7 @@
 DOMAIN = "camera_ai"
 
 # Version som visas i HA (enheter) och ska matcha serverns config.VERSION
-VERSION = "0.17.44"
+VERSION = "0.17.45"
 
 CONF_MODEL = "model"
 CONF_CONFIDENCE = "confidence"

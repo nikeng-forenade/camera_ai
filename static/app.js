@@ -836,7 +836,8 @@ loadStats();
   const dashQuickDetections = $id("dashQuickDetections");
   const dashQuickInference = $id("dashQuickInference");
   const btnLiveFullscreen = $id("btnLiveFullscreen");
-  const camEditSelect = $id("camEditSelect");
+  const camBtnRow = $id("camBtnRow");
+  let camCams = [];       // senast hämtade kameror (för kameraknapparna)
   let activeCam = localStorage.getItem("camAiActive") || "";
   let editingId = null;   // kamera som redigeras i Inställningar (null = lägg till)
   let lastMotionDiff = 0; // senaste uppmätta pixeländring (för live-mätaren)
@@ -1658,38 +1659,57 @@ loadStats();
     applyRoiFromCam(c);
     refreshRoiPreview(c);
   }
+  function renderCamButtons() {
+    const row = camBtnRow;
+    if (!row) return;
+    row.innerHTML = "";
+    camCams.forEach((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cam-chip" + (editingId === c.id ? " active" : "");
+      b.dataset.id = c.id;
+      b.textContent = c.name || c.id;
+      b.title = "Redigera " + (c.name || c.id);
+      b.addEventListener("click", () => selectCamera(c.id));
+      row.appendChild(b);
+    });
+    if (!camCams.length) {
+      row.innerHTML = `<span class="hint">Inga kameror – klicka ”➕ Lägg till kamera”.</span>`;
+    }
+  }
+  async function selectCamera(id) {
+    if (!id) { editingId = null; renderCamButtons(); fillCameraForm(null); return; }
+    editingId = id;
+    renderCamButtons();
+    let c = camCams.find((x) => x.id === id);
+    if (!c) {
+      try {
+        const data = await fetchJson("/api/cameras/list");
+        camCams = data.cameras || [];
+        c = camCams.find((x) => x.id === id);
+        renderCamButtons();
+      } catch (e) { /* ignore */ }
+    }
+    if (c) fillCameraForm(c);
+  }
   async function loadCameras() {
     let data;
     try { data = await fetchJson("/api/cameras/list"); } catch (e) { return; }
-    const cams = data.cameras || [];
-    if (!camEditSelect) return;
-    const html = cams.map((c) =>
-      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`
-    ).join("");
-    camEditSelect.innerHTML = html || `<option value="">Inga kameror – klicka ”Lägg till kamera”</option>`;
-    if (editingId && cams.some((c) => c.id === editingId)) {
-      camEditSelect.value = editingId;
-      fillCameraForm(cams.find((c) => c.id === editingId));
-    } else if (cams.length) {
-      camEditSelect.value = cams[0].id;
-      fillCameraForm(cams[0]);
+    camCams = data.cameras || [];
+    if (editingId && camCams.some((c) => c.id === editingId)) {
+      fillCameraForm(camCams.find((c) => c.id === editingId));
+    } else if (camCams.length) {
+      editingId = camCams[0].id;
+      fillCameraForm(camCams[0]);
     } else {
       fillCameraForm(null);
     }
-  }
-  if (camEditSelect) {
-    camEditSelect.addEventListener("change", () => {
-      const sel = camEditSelect.value;
-      if (!sel) { fillCameraForm(null); return; }
-      fetchJson("/api/cameras/list").then((data) => {
-        const c = (data.cameras || []).find((x) => x.id === sel);
-        if (c) fillCameraForm(c);
-      }).catch(() => {});
-    });
+    renderCamButtons();
   }
   if ($id("btnAddCamera")) {
     $id("btnAddCamera").addEventListener("click", () => {
-      if (camEditSelect) camEditSelect.value = "";
+      editingId = null;
+      renderCamButtons();
       fillCameraForm(null);
       const out = $id("camSaveMsg");
       if (out) { out.textContent = "Fyll i och spara – kameran startas direkt om den aktiveras."; out.classList.remove("ok"); }

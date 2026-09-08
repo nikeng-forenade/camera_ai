@@ -682,6 +682,10 @@ main { max-width: 1240px; }
   padding: 6px 8px; font-size: 13px; max-width: 240px;
 }
 .cam-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.cam-btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.cam-chip { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px; }
+.cam-chip:hover { border-color: var(--accent); }
+.cam-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn.danger { background: var(--red); color: #fff; }
 .btn.danger:hover { filter: brightness(1.1); }
 .settings-grid label.wide select { width: 100%; }
