@@ -269,6 +269,42 @@ input[type="range"] { accent-color: var(--accent); }
 .allcams-table .muted { color: var(--muted); }
 
 @media (max-width: 700px) {
+  body { overflow-x: hidden; }
+  .topbar { position: sticky; padding: 10px 12px; align-items: flex-start; gap: 10px; }
+  .brand { min-width: 0; gap: 8px; }
+  .logo { font-size: 23px; }
+  .brand h1 { font-size: 16px; white-space: nowrap; }
+  .brand p { display: none; }
+  .status-wrap { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .status { padding: 4px 7px; font-size: 10px; gap: 4px; }
+  .status .dot { width: 7px; height: 7px; }
+  .tabs { position: sticky; top: 54px; z-index: 9; display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; padding: 7px 12px 0; scrollbar-width: none; background: var(--bg); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; border-bottom: 1px solid var(--border); border-radius: 8px 8px 0 0; padding: 10px 13px; font-size: 12px; white-space: nowrap; }
+  main { margin: 12px auto; padding: 0 10px; }
+  .dashboard-v2 .live-card { margin-left: -10px; margin-right: -10px; border-left: 0; border-right: 0; border-radius: 0; }
+  .dashboard-v2 .live-head { padding: 10px 12px; }
+  .dashboard-v2 .live-badge { font-size: 12px; }
+  .dashboard-v2 .live-sub { flex: 1 1 100%; order: 4; font-size: 11px; }
+  .dashboard-v2 .live-viewer { min-height: 0; aspect-ratio: 16 / 10; }
+  .dashboard-v2 .dash-quickstats { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-v2 .dash-quickstat { padding: 10px 12px; }
+  .dashboard-v2 .dash-side { margin-left: 0; margin-right: 0; }
+  .dashboard-v2 .allcams-card .stats-head { align-items: flex-start; gap: 8px; }
+  .dashboard-v2 .allcams-card .stats-head h2 { font-size: 14px; }
+  .dashboard-v2 .allcams-card .stats-head .btn { padding: 8px 10px; }
+}
+
+@media (max-width: 420px) {
+  .topbar { align-items: center; }
+  .status-wrap .status:nth-child(n+2) { display: none; }
+  .dashboard-v2 .live-cam-select { margin-top: 2px; }
+  .dashboard-v2 .live-controls .btn { font-size: 12px; padding-left: 8px; padding-right: 8px; }
+  .dashboard-v2 .live-toggles { font-size: 11px; }
+}
+
+/* Existing mobile table treatment remains below for the all-camera status list. */
+@media (max-width: 700px) {
   .allcams-card { padding: 14px; }
   .allcams-card .table-scroll { overflow: visible; }
   .allcams-table, .allcams-table tbody, .allcams-table tr, .allcams-table td { display: block; width: 100%; }
