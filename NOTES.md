@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.43`: kameraskanning deduplicerar nu strömmar (samma main/sub svarar på flera alias h264/h265/Preview) – visar bara bästa main + bästa sub (`h264Preview` föredras).
 - Version `0.17.42`: fix kameraskanning – använder nu kamerans sparade inloggning (lösenordsfältet är tomt för befintliga kameror), och main-sökvägen härleds automatiskt från sub om skanningen inte hittar den. `main_path` sparas nu även för befintliga kameror.
 - Version `0.17.41`: kameraskanning (som Blue Iris) – "🔍 Skanna strömmar" provar vanliga RTSP-sökvägar och fyller i sub/main automatiskt. Ny "🖥️ Testa main"-knapp som verifierar att main-strömmen är korrekt (upplösning/FPS/kod).
 - Version `0.17.40`: valfri inställning "Main-ström sökväg" under Kameror. Lämnas den tom härleds main automatiskt från sub (`_sub` → `_main`); fyll i den bara om kameran avviker.

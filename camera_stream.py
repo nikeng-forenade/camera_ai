@@ -317,6 +317,28 @@ def _classify_stream(path: str) -> str:
     return "main"
 
 
+def _prefer_path(path: str) -> int:
+    """Rankning för att välja kanoniskt alias (Reolink h264Preview först)."""
+    p = path.lower()
+    if "h264preview" in p:
+        return 0
+    if "h265preview" in p:
+        return 1
+    if "preview" in p:
+        return 2
+    if "profile" in p:
+        return 3
+    return 4
+
+
+def _pick_best_stream(group: list) -> dict | None:
+    """Välj den bästa strömmen i en grupp (canoniskt alias, sedan högst upplösning)."""
+    if not group:
+        return None
+    group = sorted(group, key=lambda s: (_prefer_path(s["path"]), -s["width"] * s["height"]))
+    return group[0]
+
+
 def _host_with_port(host: str, port: int) -> str:
     """Lägg till RTSP-port om host saknar den (och inte är en full URL)."""
     h = (host or "").strip()
@@ -380,12 +402,18 @@ def scan_camera(
             continue
         finally:
             cap.release()
+    # Deduplicera: samma main/sub svarar på flera alias (h264/h265/Preview).
+    # Visa bara bästa main + bästa sub; behåll full lista som all_streams.
+    best_main = _pick_best_stream([s for s in streams if s["role"] == "main"])
+    best_sub = _pick_best_stream([s for s in streams if s["role"] == "sub"])
+    dedup = [s for s in (best_main, best_sub) if s is not None]
     return {
         "ok": True,
         "host": base,
-        "streams": streams,
-        "best_main": next((s["path"] for s in streams if s["role"] == "main"), ""),
-        "best_sub": next((s["path"] for s in streams if s["role"] == "sub"), ""),
+        "streams": dedup,
+        "all_streams": streams,
+        "best_main": best_main["path"] if best_main else "",
+        "best_sub": best_sub["path"] if best_sub else "",
     }
 
 

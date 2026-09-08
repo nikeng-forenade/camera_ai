@@ -1805,7 +1805,11 @@ loadStats();
           const rows = streams.map((s) =>
             `<li>${s.role === "main" ? "🖥️ Main" : "📱 Sub"} <code>${escapeHtml(s.path)}</code> — ${escapeHtml(s.width + "x" + s.height)}</li>`
           ).join("");
-          out.innerHTML = "✅ Hittade " + streams.length + " ström(mar):<ul class='cam-scan-list'>" + rows + "</ul>";
+          const aliasCount = ((r.all_streams || []).length) - streams.length;
+          const aliasNote = aliasCount > 0
+            ? `<p class="hint">(${aliasCount} alias ignoreras – visar bästa per typ)</p>`
+            : "";
+          out.innerHTML = "✅ Hittade " + streams.length + " ström(mar):<ul class='cam-scan-list'>" + rows + "</ul>" + aliasNote;
           out.classList.add("ok");
           // Fyll i sökvägarna automatiskt (sub → YOLO, main → LPR)
           if (r.best_sub && $id("camPath")) $id("camPath").value = r.best_sub;
