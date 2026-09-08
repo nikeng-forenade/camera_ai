@@ -77,16 +77,37 @@ class PlateReader:
             return None
         height, width = frame.shape[:2]
         x1, y1, x2, y2 = (int(round(float(v))) for v in box[:4])
-        x1, x2 = max(0, min(x1, width - 1)), max(0, min(x2, width))
-        y1, y2 = max(0, min(y1, height - 1)), max(0, min(y2, height))
+        # Padda boxen: skylten sitter ofta precis vid nedre kanten av YOLO-boxen
+        # och blir annars bortklippt (vanligt i sub-strömmar).
+        bw = max(1, x2 - x1)
+        bh = max(1, y2 - y1)
+        pad_x = int(round(bw * 0.04))
+        pad_top = int(round(bh * 0.05))
+        pad_bot = int(round(bh * 0.20))  # extra neråt = skyltzon
+        x1 = max(0, x1 - pad_x)
+        x2 = min(width, x2 + pad_x)
+        y1 = max(0, y1 - pad_top)
+        y2 = min(height, y2 + pad_bot)
         if x2 <= x1 or y2 <= y1:
             return None
         crop = frame[y1:y2, x1:x2]
         if crop.size == 0:
             return None
-        # Skylten är ofta liten i sub-strömmar (640x360). Testa flera
-        # uppskalningar och behåll bästa träff; små skyltar kräver 3x.
-        scales = [2.0, 3.0] if max(crop.shape[:2]) < 900 else [1.0]
+        best = self._ocr_crops(crop)
+        if best:
+            return best
+        # Fallback: beskära den undre/centrala skyltzonen och OCR:a den.
+        ch, cw = crop.shape[:2]
+        plate_zone = crop[int(ch * 0.55):, int(cw * 0.08):int(cw * 0.92)]
+        return self._ocr_crops(plate_zone)
+
+    def _ocr_crops(self, crop):
+        """OCR på flera uppskalningar, behåll bästa plåtformade träff."""
+        import cv2
+
+        if crop is None or crop.size == 0:
+            return None
+        scales = [2.0, 3.0, 4.0] if max(crop.shape[:2]) < 900 else [1.0, 2.0]
         best = None
         for scale in scales:
             if scale != 1.0:

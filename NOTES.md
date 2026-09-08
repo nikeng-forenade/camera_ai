@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.36`: LPR-skyltläsning fixad för sub-strömmar. YOLO-boxen paddas nu (extra nedåt) så skylten inte klipps av, och vid behov beskärs den undre/centrala skyltzonen. Uppskalning upp till 4×.
 - Version `0.17.35`: ny LPR-testsida (flik "🔎 LPR-test") + `POST /api/lpr/test`. Robustare skyltläsning: multi-scale-uppskalning (2×/3×) och lägre standard-min-konfidens (0.45 → 0.30) så skyltar på 640×360 sub-strömmen läses. README-fix av LPR-installkommandona (`\.venv` → `.\venv`).
 - Version `0.17.34`: LPR-downloadknappen borttagen. README.md beskriver nu manuell installation i projektets `.venv`; GUI:t visar endast om EasyOCR/PaddleOCR är installerad eller saknas.
 - Version `0.17.33`: LPR-installationen använder nu `pip --user` när appen körs med system-Python, vilket undviker Windows Access Denied mot skyddad system-`site-packages`. Virtuella miljöer använder fortsatt vanlig pip-installation.
