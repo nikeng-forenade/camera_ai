@@ -1147,6 +1147,9 @@ loadStats();
       if ($id("evMinConf")) $id("evMinConf").value = Math.round(((ev.min_conf != null ? ev.min_conf : 0.6) || 0) * 100);
     }
     renderStatus(s.runtime || null);
+    const auth = s.auth || {};
+    setChecked("authEnabled", auth.enabled);
+    if ($id("authUsername")) $id("authUsername").value = auth.username || "admin";
     loadCameras();
   }
 
@@ -1878,6 +1881,24 @@ loadStats();
         setMsg(out, "✓ Sparat (live)", true);
         loadSettingsPage();
         pollStatus();
+      } catch (e) {
+        setMsg(out, "❌ " + e.message, false);
+      }
+    });
+  }
+
+  if ($id("btnSaveAuth")) {
+    $id("btnSaveAuth").addEventListener("click", async () => {
+      const out = $id("authSaveMsg");
+      setMsg(out, "Sparar…", false);
+      try {
+        await saveSettingsJson({ auth: {
+          enabled: $id("authEnabled").checked,
+          username: $id("authUsername").value.trim(),
+          password: $id("authPassword").value,
+        } });
+        $id("authPassword").value = "";
+        setMsg(out, "✓ Sparat. Webbläsaren frågar efter login nästa gång.", true);
       } catch (e) {
         setMsg(out, "❌ " + e.message, false);
       }

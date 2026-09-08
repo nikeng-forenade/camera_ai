@@ -24,10 +24,10 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
-async def _discover(url: str) -> dict:
+async def _discover(url: str, username: str = "", password: str = "") -> dict:
     """Fråga servern om hälsa och kameror (auto-discovery)."""
     async with httpx.AsyncClient(timeout=10) as session:
-        client = CameraAIClient(url, session)
+        client = CameraAIClient(url, session, username, password)
         health = await client.health()
         cam_st = await client.cameras_status()
     names = [
@@ -50,8 +50,10 @@ class CameraAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             url = str(user_input[CONF_URL]).strip().rstrip("/")
+            username = str(user_input.get("username", "")).strip()
+            password = str(user_input.get("password", ""))
             try:
-                info = await _discover(url)
+                info = await _discover(url, username, password)
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("Discovery failed for %s: %s", url, exc)
                 errors["base"] = "cannot_connect"
@@ -59,13 +61,19 @@ class CameraAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(url)
                 self._abort_if_unique_id_configured()
                 self._url = url
+                self._username = username
+                self._password = password
                 self._info = info
                 return await self.async_step_confirm()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
-                {vol.Required(CONF_URL, default="http://"): str}
+                {
+                    vol.Required(CONF_URL, default="http://"): str,
+                    vol.Optional("username", default=""): str,
+                    vol.Optional("password", default=""): str,
+                }
             ),
             errors=errors,
         )
@@ -73,7 +81,8 @@ class CameraAIConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
             return self.async_create_entry(
-                title="Camera AI", data={CONF_URL: self._url}
+                title="Camera AI",
+                data={CONF_URL: self._url, "username": self._username, "password": self._password},
             )
         return self.async_show_form(
             step_id="confirm",
@@ -107,6 +116,8 @@ class CameraAIOptionsFlow(config_entries.OptionsFlow):
                     "panel_enabled",
                     default=bool(self.config_entry.options.get("panel_enabled", True)),
                 ): bool,
+                vol.Optional("username", default=self.config_entry.data.get("username", "")): str,
+                vol.Optional("password", default=self.config_entry.data.get("password", "")): str,
             }
         )
 
@@ -115,7 +126,12 @@ class CameraAIOptionsFlow(config_entries.OptionsFlow):
             if user_input is not None:
                 url = str(user_input.get(CONF_URL)).strip().rstrip("/")
                 panel = bool(user_input.get("panel_enabled", True))
-                data = {**self.config_entry.data, CONF_URL: url}
+                data = {
+                    **self.config_entry.data,
+                    CONF_URL: url,
+                    "username": str(user_input.get("username", "")).strip(),
+                    "password": str(user_input.get("password", "")),
+                }
                 options = {"panel_enabled": panel}
                 self.hass.config_entries.async_update_entry(
                     self.config_entry, data=data, options=options

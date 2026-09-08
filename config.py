@@ -4,6 +4,9 @@ All values can be overridden with environment variables. The GUI can also
 override model / confidence / LLM settings per request.
 """
 import os
+import hashlib
+import hmac
+import secrets
 import sys
 from pathlib import Path
 
@@ -20,8 +23,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.26"
-
+VERSION = "0.17.27"
 
 def model_path(name: str) -> str:
     """Resolve a model file name to an absolute path (bundled or next to the app)."""
@@ -56,6 +58,29 @@ def _env_bool(key: str, default: bool = False) -> bool:
     if v is None or v.strip() == "":
         return default
     return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Optional GUI/HACS protection. Disabled by default for backwards compatibility.
+AUTH_ENABLED = _env_bool("CAMERA_AUTH_ENABLED", False)
+AUTH_USERNAME = os.getenv("CAMERA_AUTH_USERNAME", "admin").strip() or "admin"
+AUTH_PASSWORD_HASH = os.getenv("CAMERA_AUTH_PASSWORD_HASH", "")
+
+
+def hash_auth_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 240_000)
+    return f"{salt.hex()}${digest.hex()}"
+
+
+def verify_auth_password(password: str, encoded: str) -> bool:
+    try:
+        salt_hex, digest_hex = encoded.split("$", 1)
+        actual = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), bytes.fromhex(salt_hex), 240_000
+        )
+        return hmac.compare_digest(actual.hex(), digest_hex)
+    except (ValueError, TypeError):
+        return False
 
 
 def _env_float(key: str, default: float, lo: float | None = None, hi: float | None = None) -> float:

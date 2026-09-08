@@ -5,6 +5,9 @@ Run:  python app.py        (then open http://127.0.0.1:8000)
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import hmac
 import json
 import threading
 import time
@@ -16,7 +19,7 @@ from urllib.parse import urlparse
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -49,10 +52,11 @@ pool = CameraPool(analyzer)  # flera live-kameror: RTSP -> YOLO -> Dashboard
 _BOOL_ENV = {
     "LIVE_STREAM_ENABLED", "LIVE_SHOW_BOXES", "LIVE_SHOW_LABELS",
     "LIVE_SHOW_CONF", "LIVE_EVENT_ENABLED", "MOTION_GATE_ENABLED",
+    "CAMERA_AUTH_ENABLED",
 }
 
 # .env-nycklar som ska sättas som STRÄNG (inte float) vid runtime-synk.
-_STR_ENV = {"CAMERA_FILTER_CLASS_SCORES"}
+_STR_ENV = {"CAMERA_FILTER_CLASS_SCORES", "CAMERA_AUTH_USERNAME", "CAMERA_AUTH_PASSWORD_HASH"}
 # .env-nyckel -> config-attribut när namnen skiljer sig åt.
 _ENV_ATTR_ALIAS = {
     "CAMERA_FILTER_MIN_SCORE": "FILTER_MIN_SCORE",
@@ -407,6 +411,34 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Camera AI", version=config.VERSION, lifespan=lifespan)
+
+
+def _basic_auth_ok(request: Request) -> bool:
+    if not config.AUTH_ENABLED:
+        return True
+    value = request.headers.get("authorization", "")
+    if not value.lower().startswith("basic "):
+        return False
+    try:
+        raw = base64.b64decode(value.split(" ", 1)[1], validate=True).decode("utf-8")
+        username, password = raw.split(":", 1)
+    except (ValueError, UnicodeDecodeError, binascii.Error):
+        return False
+    return hmac.compare_digest(username, config.AUTH_USERNAME) and config.verify_auth_password(
+        password, config.AUTH_PASSWORD_HASH
+    )
+
+
+@app.middleware("http")
+async def require_basic_auth(request: Request, call_next):
+    if _basic_auth_ok(request):
+        return await call_next(request)
+    return Response(
+        content="Authentication required",
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="Camera AI"'},
+        media_type="text/plain",
+    )
 
 ALLOWED = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
@@ -901,6 +933,7 @@ class _SettingsIn(BaseModel):
     detect: dict | None = None
     live: dict | None = None
     events: dict | None = None
+    auth: dict | None = None
 
 
 class _CameraTestIn(BaseModel):
@@ -1316,6 +1349,11 @@ def get_settings():
             "startup_grace": float(ev["startup_grace"]),
         },
         "runtime": rt,
+        "auth": {
+            "enabled": bool(config.AUTH_ENABLED),
+            "username": config.AUTH_USERNAME,
+            "password_configured": bool(config.AUTH_PASSWORD_HASH),
+        },
     }
 
 
@@ -1354,6 +1392,24 @@ def update_settings(payload: _SettingsIn):
             return bool(v) if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
         except (TypeError, ValueError):
             return cur
+
+    # ----------------------------- Säkerhet ---------------------------
+    if body.get("auth"):
+        auth = dict(body["auth"])
+        auth_enabled = _to_bool(auth.get("enabled", config.AUTH_ENABLED), config.AUTH_ENABLED)
+        auth_username = str(auth.get("username", config.AUTH_USERNAME) or "").strip()
+        auth_password = str(auth.get("password") or "")
+        if not auth_username:
+            errors.append("Användarnamnet får inte vara tomt.")
+        if auth_enabled and not config.AUTH_PASSWORD_HASH and not auth_password:
+            errors.append("Ange ett lösenord innan GUI-skydd aktiveras.")
+        if auth_password and len(auth_password) < 8:
+            errors.append("Lösenordet måste vara minst 8 tecken.")
+        if not errors:
+            env_write["CAMERA_AUTH_ENABLED"] = "true" if auth_enabled else "false"
+            env_write["CAMERA_AUTH_USERNAME"] = auth_username
+            if auth_password:
+                env_write["CAMERA_AUTH_PASSWORD_HASH"] = config.hash_auth_password(auth_password)
 
     # ----------------------------- Kamera -----------------------------
     if body.get("camera"):

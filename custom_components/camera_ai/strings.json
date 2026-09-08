@@ -5,7 +5,9 @@
         "title": "Camera AI",
         "description": "Anslut till din Camera AI-server (t.ex. http://192.168.1.66:8000). Alla kameror, entiteter och inställningar hämtas automatiskt från servern – du behöver inte välja något manuellt.",
         "data": {
-          "url": "Server URL"
+          "url": "Server URL",
+          "username": "Användarnamn",
+          "password": "Lösenord"
         }
       },
       "confirm": {
@@ -27,7 +29,9 @@
         "description": "Server-URL och om Camera AI ska visas i HA:s sidofält (panel med serverns GUI).",
         "data": {
           "url": "Server URL",
-          "panel_enabled": "Visa Camera AI i sidofältet"
+          "panel_enabled": "Visa Camera AI i sidofältet",
+          "username": "Användarnamn",
+          "password": "Lösenord"
         }
       }
     }

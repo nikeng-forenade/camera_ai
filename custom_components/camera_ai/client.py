@@ -34,32 +34,35 @@ def server_payload(settings: dict) -> dict:
 class CameraAIClient:
     """Thin async client for the Camera AI server."""
 
-    def __init__(self, url: str, session: httpx.AsyncClient) -> None:
+    def __init__(self, url: str, session: httpx.AsyncClient, username: str = "", password: str = "") -> None:
         self.url = url.rstrip("/")
         self._session = session
+        self._auth = httpx.BasicAuth(username, password) if username else None
+
+    async def _request(self, method: str, path: str, **kwargs):
+        kwargs.setdefault("auth", self._auth)
+        return await self._session.request(method, f"{self.url}{path}", **kwargs)
 
     async def health(self) -> dict:
-        resp = await self._session.get(f"{self.url}/api/health", timeout=10)
+        resp = await self._request("GET", "/api/health", timeout=10)
         resp.raise_for_status()
         return resp.json()
 
     async def get_config(self) -> dict:
         """Current server runtime settings (model, conf, device, LLM, keep_alive)."""
-        resp = await self._session.get(f"{self.url}/api/config", timeout=10)
+        resp = await self._request("GET", "/api/config", timeout=10)
         resp.raise_for_status()
         return resp.json()
 
     async def cameras_status(self) -> dict:
         """Löpande status för serverns kameror (live: state, detections, fps)."""
-        resp = await self._session.get(f"{self.url}/api/cameras/status", timeout=10)
+        resp = await self._request("GET", "/api/cameras/status", timeout=10)
         resp.raise_for_status()
         return resp.json()
 
     async def events(self, limit: int = 50) -> list[dict]:
         """Senaste detektionseventen för historik och diagnostik."""
-        resp = await self._session.get(
-            f"{self.url}/api/events", params={"limit": limit}, timeout=10
-        )
+        resp = await self._request("GET", "/api/events", params={"limit": limit}, timeout=10)
         resp.raise_for_status()
         return resp.json()
 
@@ -81,9 +84,7 @@ class CameraAIClient:
         }
         if prompt:
             data["prompt"] = prompt
-        resp = await self._session.post(
-            f"{self.url}/api/analyze", data=data, files=files, timeout=120
-        )
+        resp = await self._request("POST", "/api/analyze", data=data, files=files, timeout=120)
         resp.raise_for_status()
         return resp.json()
 
@@ -104,19 +105,17 @@ class CameraAIClient:
         }
         if prompt:
             data["prompt"] = prompt
-        resp = await self._session.post(
-            f"{self.url}/api/analyze-url", data=data, timeout=120
-        )
+        resp = await self._request("POST", "/api/analyze-url", data=data, timeout=120)
         resp.raise_for_status()
         return resp.json()
 
     async def fetch_image(self, path: str) -> bytes:
-        resp = await self._session.get(f"{self.url}{path}", timeout=30)
+        resp = await self._request("GET", path, timeout=30)
         resp.raise_for_status()
         return resp.content
 
     async def set_config(self, config: dict) -> dict:
         """Push runtime settings (model, conf, device, LLM model/prompt) to the server."""
-        resp = await self._session.post(f"{self.url}/api/config", json=config, timeout=15)
+        resp = await self._request("POST", "/api/config", json=config, timeout=15)
         resp.raise_for_status()
         return resp.json()

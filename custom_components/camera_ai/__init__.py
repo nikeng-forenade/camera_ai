@@ -142,7 +142,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # client.py är skriven för httpx (resp.json() är sync) – vi måste alltså
     # använda en httpx-klient, inte HA:s aiohttp-session.
     session = httpx.AsyncClient(timeout=30.0)
-    client = CameraAIClient(entry.data[CONF_URL], session)
+    client = CameraAIClient(
+        entry.data[CONF_URL], session,
+        entry.data.get("username", ""), entry.data.get("password", ""),
+    )
     coordinator = CameraAICoordinator(hass, client, entry.entry_id)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
