@@ -8,6 +8,8 @@ import asyncio
 import base64
 import binascii
 import hmac
+import subprocess
+import sys
 import json
 import threading
 import time
@@ -480,6 +482,50 @@ PULL: dict = {
     "error": None,
 }
 _pull_lock = threading.Lock()
+
+OCR_INSTALL: dict = {
+    "state": "idle",  # idle | running | completed | failed
+    "engine": None,
+    "status": "",
+    "error": None,
+}
+_ocr_install_lock = threading.Lock()
+
+
+def _ocr_install_worker(engine: str) -> None:
+    packages = ["easyocr"] if engine == "easyocr" else ["paddleocr", "paddlepaddle"]
+    try:
+        for package in packages:
+            OCR_INSTALL["status"] = f"Installerar {package} …"
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", package],
+                capture_output=True,
+                text=True,
+                timeout=1800,
+            )
+            if result.returncode != 0:
+                raise RuntimeError((result.stderr or result.stdout or f"pip kunde inte installera {package}")[-1000:])
+        OCR_INSTALL.update(state="completed", status=f"{engine} installerad", error=None)
+    except Exception as exc:  # noqa: BLE001 - visas i GUI
+        OCR_INSTALL.update(state="failed", status="Installationen misslyckades", error=str(exc))
+
+
+@app.post("/api/lpr/install")
+def install_lpr_engine(payload: dict):
+    engine = str(payload.get("engine") or "").strip().lower()
+    if engine not in ("easyocr", "paddleocr"):
+        raise HTTPException(400, "engine måste vara easyocr eller paddleocr")
+    if OCR_INSTALL["state"] == "running":
+        return {"started": False, **OCR_INSTALL}
+    with _ocr_install_lock:
+        OCR_INSTALL.update(state="running", engine=engine, status="Startar installation …", error=None)
+    threading.Thread(target=_ocr_install_worker, args=(engine,), daemon=True).start()
+    return {"started": True, **OCR_INSTALL}
+
+
+@app.get("/api/lpr/install/status")
+def lpr_install_status():
+    return dict(OCR_INSTALL)
 
 
 class _PullIn(BaseModel):

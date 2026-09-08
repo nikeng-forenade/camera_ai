@@ -1887,6 +1887,42 @@ loadStats();
     });
   }
 
+  if ($id("btnInstallLpr")) {
+    let lprInstallTimer = null;
+    const pollLprInstall = async () => {
+      try {
+        const status = await fetchJson("/api/lpr/install/status");
+        const label = status.status || status.state || "";
+        const out = $id("lprInstallStatus");
+        if (out) {
+          out.textContent = status.error ? "❌ " + status.error : label;
+          out.classList.toggle("ok", status.state === "completed");
+        }
+        if (status.state !== "running" && lprInstallTimer) {
+          clearInterval(lprInstallTimer);
+          lprInstallTimer = null;
+          $id("btnInstallLpr").disabled = false;
+        }
+      } catch (e) { /* serverfel visas nästa statuspoll */ }
+    };
+    $id("btnInstallLpr").addEventListener("click", async () => {
+      const engine = $id("detLprEngine").value;
+      $id("btnInstallLpr").disabled = true;
+      try {
+        await fetchJson("/api/lpr/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ engine }),
+        });
+        await pollLprInstall();
+        lprInstallTimer = setInterval(pollLprInstall, 2000);
+      } catch (e) {
+        $id("lprInstallStatus").textContent = "❌ " + e.message;
+        $id("btnInstallLpr").disabled = false;
+      }
+    });
+  }
+
   if ($id("btnSaveAuth")) {
     $id("btnSaveAuth").addEventListener("click", async () => {
       const out = $id("authSaveMsg");
