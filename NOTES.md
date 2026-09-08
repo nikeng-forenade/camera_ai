@@ -1,6 +1,7 @@
 # Ändringsnoteringar
 
 ## 2026-09-08
+- Version `0.17.47`: dashboardens kameraväljare är nu också knappar (som i Inställningar) – en ny kamera ger en ny knapp.
 - Version `0.17.46`: per-kamera LPR-inställningar – välj om LPR ska köra på kameran och vilken ström (huvudström hög upplösning / sub). Global LPR måste även vara på.
 - Version `0.17.45`: kamerorna i Inställningar är nu knappar (inte dropdown) – en ny kamera ger en ny knapp, klicka för att redigera.
 - Version `0.17.44`: System / Runtime visar main-strömsinfo; Dashboard har "🖥️ Visa main"-knapp (hämtar högupplöst main-bild via `/snapshot.jpg?main=1`). Mindre zonetiketter (ZON 1/2).

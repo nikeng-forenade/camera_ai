@@ -830,7 +830,7 @@ loadStats();
   const liveOverlay = $id("liveOverlay");
   let mainViewOn = false;
   let mainViewTimer = null;
-  const camSelect = $id("camSelect");
+  const camBtnRowDash = $id("camBtnRowDash");
   const dashQuickCamera = $id("dashQuickCamera");
   const dashQuickYolo = $id("dashQuickYolo");
   const dashQuickDetections = $id("dashQuickDetections");
@@ -875,34 +875,41 @@ loadStats();
     // Välj aktiv kamera (första om ingen vald)
     if (!cams.length) {
       activeCam = "";
-      if (camSelect) camSelect.innerHTML = `<option value="">Inga kameror</option>`;
+      renderDashCamButtons([]);
       renderStatus(null);
       return;
     }
     if (!cams.some((c) => c.camera_id === activeCam)) {
       activeCam = cams[0].camera_id;
     }
-    // Håll dropdown (Dashboard) synkad utan att avbryta användarens val
-    if (camSelect) {
-      const html = cams.map((c) =>
-        `<option value="${escapeHtml(c.camera_id)}">${escapeHtml(c.camera_name)}</option>`
-      ).join("");
-      if (camSelect.innerHTML !== html) camSelect.innerHTML = html;
-      if (camSelect.value !== activeCam) camSelect.value = activeCam;
-    }
+    // Håll kameraknapparna (Dashboard) synkade med aktiv kamera
+    renderDashCamButtons(cams);
     const st = cams.find((c) => c.camera_id === activeCam) || cams[0];
     renderStatus(st);
     renderAllCams(cams);
   }
 
-  // Kameraväljaren (Dashboard): byt aktiv kamera
-  if (camSelect) {
-    camSelect.addEventListener("change", () => {
-      activeCam = camSelect.value || "";
-      localStorage.setItem("camAiActive", activeCam);
-      if (liveImg) { liveImg.dataset.src = ""; liveImg.removeAttribute("src"); }
-      pollStatus();
+  // Kameraknappar (Dashboard): byt aktiv kamera
+  function renderDashCamButtons(cams) {
+    const row = camBtnRowDash;
+    if (!row) return;
+    row.innerHTML = "";
+    cams.forEach((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cam-chip" + (c.camera_id === activeCam ? " active" : "");
+      b.dataset.id = c.camera_id;
+      b.textContent = c.camera_name || c.camera_id;
+      b.title = "Visa " + (c.camera_name || c.camera_id);
+      b.addEventListener("click", () => {
+        activeCam = c.camera_id;
+        localStorage.setItem("camAiActive", activeCam);
+        if (liveImg) { liveImg.dataset.src = ""; liveImg.removeAttribute("src"); }
+        pollStatus();
+      });
+      row.appendChild(b);
     });
+    if (!cams.length) row.innerHTML = `<span class="hint">Inga kameror</span>`;
   }
 
   function stateClass(state) {
@@ -1169,7 +1176,7 @@ loadStats();
         if (!id) return;
         activeCam = id;
         localStorage.setItem("camAiActive", activeCam);
-        if (camSelect) camSelect.value = activeCam;
+        renderDashCamButtons(cams);
         pollStatus();
       });
     });
