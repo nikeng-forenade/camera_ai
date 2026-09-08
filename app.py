@@ -1310,16 +1310,24 @@ def live_stream(camera: str = ""):
 
 
 @app.get("/api/live/{camera}/snapshot.jpg")
-def live_snapshot(camera: str = "", clean: bool = False):
-    """Stillbild som JPEG. ``clean=1`` ger rå bild utan boxar/linje (för
-    förhandsvisning när man sätter detektionslinjen), annars senaste annoterade.
+def live_snapshot(camera: str = "", clean: bool = False, main: bool = False):
+    """Stillbild som JPEG. ``clean=1`` ger rå bild utan boxar/linje, ``main=1``
+    ger högupplöst bild från huvudströmmen – annars senaste annoterade.
 
-    Används av HA/HACS som en vanlig bild-URL per kamera - enklare än att
-    streama MJPEG. 404 tills kameran har producerat en första bild.
+    ``main=1`` används av Dashboard för att visa/verifiera main-strömmen.
     """
     w = _resolve_camera(camera)
     if w is None:
         raise HTTPException(404, "Ingen kamera konfigurerad.")
+    if main:
+        data = w.main_jpeg()
+        if not data:
+            raise HTTPException(404, "Ingen main-bild ännu - kontrollera main-strömmen.")
+        return Response(
+            content=data,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-cache"},
+        )
     if clean:
         data = w.raw_jpeg()
         if not data:

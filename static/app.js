@@ -825,8 +825,11 @@ loadStats();
   const gpuWarnConfigured = $id("gpuWarnConfigured");
   const gpuWarnActual = $id("gpuWarnActual");
   const btnStreamToggle = $id("btnStreamToggle");
+  const btnMainToggle = $id("btnMainToggle");
   const streamHint = $id("streamHint");
   const liveOverlay = $id("liveOverlay");
+  let mainViewOn = false;
+  let mainViewTimer = null;
   const camSelect = $id("camSelect");
   const dashQuickCamera = $id("dashQuickCamera");
   const dashQuickYolo = $id("dashQuickYolo");
@@ -931,12 +934,20 @@ loadStats();
     const camId = s.camera_id;
     const showVideo = !!(s.camera_enabled && s.live_enabled && s.camera_state !== "disabled");
     if (liveImg) {
-      if (showVideo && liveImg.dataset.src !== camId) {
-        liveImg.dataset.src = camId;
-        liveImg.src = "/api/live/" + encodeURIComponent(camId);
-      } else if (!showVideo && liveImg.dataset.src) {
+      if (!showVideo) {
         liveImg.dataset.src = "";
+        liveImg.removeAttribute("data-main-cam");
         liveImg.removeAttribute("src");
+      } else if (mainViewOn) {
+        // Visa högupplöst main-ström – uppdateras av timern i toggle-handlern.
+        if (liveImg.dataset.mainCam !== camId) {
+          liveImg.dataset.mainCam = camId;
+          liveImg.src = "/api/live/" + encodeURIComponent(camId) + "/snapshot.jpg?main=1&ts=" + Date.now();
+        }
+      } else if (liveImg.dataset.src !== camId) {
+        liveImg.dataset.src = camId;
+        liveImg.removeAttribute("data-main-cam");
+        liveImg.src = "/api/live/" + encodeURIComponent(camId);
       }
     }
 
@@ -1021,6 +1032,9 @@ loadStats();
         ["Video FPS (in)", (s.source_fps || 0).toFixed(1)],
         ["Display FPS", (s.display_fps || 0).toFixed(1) + " (mål " + s.target_display_fps + ")"],
         ["Upplösning", s.resolution || "—"],
+        ["Main-ström", s.main_path || "—"],
+        ["Main-bild", (s.main_resolution || "—") + (s.main_age != null ? " · senast " + ageText(s.main_age) : ""), s.main_resolution ? "metric-ok" : "metric-warn"],
+        ["LPR använder main", s.lpr_uses_main ? "Ja" : "Nej"],
         ["Senaste bild", ageText(s.last_frame_age)],
         ["Senaste YOLO", ageText(s.last_inference_age)],
         ["Reconnect", s.reconnect_count ? s.reconnect_count + " · " + fmtClock(s.last_reconnect_ts) : "0"],
@@ -1203,6 +1217,27 @@ loadStats();
         if (streamHint) streamHint.textContent = "Fel: " + e.message;
       }
       pollStatus();
+    });
+  }
+
+  if (btnMainToggle) {
+    btnMainToggle.addEventListener("click", () => {
+      mainViewOn = !mainViewOn;
+      btnMainToggle.textContent = mainViewOn ? "↩ Tillbaka till sub" : "🖥️ Visa main";
+      btnMainToggle.classList.toggle("active", mainViewOn);
+      if (mainViewTimer) { clearInterval(mainViewTimer); mainViewTimer = null; }
+      const refresh = () => {
+        if (!mainViewOn || !activeCam) return;
+        const img = $id("liveImg");
+        if (img) img.src = "/api/live/" + encodeURIComponent(activeCam) + "/snapshot.jpg?main=1&ts=" + Date.now();
+      };
+      if (mainViewOn) {
+        refresh();
+        mainViewTimer = setInterval(refresh, 2000);
+      } else {
+        // Återgå till MJPEG-strömmen (nästa pollStatus sätter src till sub)
+        pollStatus();
+      }
     });
   }
 
@@ -1463,15 +1498,15 @@ loadStats();
           const minY = Math.min(...poly.map((point) => point[1])) * 100;
           const label = document.createElementNS("http://www.w3.org/2000/svg", "g");
           label.classList.add("roi-zone-label", kind);
-          label.setAttribute("transform", "translate(" + Math.min(86, Math.max(7, minX + 7)) + " " + Math.min(93, Math.max(7, minY + 7)) + ")");
+          label.setAttribute("transform", "translate(" + Math.min(90, Math.max(5, minX + 5)) + " " + Math.min(95, Math.max(5, minY + 5)) + ")");
           const plate = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-          plate.setAttribute("x", "-7");
-          plate.setAttribute("y", "-5");
-          plate.setAttribute("width", "14");
-          plate.setAttribute("height", "10");
+          plate.setAttribute("x", "-5");
+          plate.setAttribute("y", "-3.5");
+          plate.setAttribute("width", "10");
+          plate.setAttribute("height", "7");
           plate.setAttribute("rx", "2");
           const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-          text.setAttribute("y", "1.3");
+          text.setAttribute("y", "0.8");
           text.textContent = "ZON " + (zi + 1);
           label.append(plate, text);
           svg.appendChild(label);
@@ -1903,11 +1938,11 @@ loadStats();
     svg.appendChild(poly);
     const label = document.createElementNS("http://www.w3.org/2000/svg", "g");
     label.classList.add("roi-zone-label", "draft");
-    label.setAttribute("transform", "translate(" + Math.min(86, Math.max(7, (Math.min(sx, cx) * 100) + 7)) + " " + Math.min(93, Math.max(7, (Math.min(sy, cy) * 100) + 7)) + ")");
+    label.setAttribute("transform", "translate(" + Math.min(90, Math.max(5, (Math.min(sx, cx) * 100) + 5)) + " " + Math.min(95, Math.max(5, (Math.min(sy, cy) * 100) + 5)) + ")");
     const plate = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    plate.setAttribute("x", "-7"); plate.setAttribute("y", "-5"); plate.setAttribute("width", "14"); plate.setAttribute("height", "10"); plate.setAttribute("rx", "2");
+    plate.setAttribute("x", "-5"); plate.setAttribute("y", "-3.5"); plate.setAttribute("width", "10"); plate.setAttribute("height", "7"); plate.setAttribute("rx", "2");
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("y", "1.3"); text.textContent = "ZON " + (zones.length + 1);
+    text.setAttribute("y", "0.8"); text.textContent = "ZON " + (zones.length + 1);
     label.append(plate, text);
     svg.appendChild(label);
   }

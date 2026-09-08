@@ -718,6 +718,16 @@ class CameraWorker:
         self._preview_ref = small
         return diff
 
+    def _main_path_display(self) -> str:
+        """Main-strömmens sökväg (utan credentials) för GUI/status."""
+        with self._lock:
+            cfg = dict(self.camera)
+        path = (cfg.get("main_path") or "").strip()
+        if path:
+            return path
+        p = (cfg.get("path") or "/Preview_01_sub").strip()
+        return p.replace("_sub", "_main") if "_sub" in p else ""
+
     def _main_rtsp_url(self) -> str:
         """RTSP-URL för huvudströmmen (högre upplösning) – härleds från sub."""
         cfg = self.camera
@@ -779,6 +789,44 @@ class CameraWorker:
         finally:
             with self._lock:
                 self._main_grab_running = False
+
+    def _grab_main_frame_sync(self):
+        """Hämta en main-bild direkt (blockerande) – för 'visa main'-knappen."""
+        import cv2
+
+        url = self._main_rtsp_url()
+        if not url:
+            return None
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        try:
+            if not cap.isOpened():
+                return None
+            frame = None
+            for _ in range(12):
+                ret, f = cap.read()
+                if ret and f is not None:
+                    frame = f
+            if frame is not None:
+                with self._lock:
+                    self._main_frame = frame
+                    self._main_ts = time.time()
+            return frame
+        finally:
+            cap.release()
+
+    def main_jpeg(self, quality: int = 80) -> bytes | None:
+        """Högupplöst main-bild som JPEG (för 'visa main' i dashboard)."""
+        import cv2
+
+        with self._lock:
+            frame = self._main_frame
+            ts = self._main_ts
+        if frame is None or (time.time() - ts) > 2.0:
+            frame = self._grab_main_frame_sync()
+        if frame is None:
+            return None
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        return buf.tobytes() if ok else None
 
     def _read_license_plates(self, frame, dets: list[dict], now: float) -> None:
         """Run optional OCR on filtered vehicle detections at a low rate.
@@ -1833,6 +1881,8 @@ class CameraWorker:
             inference = self.inference_ms
             boxes = list(self._boxes)
             moving_boxes = list(self._moving_boxes)
+            main_frame = self._main_frame
+            main_ts = self._main_ts
         cfg = self.analyzer
         configured_device = getattr(cfg, "device", None)
         actual_device = getattr(cfg, "last_device", None) or configured_device
@@ -1890,6 +1940,11 @@ class CameraWorker:
             "lpr_engine": str(detect.get("lpr_engine", config.LPR_ENGINE)),
             "lpr_last_plate": self._lpr_last_plate,
             "lpr_error": self._lpr_error,
+            # Main-ström (högupplöst, för LPR)
+            "main_path": self._main_path_display(),
+            "main_resolution": (f"{main_frame.shape[1]}x{main_frame.shape[0]}" if main_frame is not None else None),
+            "main_age": (round(time.time() - main_ts, 1) if main_ts else None),
+            "lpr_uses_main": bool(detect.get("lpr_enabled", False) and main_frame is not None),
             "live_enabled": bool(live["enabled"]),
             "detections": top,
             "detection_counts": counts,
