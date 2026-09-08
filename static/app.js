@@ -1897,7 +1897,9 @@ loadStats();
         const label = status.status || status.state || "";
         const out = $id("lprInstallStatus");
         if (out) {
-          out.textContent = status.error ? "❌ " + status.error : label;
+          out.textContent = status.error
+            ? "❌ " + (status.error_code ? status.error_code + ": " : "") + status.error
+            : (status.phase ? "[" + status.phase + "] " : "") + label;
           out.classList.toggle("ok", status.state === "completed");
         }
         if (status.state !== "running" && lprInstallTimer) {
@@ -1942,7 +1944,12 @@ loadStats();
     try {
       const status = await fetchJson("/api/lpr/install/status");
       renderLprModuleStatus(status);
-      if ($id("lprInstallStatus") && status.state === "failed") $id("lprInstallStatus").textContent = "❌ " + (status.error || status.status || "Installationen misslyckades");
+      if ($id("lprInstallStatus") && status.state !== "idle") {
+        $id("lprInstallStatus").textContent = status.error
+          ? "❌ " + (status.error_code ? status.error_code + ": " : "") + status.error
+          : (status.phase ? "[" + status.phase + "] " : "") + (status.status || status.state);
+        $id("lprInstallStatus").classList.toggle("ok", status.state === "completed");
+      }
     } catch (e) { /* status visas nästa gång servern svarar */ }
   }
 
