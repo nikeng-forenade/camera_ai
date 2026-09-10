@@ -742,7 +742,46 @@ function drawHistoryBoxes(canvas, image, detections) {
   }
 }
 
+function openHistoryImage(event, image) {
+  const tab = window.open("", "_blank", "noopener,noreferrer");
+  if (!tab) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  context.lineWidth = Math.max(2, Math.round(image.naturalWidth / 500));
+  context.strokeStyle = "#ffcc00";
+  for (const detection of event.detections || []) {
+    const box = detection.box || [];
+    if (box.length < 4) continue;
+    const x = Number(box[0]);
+    const y = Number(box[1]);
+    const width = Number(box[2]) - x;
+    const height = Number(box[3]) - y;
+    if (Number.isFinite(x) && Number.isFinite(y) && width > 0 && height > 0) {
+      context.strokeRect(x, y, width, height);
+    }
+  }
+  const imageUrl = canvas.toDataURL("image/jpeg", 0.92);
+  tab.document.title = "Camera AI - detektionsbild";
+  tab.document.body.style.cssText = "margin:0;background:#080b0f;display:grid;place-items:center;min-height:100vh";
+  const fullImage = tab.document.createElement("img");
+  fullImage.src = imageUrl;
+  fullImage.alt = "Detektionsbild med boxar";
+  fullImage.style.cssText = "max-width:100%;max-height:100vh;object-fit:contain";
+  tab.document.body.appendChild(fullImage);
+}
+
 function setupHistoryImageOverlays(shown) {
+  document.querySelectorAll(".history-box-image-link").forEach((link, index) => {
+    const image = link.querySelector(".event-log-image");
+    link.addEventListener("click", (clickEvent) => {
+      if (!historyShowBoxes || !image?.complete || !image.naturalWidth) return;
+      clickEvent.preventDefault();
+      openHistoryImage(shown[index], image);
+    });
+  });
   if (!historyShowBoxes) return;
   document.querySelectorAll(".history-box-canvas").forEach((canvas, index) => {
     const image = canvas.previousElementSibling;
@@ -763,12 +802,12 @@ function renderEvents() {
       : '<p class="empty">Inga HA-event ännu.</p>';
     return;
   }
-  box.innerHTML = shown.map((event) => {
+  box.innerHTML = shown.map((event, index) => {
     const classes = (event.classes || []).map(escapeHtml).join(", ") || "detektion";
     const time = new Date(event.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
     const detections = (event.detections || []).map((d) => `${escapeHtml(d.class || "objekt")} ${Math.round((Number(d.confidence) || 0) * 100)}%`).join(" · ");
     return `<article class="event-log-item">
-      ${event.image_url ? `<a class="event-log-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><span class="event-log-image-wrap"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /><canvas class="history-box-canvas" aria-hidden="true"></canvas></span></a>` : ""}
+      ${event.image_url ? `<a class="event-log-image-link history-box-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><span class="event-log-image-wrap"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /><canvas class="history-box-canvas" aria-hidden="true"></canvas></span></a>` : ""}
       <div class="event-log-icon">●</div>
       <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
       <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>

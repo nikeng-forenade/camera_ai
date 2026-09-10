@@ -1,5 +1,8 @@
 # Ändringsnoteringar
 
+## Version 0.17.51 - 2026-09-10
+- Historikens stora bildvy ritar nu också detektionernas boxar när "Visa boxar" är aktiverat, även för äldre events med sparade detektionskoordinater.
+
 ## Version 0.17.50 - 2026-09-10
 - Historikbilderna är fortsatt sparade utan överlägg, men Historik har nu ett valbart "Visa boxar"-reglage som ritar detektionernas boxar ovanpå miniatyrbilderna i webbläsaren. Valet sparas lokalt per webbläsare.
 
