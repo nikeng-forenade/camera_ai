@@ -1,5 +1,8 @@
 # Ändringsnoteringar
 
+## Version 0.17.52 - 2026-09-10
+- Fixad storbildsöppning från Historik: boxbilden öppnas nu direkt som en färdig bild i stället för att försöka skriva till en isolerad blank flik.
+
 ## Version 0.17.51 - 2026-09-10
 - Historikens stora bildvy ritar nu också detektionernas boxar när "Visa boxar" är aktiverat, även för äldre events med sparade detektionskoordinater.
 

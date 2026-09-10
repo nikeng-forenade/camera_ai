@@ -743,8 +743,6 @@ function drawHistoryBoxes(canvas, image, detections) {
 }
 
 function openHistoryImage(event, image) {
-  const tab = window.open("", "_blank", "noopener,noreferrer");
-  if (!tab) return;
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
@@ -764,13 +762,7 @@ function openHistoryImage(event, image) {
     }
   }
   const imageUrl = canvas.toDataURL("image/jpeg", 0.92);
-  tab.document.title = "Camera AI - detektionsbild";
-  tab.document.body.style.cssText = "margin:0;background:#080b0f;display:grid;place-items:center;min-height:100vh";
-  const fullImage = tab.document.createElement("img");
-  fullImage.src = imageUrl;
-  fullImage.alt = "Detektionsbild med boxar";
-  fullImage.style.cssText = "max-width:100%;max-height:100vh;object-fit:contain";
-  tab.document.body.appendChild(fullImage);
+  return Boolean(window.open(imageUrl, "_blank", "noopener,noreferrer"));
 }
 
 function setupHistoryImageOverlays(shown) {
@@ -778,8 +770,7 @@ function setupHistoryImageOverlays(shown) {
     const image = link.querySelector(".event-log-image");
     link.addEventListener("click", (clickEvent) => {
       if (!historyShowBoxes || !image?.complete || !image.naturalWidth) return;
-      clickEvent.preventDefault();
-      openHistoryImage(shown[index], image);
+      if (openHistoryImage(shown[index], image)) clickEvent.preventDefault();
     });
   });
   if (!historyShowBoxes) return;
