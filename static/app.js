@@ -761,8 +761,14 @@ function openHistoryImage(event, image) {
       context.strokeRect(x, y, width, height);
     }
   }
-  const imageUrl = canvas.toDataURL("image/jpeg", 0.92);
-  return Boolean(window.open(imageUrl, "_blank", "noopener,noreferrer"));
+  const data = canvas.toDataURL("image/jpeg", 0.92).split(",")[1];
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const imageUrl = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+  const opened = window.open(imageUrl, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(imageUrl), 60000);
+  return Boolean(opened);
 }
 
 function setupHistoryImageOverlays(shown) {

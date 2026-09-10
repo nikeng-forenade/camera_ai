@@ -1,5 +1,8 @@
 # Ändringsnoteringar
 
+## Version 0.17.53 - 2026-09-10
+- Historikens stora bild med boxar öppnas nu som en tillfällig JPEG-blob i stället för en `data:image/jpeg`-URL, vilket undviker tom visning i webbläsare som inte hanterar data-URL:en korrekt.
+
 ## Version 0.17.52 - 2026-09-10
 - Fixad storbildsöppning från Historik: boxbilden öppnas nu direkt som en färdig bild i stället för att försöka skriva till en isolerad blank flik.
 
