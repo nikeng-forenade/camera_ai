@@ -679,6 +679,16 @@ let eventRefreshInFlight = false;
 let eventRefreshTimer = null;
 let eventItems = [];   // senast hämtade HA-event (rådata, före sökfiltrering)
 let eventQuery = "";   // aktiv sökfras i Historik-fliken
+const historyBoxesInput = document.getElementById("historyBoxes");
+let historyShowBoxes = localStorage.getItem("cameraAiHistoryBoxes") === "true";
+if (historyBoxesInput) {
+  historyBoxesInput.checked = historyShowBoxes;
+  historyBoxesInput.addEventListener("change", () => {
+    historyShowBoxes = historyBoxesInput.checked;
+    localStorage.setItem("cameraAiHistoryBoxes", String(historyShowBoxes));
+    renderEvents();
+  });
+}
 
 function setEventRefreshState(text, isError = false) {
   const meta = document.getElementById("eventRefreshMeta");
@@ -701,6 +711,48 @@ function eventMatches(ev, query) {
   return terms.every((t) => hay.includes(t));
 }
 
+function drawHistoryBoxes(canvas, image, detections) {
+  const width = image.clientWidth;
+  const height = image.clientHeight;
+  if (!width || !height || !image.naturalWidth || !image.naturalHeight) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.scale(dpr, dpr);
+
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const offsetX = (width - image.naturalWidth * scale) / 2;
+  const offsetY = (height - image.naturalHeight * scale) / 2;
+  context.lineWidth = 2;
+  context.strokeStyle = "#ffcc00";
+  for (const detection of detections || []) {
+    const box = detection.box || [];
+    if (box.length < 4) continue;
+    const x = offsetX + Number(box[0]) * scale;
+    const y = offsetY + Number(box[1]) * scale;
+    const boxWidth = (Number(box[2]) - Number(box[0])) * scale;
+    const boxHeight = (Number(box[3]) - Number(box[1])) * scale;
+    if (Number.isFinite(x) && Number.isFinite(y) && boxWidth > 0 && boxHeight > 0) {
+      context.strokeRect(x, y, boxWidth, boxHeight);
+    }
+  }
+}
+
+function setupHistoryImageOverlays(shown) {
+  if (!historyShowBoxes) return;
+  document.querySelectorAll(".history-box-canvas").forEach((canvas, index) => {
+    const image = canvas.previousElementSibling;
+    if (!image) return;
+    const draw = () => drawHistoryBoxes(canvas, image, shown[index]?.detections);
+    if (image.complete) draw();
+    else image.addEventListener("load", draw, { once: true });
+  });
+}
+
 function renderEvents() {
   const box = document.getElementById("eventLogBox");
   if (!box) return;
@@ -716,7 +768,7 @@ function renderEvents() {
     const time = new Date(event.ts * 1000).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
     const detections = (event.detections || []).map((d) => `${escapeHtml(d.class || "objekt")} ${Math.round((Number(d.confidence) || 0) * 100)}%`).join(" · ");
     return `<article class="event-log-item">
-      ${event.image_url ? `<a class="event-log-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /></a>` : ""}
+      ${event.image_url ? `<a class="event-log-image-link" href="${escapeHtml(event.image_url)}" target="_blank" rel="noopener"><span class="event-log-image-wrap"><img class="event-log-image" src="${escapeHtml(event.image_url)}" alt="Öppna detektionsbild" loading="lazy" /><canvas class="history-box-canvas" aria-hidden="true"></canvas></span></a>` : ""}
       <div class="event-log-icon">●</div>
       <div class="event-log-main"><div class="event-log-top"><strong>${escapeHtml(event.camera || "Kamera")}</strong><time>${time}</time></div>
       <div class="event-log-title">${classes}</div><div class="event-log-detail">${escapeHtml(event.summary || detections || "Ny detektion")}</div>
@@ -724,6 +776,7 @@ function renderEvents() {
       ${event.image_error ? `<div class="event-log-image-error">Bild saknas: ${escapeHtml(event.image_error)}</div>` : ""}
     </article>`;
   }).join("");
+  setupHistoryImageOverlays(shown);
 }
 
 async function loadEvents() {

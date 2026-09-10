@@ -1,5 +1,8 @@
 # Ändringsnoteringar
 
+## Version 0.17.50 - 2026-09-10
+- Historikbilderna är fortsatt sparade utan överlägg, men Historik har nu ett valbart "Visa boxar"-reglage som ritar detektionernas boxar ovanpå miniatyrbilderna i webbläsaren. Valet sparas lokalt per webbläsare.
+
 ## 2026-09-08
 - Version `0.17.49`: HACS-integrationen visar nu LPR – nya sensorer `sensor.camera_ai_last_plate` (senast uppläst skylt, global) och `sensor.camera_ai_<kamera>_last_plate` (per kamera) med attribut `plate`, `confidence`, `timestamp`, `count`. Hämtas från serverns `GET /api/lpr`.
 - Version `0.17.48`: zonetiketter (ZON 1/2) nu mindre – en liten ruta i zonens hörn.

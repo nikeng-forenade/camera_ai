@@ -98,7 +98,9 @@
   .event-log-list { display: flex; flex-direction: column; gap: 8px; }
   .event-log-item { display: flex; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; background: #10151c; }
   .event-log-image-link { flex: 0 0 96px; width: 96px; height: 64px; display: block; border-radius: 6px; }
+  .event-log-image-wrap { position: relative; display: block; width: 100%; height: 100%; }
   .event-log-image { display: block; width: 96px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: #080b0f; }
+  .history-box-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .event-log-image-link:hover .event-log-image { border-color: var(--accent); opacity: .85; }
   .event-log-image-error { color: var(--yellow); font-size: 12px; align-self: center; }
   .event-log-icon { flex: 0 0 28px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: rgba(248,81,73,.16); color: var(--red); font-size: 16px; }
@@ -111,8 +113,9 @@
   .event-refresh-meta { min-height: 16px; margin: 3px 0 0; color: var(--muted); font-size: 12px; }
   .event-refresh-meta.err { color: var(--red); }
   .btn.is-loading { opacity: .65; cursor: wait; }
-  .event-log-filter { display: flex; gap: 8px; margin: 10px 0 2px; }
+  .event-log-filter { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
   .event-log-filter input[type="search"] { width: 100%; background: #0b0e13; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+  .history-box-toggle { flex: 0 0 auto; white-space: nowrap; }
   .event-log-filter input[type="search"]:focus { outline: none; border-color: var(--accent); }
   @media (max-width: 600px) { .event-log-item { padding: 10px; } .event-log-image-link { flex-basis: 76px; width: 76px; height: 52px; } .event-log-image { width: 76px; height: 52px; } .event-log-top { align-items: flex-start; flex-direction: column; gap: 2px; } }
 /* ---- Typval + enkel linje (0.13.3) ---- */
