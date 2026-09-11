@@ -23,7 +23,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.53"
+VERSION = "0.17.54"
 
 def model_path(name: str) -> str:
     """Resolve a model file name to an absolute path (bundled or next to the app)."""
@@ -43,8 +43,10 @@ except ImportError:
 # Folders
 UPLOAD_DIR = Path(os.getenv("CAMERA_AI_UPLOAD_DIR", BASE_DIR / "uploads"))
 MEDIA_DIR = Path(os.getenv("CAMERA_AI_MEDIA_DIR", BASE_DIR / "media"))
+RECORDINGS_DIR = Path(os.getenv("CAMERA_AI_RECORDINGS_DIR", BASE_DIR / "recordings"))
 UPLOAD_DIR.mkdir(exist_ok=True)
 MEDIA_DIR.mkdir(exist_ok=True)
+RECORDINGS_DIR.mkdir(exist_ok=True)
 # Lokal data (flera kameror etc.) - bevaras av install/update (exkluderas i
 # robocopy) och är aldrig en del av repot.
 DATA_DIR = Path(os.getenv("CAMERA_AI_DATA_DIR", BASE_DIR / "data"))

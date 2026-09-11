@@ -1052,6 +1052,10 @@ class _CameraIn(BaseModel):
     reconnect: bool | None = None
     reconnect_delay: int | None = None
     autostart: bool | None = None
+    recording_mode: str | None = None
+    recording_folder: str | None = None
+    recording_retention_days: int | None = None
+    recording_segment_seconds: int | None = None
     # Detektionslinje (ROI) – äldre, omvandlas till zon
     roi_enabled: bool | None = None
     roi_y: float | None = None
@@ -1863,6 +1867,67 @@ def media(name: str):
     if not str(path).startswith(str(config.MEDIA_DIR.resolve())) or not path.exists():
         raise HTTPException(404, "not found")
     return FileResponse(path)
+
+
+def _recording_root(camera_id: str) -> Path:
+    worker = pool.get(camera_id)
+    if worker is None:
+        raise HTTPException(404, "Kameran finns inte.")
+    folder = str(worker.camera.get("recording_folder") or config.RECORDINGS_DIR).strip()
+    return (Path(folder).expanduser() / worker.camera_id).resolve()
+
+
+@app.get("/api/recordings/{camera_id}")
+def recordings_list(camera_id: str, date: str = ""):
+    """List MP4 segments for one camera and UTC-local recording date."""
+    root = _recording_root(camera_id)
+    day = (date or time.strftime("%Y-%m-%d")).strip()
+    try:
+        time.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "Datum måste vara YYYY-MM-DD.")
+    folder = (root / day).resolve()
+    if root not in folder.parents and folder != root:
+        raise HTTPException(400, "Ogiltig inspelningssökväg.")
+    segments = []
+    try:
+        for path in sorted(folder.glob("*.mp4")):
+            stamp = f"{day} {path.stem.replace('-', ':')}"
+            try:
+                started = time.mktime(time.strptime(stamp, "%Y-%m-%d %H:%M:%S"))
+            except ValueError:
+                started = path.stat().st_mtime
+            segments.append({
+                "name": path.name,
+                "started_at": started,
+                "size": path.stat().st_size,
+                "url": f"/api/recordings/{camera_id}/file/{path.name}?date={day}",
+            })
+    except OSError:
+        pass
+    events = [
+        {"ts": event.get("ts"), "classes": event.get("classes") or []}
+        for event in EVENT_LOG
+        if str(event.get("camera", "")).lower() == str(pool.get(camera_id).camera.get("name", "")).lower()
+        and time.strftime("%Y-%m-%d", time.localtime(float(event.get("ts", 0)))) == day
+    ]
+    return {"camera_id": camera_id, "date": day, "segments": segments, "events": events}
+
+
+@app.get("/api/recordings/{camera_id}/file/{name}")
+def recording_file(camera_id: str, name: str, date: str = ""):
+    if Path(name).name != name or not name.lower().endswith(".mp4"):
+        raise HTTPException(404, "not found")
+    root = _recording_root(camera_id)
+    day = (date or "").strip()
+    try:
+        time.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "Datum måste vara YYYY-MM-DD.")
+    path = (root / day / name).resolve()
+    if root not in path.parents or not path.is_file():
+        raise HTTPException(404, "not found")
+    return FileResponse(path, media_type="video/mp4")
 
 
 @app.post("/api/analyze")

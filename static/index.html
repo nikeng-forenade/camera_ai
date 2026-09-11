@@ -27,6 +27,7 @@
     <button class="tab" data-view="analys">🖼️ Analys</button>
     <button class="tab" data-view="lpr">🔎 LPR-test</button>
     <button class="tab" data-view="historik">📊 Historik</button>
+    <button class="tab" data-view="inspelningar">⏺ Inspelningar</button>
     <button class="tab" data-view="modeller">🤖 Modeller &amp; System</button>
     <button class="tab" data-view="settings">⚙️ Inställningar</button>
   </nav>
@@ -208,6 +209,25 @@
       </section>
     </section>
 
+    <!-- ========================== INSPELNINGAR ========================== -->
+    <section id="view-inspelningar" class="view">
+      <section class="card recordings-card">
+        <div class="stats-head">
+          <div><h2>⏺ Inspelningar</h2><p class="hint">Välj kamera och datum för att spela upp sparade MP4-segment.</p></div>
+          <button id="recordingsRefresh" class="btn" type="button">↻ Uppdatera</button>
+        </div>
+        <div class="recordings-controls">
+          <label>Kamera <select id="recordingsCamera"></select></label>
+          <label>Datum <input id="recordingsDate" type="date" /></label>
+          <span id="recordingsStatus" class="save-msg"></span>
+        </div>
+        <video id="recordingsVideo" class="recordings-video" controls preload="metadata"></video>
+        <p id="recordingsNow" class="hint">Välj ett segment i tidslinjen.</p>
+        <div id="recordingsTimeline" class="recordings-timeline"><p class="empty">Välj en kamera med inspelning.</p></div>
+        <div id="recordingsEvents" class="recordings-events"></div>
+      </section>
+    </section>
+
     <!-- ===================== MODELLER & SYSTEM ===================== -->
     <section id="view-modeller" class="view">
       <section class="card">
@@ -343,6 +363,29 @@
           </label>
           <label class="chk">
             <input type="checkbox" id="camAutostart" /> Auto-start vid appstart
+          </label>
+          <label>Inspelning
+            <select id="camRecordingMode">
+              <option value="off">Av</option>
+              <option value="continuous">24/7</option>
+              <option value="motion">Endast rörelse</option>
+              <option value="continuous_motion">24/7 + rörelse</option>
+            </select>
+            <span class="hint">24/7 + rörelse spelar in kontinuerligt. Rörelse och AI-event kan senare få längre retention.</span>
+          </label>
+          <label class="wide">Inspelningsmapp
+            <input type="text" id="camRecordingFolder" placeholder="C:\\CameraAI\\recordings" />
+            <span class="hint">Fullständig lokal sökväg. En undermapp per kamera och datum skapas automatiskt.</span>
+          </label>
+          <label>Behåll inspelningar (dagar)
+            <input type="number" id="camRecordingRetention" min="1" max="3650" value="7" />
+          </label>
+          <label>Segmentlängd (sekunder)
+            <select id="camRecordingSegment">
+              <option value="10">10 sekunder</option>
+              <option value="30">30 sekunder</option>
+              <option value="60">60 sekunder</option>
+            </select>
           </label>
         </div>
 

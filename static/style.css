@@ -351,6 +351,15 @@ input[type="range"] { accent-color: var(--accent); }
 .save-msg { font-size: 12.5px; color: var(--muted); }
 .save-msg.ok { color: var(--green); }
 .save-msg.err { color: var(--red); }
+.recordings-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 12px 0; }
+.recordings-controls label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12.5px; }
+.recordings-controls select, .recordings-controls input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.recordings-video { display: block; width: 100%; max-height: 520px; background: #000; border: 1px solid var(--border); border-radius: 6px; }
+.recordings-timeline { display: flex; min-height: 58px; overflow-x: auto; gap: 2px; margin-top: 14px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.recording-segment { flex: 1 0 18px; min-width: 18px; height: 38px; padding: 0; border: 0; border-radius: 3px; background: #245b83; cursor: pointer; }
+.recording-segment:hover, .recording-segment.active { background: var(--accent); outline: 2px solid #e6edf3; outline-offset: 1px; }
+.recordings-events { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.recording-event { padding: 4px 8px; background: rgba(242,204,96,.12); border: 1px solid rgba(242,204,96,.45); border-radius: 5px; color: var(--yellow); font-size: 12px; }
 .cam-scan-list { margin: 8px 0 0; padding-left: 18px; }
 .cam-scan-list code { color: var(--accent); }
 .cam-scan-list li { margin: 2px 0; }

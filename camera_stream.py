@@ -22,6 +22,7 @@ import numpy as np
 
 import config
 from analyzer import annotate_frame_bgr
+from recording import RecordingManager
 
 # Watchdog: starta om workern om AI-inferensen hänger (ingen ny inferens).
 WATCHDOG_STALE_S = 90.0      # ingen inferens på så länge -> misstänkt hängning
@@ -513,6 +514,12 @@ class CameraWorker:
         self.last_event: str | None = None
         self.last_event_ts: float | None = None
         self.event_count = 0
+        self.recorder = RecordingManager(
+            self.camera_id,
+            lambda: dict(self.camera),
+            self._recording_rtsp_url,
+            self._recording_motion_active,
+        )
 
     # ------------------------------------------------------------------ utils
     @staticmethod
@@ -531,6 +538,10 @@ class CameraWorker:
             "main_path": "",
             "lpr_enabled": True,   # per-kamera: kör LPR (följer global LPR på/av)
             "lpr_stream": "main",  # per-kamera: "main" (högupplöst) | "sub"
+            "recording_mode": "off",
+            "recording_folder": str(config.RECORDINGS_DIR),
+            "recording_retention_days": 7,
+            "recording_segment_seconds": 10,
 # Detektionszoner (en eller flera polygoner); gamla linjer (roi_*) stöds fortfarande
     "roi_enabled": False,
     "roi_y": 0.5,
@@ -1003,6 +1014,18 @@ class CameraWorker:
             elif state in (CAM_ONLINE, CAM_CONNECTING):
                 self.error = None
 
+    def _recording_rtsp_url(self) -> str:
+        with self._lock:
+            camera = dict(self.camera)
+        return build_rtsp_url(
+            camera.get("host", ""), camera.get("user", ""), camera.get("password", ""),
+            camera.get("path", ""), camera.get("full_url", ""),
+        )
+
+    def _recording_motion_active(self) -> bool:
+        with self._lock:
+            return bool(self._moving_boxes) or self.motion_diff >= float(self.detect.get("motion_threshold", 5.0))
+
     # ------------------------------------------------------------- livscykel
     def start(self) -> None:
         with self._restart_lock:
@@ -1020,6 +1043,8 @@ class CameraWorker:
             self._rtsp_thread.start()
             self._loop_thread.start()
             self._start_watchdog()
+            if self.camera.get("recording_mode") != "off":
+                self.recorder.start()
 
     def stop(self, join: float = 3.0) -> None:
         with self._restart_lock:
@@ -1033,6 +1058,7 @@ class CameraWorker:
             self._rtsp_thread = None
             self._loop_thread = None
             self._wd_thread = None
+            self.recorder.stop()
             self._raw_frame = None
             self._raw_ts = 0.0
             with self._lock:
@@ -1061,6 +1087,8 @@ class CameraWorker:
             self._rtsp_thread.start()
             self._loop_thread.start()
             self._start_watchdog()
+            if self.camera.get("recording_mode") != "off":
+                self.recorder.restart()
 
     # -------------------------------------------------------------- RTSP-loop
     def _start_watchdog(self) -> None:
@@ -1451,6 +1479,11 @@ class CameraWorker:
             for k, v in values.items():
                 if k in _CAMERA_FIELDS:
                     self.camera[k] = v
+        if any(k.startswith("recording_") for k in values):
+            if self.running and self.camera.get("recording_mode") != "off":
+                self.recorder.restart()
+            elif self.camera.get("recording_mode") == "off":
+                self.recorder.stop()
 
     def _roi_cfg(self) -> dict:
         """Nuvarande detektionsfiltrering – linje OCH/ELLER zoner (oberoende).
@@ -1838,6 +1871,10 @@ class CameraWorker:
             "reconnect": bool(c.get("reconnect")),
             "reconnect_delay": int(c.get("reconnect_delay", 5)),
             "autostart": bool(c.get("autostart")),
+            "recording_mode": str(c.get("recording_mode") or "off"),
+            "recording_folder": str(c.get("recording_folder") or config.RECORDINGS_DIR),
+            "recording_retention_days": int(c.get("recording_retention_days", 7)),
+            "recording_segment_seconds": int(c.get("recording_segment_seconds", 10)),
             # Detektionszon
             "roi_enabled": bool(c.get("roi_enabled")),
             "roi_y": float(c.get("roi_y", 0.5)),
@@ -1917,7 +1954,7 @@ class CameraWorker:
             return "gpu" if dev and "gpu" in str(dev).lower() else "cpu"
 
         fallback = _tier(configured_device) == "gpu" and _tier(actual_device) == "cpu"
-        return {
+        result = {
             "camera_id": self.camera_id,
             "camera_name": camera["name"],
             "camera_enabled": bool(camera["enabled"]),
@@ -1982,6 +2019,8 @@ class CameraWorker:
             "last_event_ts": self.last_event_ts,
             "event_count": self.event_count,
         }
+        result.update(self.recorder.status())
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -1993,6 +2032,7 @@ _CAMERA_FIELDS = (
     "enabled", "name", "host", "user", "password", "path", "main_path", "full_url",
     "reconnect", "reconnect_delay", "autostart",
     "lpr_enabled", "lpr_stream",
+    "recording_mode", "recording_folder", "recording_retention_days", "recording_segment_seconds",
     "roi_enabled", "roi_y", "roi_side",
     "zone_enabled", "zone_polys", "zone_kinds", "zone_points", "zone_mode",
 )
@@ -2048,6 +2088,10 @@ class CameraPool:
             "reconnect": config.CAMERA_RECONNECT,
             "reconnect_delay": config.CAMERA_RECONNECT_DELAY,
             "autostart": config.CAMERA_AUTOSTART,
+            "recording_mode": "off",
+            "recording_folder": str(config.RECORDINGS_DIR),
+            "recording_retention_days": 7,
+            "recording_segment_seconds": 10,
             # Detektionszoner
             "roi_enabled": False,
             "roi_y": 0.5,
@@ -2160,6 +2204,14 @@ class CameraPool:
             values["lpr_stream"] = s if s in ("main", "sub") else "main"
         if values.get("full_url") is not None:
             values["full_url"] = str(values["full_url"]).strip()
+        if values.get("recording_mode") is not None:
+            mode = str(values["recording_mode"]).strip().lower()
+            values["recording_mode"] = mode if mode in ("off", "continuous", "motion", "continuous_motion") else "off"
+        if values.get("recording_folder") is not None:
+            values["recording_folder"] = str(values["recording_folder"]).strip() or str(config.RECORDINGS_DIR)
+        for key, minimum, maximum in (("recording_retention_days", 1, 3650), ("recording_segment_seconds", 5, 300)):
+            if values.get(key) is not None:
+                values[key] = max(minimum, min(maximum, int(values[key])))
 
         was_running = w.running
         enabled = values.get("enabled", w.camera.get("enabled", False))

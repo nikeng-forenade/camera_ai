@@ -8,6 +8,50 @@ const statusEl = document.getElementById("status");
 const confInput = document.getElementById("conf");
 const confValue = document.getElementById("confValue");
 
+/* ---- Inspelningar ---- */
+let recordingsData = null;
+function recordingTime(ts) { return new Date(Number(ts) * 1000).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+function recordingToday() { return new Date().toISOString().slice(0, 10); }
+function setupRecordingsCameras(cameras) {
+  const select = document.getElementById("recordingsCamera");
+  if (!select) return;
+  const previous = select.value;
+  select.innerHTML = (cameras || []).map((camera) => `<option value="${escapeHtml(camera.id)}">${escapeHtml(camera.name || camera.id)}</option>`).join("");
+  if (previous && [...select.options].some((option) => option.value === previous)) select.value = previous;
+}
+function renderRecordings() {
+  const timeline = document.getElementById("recordingsTimeline"), video = document.getElementById("recordingsVideo"), now = document.getElementById("recordingsNow"), events = document.getElementById("recordingsEvents");
+  if (!timeline || !video || !now || !events) return;
+  const segments = recordingsData?.segments || [];
+  timeline.innerHTML = "";
+  events.innerHTML = "";
+  if (!segments.length) { timeline.innerHTML = '<p class="empty">Inga inspelade segment för valt datum.</p>'; video.removeAttribute("src"); video.load(); now.textContent = ""; return; }
+  segments.forEach((segment, index) => {
+    const button = document.createElement("button");
+    button.className = "recording-segment";
+    button.title = recordingTime(segment.started_at);
+    button.setAttribute("aria-label", "Spela " + recordingTime(segment.started_at));
+    button.addEventListener("click", () => {
+      timeline.querySelectorAll(".recording-segment").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active"); video.src = segment.url; video.play().catch(() => {}); now.textContent = "Segment " + recordingTime(segment.started_at) + " (" + Math.round(segment.size / 1024 / 1024) + " MB)";
+    });
+    if (index === 0) button.click();
+    timeline.appendChild(button);
+  });
+  (recordingsData.events || []).forEach((event) => { const tag = document.createElement("span"); tag.className = "recording-event"; tag.textContent = recordingTime(event.ts) + " · " + (event.classes || []).join(", "); events.appendChild(tag); });
+}
+async function loadRecordings() {
+  const camera = document.getElementById("recordingsCamera")?.value, date = document.getElementById("recordingsDate")?.value, status = document.getElementById("recordingsStatus");
+  if (!camera || !date) return;
+  if (status) status.textContent = "Laddar…";
+  try { recordingsData = await fetchJson("/api/recordings/" + encodeURIComponent(camera) + "?date=" + encodeURIComponent(date)); renderRecordings(); if (status) status.textContent = recordingsData.segments.length + " segment"; }
+  catch (error) { if (status) status.textContent = "❌ " + error.message; }
+}
+document.getElementById("recordingsDate")?.setAttribute("value", recordingToday());
+document.getElementById("recordingsCamera")?.addEventListener("change", loadRecordings);
+document.getElementById("recordingsDate")?.addEventListener("change", loadRecordings);
+document.getElementById("recordingsRefresh")?.addEventListener("click", loadRecordings);
+
 confInput.addEventListener("input", () => {
   confValue.textContent = parseFloat(confInput.value).toFixed(2);
 });
@@ -891,6 +935,7 @@ loadStats();
       loadEvents();
       loadLpr();
     }
+    if (name === "inspelningar") loadRecordings();
     window.scrollTo({ top: 0 });
   }
   document.querySelectorAll(".tab").forEach((b) =>
@@ -1558,6 +1603,10 @@ loadStats();
       reconnect: $id("camReconnect").checked,
       reconnect_delay: parseInt($id("camReconnectDelay").value, 10) || 5,
       autostart: $id("camAutostart").checked,
+      recording_mode: $id("camRecordingMode") ? $id("camRecordingMode").value : "off",
+      recording_folder: $id("camRecordingFolder") ? ($id("camRecordingFolder").value || "").trim() : "",
+      recording_retention_days: parseInt($id("camRecordingRetention")?.value, 10) || 7,
+      recording_segment_seconds: parseInt($id("camRecordingSegment")?.value, 10) || 10,
       // Linje – oberoende: bevaka bara ovanför/nedanför
       roi_enabled: lineActive(),
       roi_y: Math.min(1, Math.max(0, lineY / 100)),
@@ -1735,6 +1784,10 @@ loadStats();
       setChecked("camReconnect", true);
       if ($id("camReconnectDelay")) $id("camReconnectDelay").value = 5;
       setChecked("camAutostart", true);
+      if ($id("camRecordingMode")) $id("camRecordingMode").value = "off";
+      if ($id("camRecordingFolder")) $id("camRecordingFolder").value = "";
+      if ($id("camRecordingRetention")) $id("camRecordingRetention").value = 7;
+      if ($id("camRecordingSegment")) $id("camRecordingSegment").value = 10;
       if ($id("camPassHint")) $id("camPassHint").textContent = "";
       applyRoiFromCam(null);
       hideRoiPreview();
@@ -1753,6 +1806,10 @@ loadStats();
     setChecked("camReconnect", c.reconnect !== false);
     if ($id("camReconnectDelay")) $id("camReconnectDelay").value = (c.reconnect_delay != null) ? c.reconnect_delay : 5;
     setChecked("camAutostart", c.autostart !== false);
+    if ($id("camRecordingMode")) $id("camRecordingMode").value = c.recording_mode || "off";
+    if ($id("camRecordingFolder")) $id("camRecordingFolder").value = c.recording_folder || "";
+    if ($id("camRecordingRetention")) $id("camRecordingRetention").value = c.recording_retention_days || 7;
+    if ($id("camRecordingSegment")) $id("camRecordingSegment").value = c.recording_segment_seconds || 10;
     if ($id("camPassHint")) {
       $id("camPassHint").textContent = c.password_configured
         ? "🔒 Lösenord konfigurerat (tomt = behåll)."
@@ -1798,6 +1855,7 @@ loadStats();
     let data;
     try { data = await fetchJson("/api/cameras/list"); } catch (e) { return; }
     camCams = data.cameras || [];
+    setupRecordingsCameras(camCams);
     if (editingId && camCams.some((c) => c.id === editingId)) {
       fillCameraForm(camCams.find((c) => c.id === editingId));
     } else if (camCams.length) {
