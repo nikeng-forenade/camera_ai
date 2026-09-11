@@ -1,8 +1,11 @@
-## Version 0.17.54 - 2026-09-11
+## Version 0.17.55 - 2026-09-11
 
 - Added an early visual mockup for the planned recordings and event timeline view: `docs/mockups/recordings-timeline.svg`.
 - Added per-camera MP4 recording settings: mode, recording folder, retention and segment length. Recordings use ffmpeg stream copy and default to 10-second segments.
 - Added an Inspelningar view with camera/date selection, MP4 playback, segment timeline and AI-event markers.
+- Fixed the recordings view API request so it does not depend on a private frontend helper scope.
+- Upgraded the recordings view to a 24-hour visual timeline with positioned video segments, a playback head and color-coded AI-event markers.
+- Added a selectable recording time span with From/To fields and 1, 3, 6 and 24-hour quick filters.
 # Ändringsnoteringar
 
 ## Version 0.17.53 - 2026-09-10

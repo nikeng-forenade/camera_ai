@@ -354,12 +354,23 @@ input[type="range"] { accent-color: var(--accent); }
 .recordings-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 12px 0; }
 .recordings-controls label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12.5px; }
 .recordings-controls select, .recordings-controls input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.recordings-span { display: flex; gap: 4px; align-items: flex-end; }
+.recordings-span-btn { min-width: 38px; padding: 8px 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; font-size: 12px; }
+.recordings-span-btn:hover, .recordings-span-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
 .recordings-video { display: block; width: 100%; max-height: 520px; background: #000; border: 1px solid var(--border); border-radius: 6px; }
-.recordings-timeline { display: flex; min-height: 58px; overflow-x: auto; gap: 2px; margin-top: 14px; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
-.recording-segment { flex: 1 0 18px; min-width: 18px; height: 38px; padding: 0; border: 0; border-radius: 3px; background: #245b83; cursor: pointer; }
-.recording-segment:hover, .recording-segment.active { background: var(--accent); outline: 2px solid #e6edf3; outline-offset: 1px; }
+.recordings-timeline { min-height: 100px; margin-top: 14px; padding: 14px 12px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
+.recordings-track { position: relative; min-width: 720px; height: 48px; border-radius: 4px; background: repeating-linear-gradient(90deg, #151b22 0, #151b22 calc(12.5% - 1px), #30363d calc(12.5% - 1px), #30363d 12.5%); }
+.recording-segment { position: absolute; top: 16px; min-width: 2px; height: 22px; padding: 0; border: 0; border-radius: 2px; background: #27628d; cursor: pointer; z-index: 2; }
+.recording-segment:hover, .recording-segment.active { background: var(--accent); outline: 2px solid #e6edf3; outline-offset: 1px; z-index: 3; }
+.recordings-event-markers { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.recording-event-marker { position: absolute; top: 4px; width: 11px; height: 11px; padding: 0; border: 2px solid var(--bg); border-radius: 50%; transform: translateX(-50%); pointer-events: auto; cursor: pointer; }
+.recording-event-marker.person { background: var(--red); }.recording-event-marker.vehicle { background: var(--yellow); }.recording-event-marker.animal { background: var(--green); }
+.recordings-playhead { position: absolute; top: -5px; bottom: -5px; width: 2px; background: #e6edf3; z-index: 5; pointer-events: none; }
+.recordings-playhead::before { content: ""; position: absolute; top: 0; left: -4px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid #e6edf3; }
+.recordings-ruler { position: relative; min-width: 720px; height: 25px; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.recordings-ruler span { position: absolute; transform: translateX(-50%); white-space: nowrap; }.recordings-ruler span:first-child { transform: none; }.recordings-ruler span:last-child { transform: translateX(-100%); }
 .recordings-events { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
-.recording-event { padding: 4px 8px; background: rgba(242,204,96,.12); border: 1px solid rgba(242,204,96,.45); border-radius: 5px; color: var(--yellow); font-size: 12px; }
+.recording-event { padding: 4px 8px; border-radius: 5px; font-size: 12px; }.recording-event.person { color: var(--red); background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.45); }.recording-event.vehicle { color: var(--yellow); background: rgba(242,204,96,.12); border: 1px solid rgba(242,204,96,.45); }.recording-event.animal { color: var(--green); background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.45); }
 .cam-scan-list { margin: 8px 0 0; padding-left: 18px; }
 .cam-scan-list code { color: var(--accent); }
 .cam-scan-list li { margin: 2px 0; }

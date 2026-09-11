@@ -219,6 +219,14 @@
         <div class="recordings-controls">
           <label>Kamera <select id="recordingsCamera"></select></label>
           <label>Datum <input id="recordingsDate" type="date" /></label>
+          <label>Från <input id="recordingsFrom" type="time" value="00:00" /></label>
+          <label>Till <input id="recordingsTo" type="time" value="23:59" /></label>
+          <div class="recordings-span" aria-label="Snabbval tidsintervall">
+            <button type="button" class="recordings-span-btn" data-hours="1">1 h</button>
+            <button type="button" class="recordings-span-btn" data-hours="3">3 h</button>
+            <button type="button" class="recordings-span-btn" data-hours="6">6 h</button>
+            <button type="button" class="recordings-span-btn active" data-hours="24">24 h</button>
+          </div>
           <span id="recordingsStatus" class="save-msg"></span>
         </div>
         <video id="recordingsVideo" class="recordings-video" controls preload="metadata"></video>

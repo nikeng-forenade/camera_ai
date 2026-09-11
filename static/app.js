@@ -16,40 +16,137 @@ function setupRecordingsCameras(cameras) {
   const select = document.getElementById("recordingsCamera");
   if (!select) return;
   const previous = select.value;
-  select.innerHTML = (cameras || []).map((camera) => `<option value="${escapeHtml(camera.id)}">${escapeHtml(camera.name || camera.id)}</option>`).join("");
+  select.innerHTML = "";
+  (cameras || []).forEach((camera) => {
+    const option = document.createElement("option");
+    option.value = camera.id;
+    option.textContent = camera.name || camera.id;
+    select.appendChild(option);
+  });
   if (previous && [...select.options].some((option) => option.value === previous)) select.value = previous;
+}
+function recordingEventColor(classes) {
+  const values = (classes || []).map((item) => String(item).toLowerCase());
+  if (values.some((item) => ["person", "human"].includes(item))) return "person";
+  if (values.some((item) => ["car", "truck", "bus", "motorcycle", "bicycle"].includes(item))) return "vehicle";
+  return "animal";
+}
+function recordingRange() {
+  const date = document.getElementById("recordingsDate")?.value;
+  const from = document.getElementById("recordingsFrom")?.value || "00:00";
+  const to = document.getElementById("recordingsTo")?.value || "23:59";
+  const start = new Date(date + "T" + from + ":00").getTime() / 1000;
+  const end = new Date(date + "T" + to + ":59").getTime() / 1000;
+  return { start, end: Math.max(start + 1, end) };
 }
 function renderRecordings() {
   const timeline = document.getElementById("recordingsTimeline"), video = document.getElementById("recordingsVideo"), now = document.getElementById("recordingsNow"), events = document.getElementById("recordingsEvents");
   if (!timeline || !video || !now || !events) return;
-  const segments = recordingsData?.segments || [];
+  const range = recordingRange();
+  const allSegments = recordingsData?.segments || [];
+  const segments = allSegments.filter((segment) => Number(segment.started_at) >= range.start && Number(segment.started_at) <= range.end);
   timeline.innerHTML = "";
   events.innerHTML = "";
   if (!segments.length) { timeline.innerHTML = '<p class="empty">Inga inspelade segment för valt datum.</p>'; video.removeAttribute("src"); video.load(); now.textContent = ""; return; }
+  const toPercent = (timestamp) => Math.min(100, Math.max(0, ((Number(timestamp) - range.start) / (range.end - range.start)) * 100));
+  const track = document.createElement("div");
+  track.className = "recordings-track";
+  const markerLayer = document.createElement("div");
+  markerLayer.className = "recordings-event-markers";
+  const playhead = document.createElement("div");
+  playhead.className = "recordings-playhead";
+  track.append(markerLayer, playhead);
+  const selectSegment = (segment, button) => {
+    timeline.querySelectorAll(".recording-segment").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    playhead.style.left = toPercent(segment.started_at) + "%";
+    video.src = segment.url;
+    video.ontimeupdate = () => {
+      playhead.style.left = toPercent(Number(segment.started_at) + video.currentTime) + "%";
+    };
+    video.play().catch(() => {});
+    now.textContent = "Segment " + recordingTime(segment.started_at) + " (" + Math.round(segment.size / 1024 / 1024) + " MB)";
+  };
   segments.forEach((segment, index) => {
     const button = document.createElement("button");
     button.className = "recording-segment";
     button.title = recordingTime(segment.started_at);
     button.setAttribute("aria-label", "Spela " + recordingTime(segment.started_at));
-    button.addEventListener("click", () => {
-      timeline.querySelectorAll(".recording-segment").forEach((item) => item.classList.remove("active"));
-      button.classList.add("active"); video.src = segment.url; video.play().catch(() => {}); now.textContent = "Segment " + recordingTime(segment.started_at) + " (" + Math.round(segment.size / 1024 / 1024) + " MB)";
-    });
-    if (index === 0) button.click();
-    timeline.appendChild(button);
+    const next = segments[index + 1];
+    const duration = Math.max(5, Math.min(300, next ? Number(next.started_at) - Number(segment.started_at) : 10));
+    button.style.left = toPercent(segment.started_at) + "%";
+    button.style.width = Math.max(0.08, (duration / 86400) * 100) + "%";
+    button.addEventListener("click", () => selectSegment(segment, button));
+    track.appendChild(button);
+    if (index === 0) setTimeout(() => selectSegment(segment, button), 0);
   });
-  (recordingsData.events || []).forEach((event) => { const tag = document.createElement("span"); tag.className = "recording-event"; tag.textContent = recordingTime(event.ts) + " · " + (event.classes || []).join(", "); events.appendChild(tag); });
+  (recordingsData.events || []).filter((event) => Number(event.ts) >= range.start && Number(event.ts) <= range.end).forEach((event) => {
+    const marker = document.createElement("button");
+    const label = (event.classes || []).join(", ") || "Event";
+    marker.className = "recording-event-marker " + recordingEventColor(event.classes);
+    marker.style.left = toPercent(event.ts) + "%";
+    marker.title = recordingTime(event.ts) + " · " + label;
+    marker.setAttribute("aria-label", marker.title);
+    marker.addEventListener("click", () => {
+      const eventTime = Number(event.ts);
+      const index = segments.findIndex((segment, position) => {
+        const next = segments[position + 1];
+        return eventTime >= Number(segment.started_at) && (!next || eventTime < Number(next.started_at));
+      });
+      const segment = segments[index >= 0 ? index : 0];
+      const button = track.querySelectorAll(".recording-segment")[index >= 0 ? index : 0];
+      if (segment && button) selectSegment(segment, button);
+    });
+    markerLayer.appendChild(marker);
+    const tag = document.createElement("span");
+    tag.className = "recording-event " + recordingEventColor(event.classes);
+    tag.textContent = recordingTime(event.ts) + " · " + label;
+    events.appendChild(tag);
+  });
+  const ruler = document.createElement("div");
+  ruler.className = "recordings-ruler";
+  const tickCount = range.end - range.start <= 3600 * 3 ? 6 : 8;
+  for (let index = 0; index <= tickCount; index += 1) {
+    const timestamp = range.start + ((range.end - range.start) * index / tickCount);
+    const label = document.createElement("span");
+    label.style.left = (index / tickCount * 100) + "%";
+    label.textContent = recordingTime(timestamp).slice(0, 5);
+    ruler.appendChild(label);
+  }
+  timeline.append(track, ruler);
 }
 async function loadRecordings() {
   const camera = document.getElementById("recordingsCamera")?.value, date = document.getElementById("recordingsDate")?.value, status = document.getElementById("recordingsStatus");
   if (!camera || !date) return;
   if (status) status.textContent = "Laddar…";
-  try { recordingsData = await fetchJson("/api/recordings/" + encodeURIComponent(camera) + "?date=" + encodeURIComponent(date)); renderRecordings(); if (status) status.textContent = recordingsData.segments.length + " segment"; }
+  try {
+    const response = await fetch("/api/recordings/" + encodeURIComponent(camera) + "?date=" + encodeURIComponent(date));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Kunde inte hämta inspelningar.");
+    recordingsData = data;
+    renderRecordings();
+    if (status) status.textContent = recordingsData.segments.length + " segment";
+  }
   catch (error) { if (status) status.textContent = "❌ " + error.message; }
 }
 document.getElementById("recordingsDate")?.setAttribute("value", recordingToday());
 document.getElementById("recordingsCamera")?.addEventListener("change", loadRecordings);
 document.getElementById("recordingsDate")?.addEventListener("change", loadRecordings);
+document.getElementById("recordingsFrom")?.addEventListener("change", renderRecordings);
+document.getElementById("recordingsTo")?.addEventListener("change", renderRecordings);
+document.querySelectorAll(".recordings-span-btn").forEach((button) => button.addEventListener("click", () => {
+  const hours = Number(button.dataset.hours);
+  const now = new Date();
+  const selectedDate = document.getElementById("recordingsDate")?.value;
+  const isToday = selectedDate === recordingToday();
+  const endMinutes = isToday ? now.getHours() * 60 + now.getMinutes() : 24 * 60 - 1;
+  const startMinutes = Math.max(0, endMinutes - hours * 60);
+  const timeText = (minutes) => String(Math.floor(minutes / 60)).padStart(2, "0") + ":" + String(minutes % 60).padStart(2, "0");
+  document.getElementById("recordingsFrom").value = timeText(startMinutes);
+  document.getElementById("recordingsTo").value = timeText(endMinutes);
+  document.querySelectorAll(".recordings-span-btn").forEach((item) => item.classList.toggle("active", item === button));
+  renderRecordings();
+}));
 document.getElementById("recordingsRefresh")?.addEventListener("click", loadRecordings);
 
 confInput.addEventListener("input", () => {
