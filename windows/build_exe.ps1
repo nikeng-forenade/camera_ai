@@ -12,6 +12,11 @@ $AppDir = Split-Path -Parent $PSScriptRoot
 $Py = "$AppDir\.venv\Scripts\python.exe"
 
 if (-not (Test-Path $Py)) { Write-Host "Kör först: windows\setup.ps1" -ForegroundColor Red; exit 1 }
+$Ffmpeg = Get-Command ffmpeg -ErrorAction SilentlyContinue
+if (-not $Ffmpeg) {
+    Write-Host "ffmpeg saknas. Kör windows\setup.ps1 igen eller installera Gyan.FFmpeg via winget." -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "=== Camera AI - EXE-bygge (PyInstaller) ==="
 
@@ -43,6 +48,7 @@ Set-Location $AppDir
     --name $Name `
     --icon "windows\camera_ai.ico" `
     --add-data "static;static" `
+    --add-binary "$($Ffmpeg.Source);ffmpeg.exe" `
     --add-data "yolo11n.pt;." `
     --add-data "yolo11s.pt;." `
     --collect-all ultralytics `
@@ -59,4 +65,4 @@ if ($OneFile) {
     Write-Host "Mapp: $AppDir\dist\CameraAI\CameraAI.exe   (flytta hela mappen)"
 }
 Write-Host "Kopiera till datorn med Arc B50 Pro och kör CameraAI.exe"
-Write-Host "(.env, uploads/, media/ och OpenVINO-modeller skapas automatiskt bredvid exe:n)"
+Write-Host "(.env, uploads/, media/, recordings/ och OpenVINO-modeller skapas automatiskt bredvid exe:n)"

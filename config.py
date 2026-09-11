@@ -23,7 +23,7 @@ else:
 STATIC_DIR = BUNDLE_DIR / "static"
 
 # App-version (visas i GUI och HA-integrationen)
-VERSION = "0.17.55"
+VERSION = "0.17.56"
 
 def model_path(name: str) -> str:
     """Resolve a model file name to an absolute path (bundled or next to the app)."""
@@ -44,6 +44,13 @@ except ImportError:
 UPLOAD_DIR = Path(os.getenv("CAMERA_AI_UPLOAD_DIR", BASE_DIR / "uploads"))
 MEDIA_DIR = Path(os.getenv("CAMERA_AI_MEDIA_DIR", BASE_DIR / "media"))
 RECORDINGS_DIR = Path(os.getenv("CAMERA_AI_RECORDINGS_DIR", BASE_DIR / "recordings"))
+_ffmpeg_override = os.getenv("CAMERA_AI_FFMPEG", "").strip()
+_ffmpeg_candidates = [
+    Path(_ffmpeg_override) if _ffmpeg_override else None,
+    BASE_DIR / "ffmpeg.exe",
+    BUNDLE_DIR / "ffmpeg.exe",
+]
+FFMPEG_BIN = next((str(path) for path in _ffmpeg_candidates if path and path.is_file()), "ffmpeg")
 UPLOAD_DIR.mkdir(exist_ok=True)
 MEDIA_DIR.mkdir(exist_ok=True)
 RECORDINGS_DIR.mkdir(exist_ok=True)

@@ -234,18 +234,38 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Verifiera OpenVINO-enheter
+# 5. ffmpeg för MP4-inspelning
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "--- 5/6 OpenVINO-enheter (Arc-kortet ska synas) ---" -ForegroundColor Cyan
+Write-Host "--- 5/7 ffmpeg (MP4-inspelning) ---" -ForegroundColor Cyan
+if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "ffmpeg saknas - installerar via winget ..." -ForegroundColor Yellow
+        Invoke-Native { winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements }
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+    } else {
+        Write-Host "Varning: ffmpeg saknas och winget finns inte. MP4-inspelning blir inte tillgänglig." -ForegroundColor Yellow
+    }
+}
+if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+    $FfmpegExe = (Get-Command ffmpeg).Source
+    Copy-Item -Path $FfmpegExe -Destination "$AppDir\ffmpeg.exe" -Force
+    Write-Host "ffmpeg hittad och kopierad till appmappen." -ForegroundColor Green
+}
+
+# ---------------------------------------------------------------------------
+# 6. Verifiera OpenVINO-enheter
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- 6/7 OpenVINO-enheter (Arc-kortet ska synas) ---" -ForegroundColor Cyan
 & $PyExe -c "import openvino as ov; print('Devices:', ov.Core().available_devices)"
 
 # ---------------------------------------------------------------------------
-# 6. Schemalagd aktivitet "CameraAI" (headless server)
+# 7. Schemalagd aktivitet "CameraAI" (headless server)
 # ---------------------------------------------------------------------------
 if (-not $NoTask) {
     Write-Host ""
-    Write-Host "--- 6/6 Schemalagd aktivitet '$TaskName' ---" -ForegroundColor Cyan
+    Write-Host "--- 7/7 Schemalagd aktivitet '$TaskName' ---" -ForegroundColor Cyan
     $PyW = "$AppDir\.venv\Scripts\pythonw.exe"
     $action = New-ScheduledTaskAction -Execute $PyW -Argument "windows\camera_ai_app.py --server" -WorkingDirectory $AppDir
     $trigger = New-ScheduledTaskTrigger -AtStartup

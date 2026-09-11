@@ -50,7 +50,25 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
     Write-Host "Ollama saknas - installera https://ollama.com och kör sedan: ollama pull moondream"
 }
 
-# 5. Verifiera att OpenVINO ser Arc-kortet
+# 5. ffmpeg (krävs för MP4-inspelning)
+Write-Host ""
+Write-Host "--- ffmpeg (MP4-inspelning) ---"
+if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "Installerar ffmpeg ..."
+        winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+    } else {
+        Write-Host "ffmpeg saknas. Installera Gyan.FFmpeg med winget för att använda inspelning." -ForegroundColor Yellow
+    }
+}
+if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+    $FfmpegExe = (Get-Command ffmpeg).Source
+    Copy-Item -Path $FfmpegExe -Destination "$AppDir\ffmpeg.exe" -Force
+    Write-Host ("ffmpeg: " + ((ffmpeg -version | Select-Object -First 1) -join "")) -ForegroundColor Green
+}
+
+# 6. Verifiera att OpenVINO ser Arc-kortet
 Write-Host ""
 Write-Host "--- OpenVINO enheter (Arc B50 Pro ska synas) ---"
 & $Py -c "import openvino as ov; print('Devices:', ov.Core().available_devices)"

@@ -5,7 +5,13 @@ import shutil
 import subprocess
 import threading
 import time
+import logging
 from pathlib import Path
+
+import config
+
+
+LOGGER = logging.getLogger("camera_ai.recording")
 
 
 class RecordingManager:
@@ -69,7 +75,9 @@ class RecordingManager:
         return Path(raw).expanduser() if raw else Path("recordings")
 
     def _run(self) -> None:
-        if not shutil.which("ffmpeg"):
+        ffmpeg = config.FFMPEG_BIN
+        if not Path(ffmpeg).is_file() and not shutil.which(ffmpeg):
+            LOGGER.error("%s: ffmpeg saknas i PATH - inspelning kan inte starta.", self.camera_id)
             with self._lock:
                 self._error = "ffmpeg saknas i PATH - installera ffmpeg för inspelning."
             return
@@ -82,28 +90,32 @@ class RecordingManager:
             try:
                 folder.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
+                LOGGER.error("%s: kunde inte skapa inspelningsmapp: %s", self.camera_id, exc)
                 with self._lock:
                     self._error = f"Kunde inte skapa inspelningsmapp: {exc}"
                 return
             url = self._rtsp_url_getter()
             if not url:
+                LOGGER.error("%s: RTSP-adress saknas för inspelning.", self.camera_id)
                 with self._lock:
                     self._error = "RTSP-adress saknas för inspelning."
                 return
             pattern = str(folder / "%H-%M-%S.mp4")
             command = [
-                "ffmpeg", "-hide_banner", "-loglevel", "warning", "-rtsp_transport", "tcp",
+                ffmpeg, "-hide_banner", "-loglevel", "warning", "-rtsp_transport", "tcp",
                 "-i", url, "-map", "0:v:0", "-an", "-c", "copy", "-f", "segment",
                 "-segment_time", str(int(cfg.get("recording_segment_seconds", 10))),
                 "-reset_timestamps", "1", "-strftime", "1", pattern,
             ]
             try:
+                LOGGER.info("%s: startar inspelning (%s) till %s", self.camera_id, mode, folder)
                 with self._lock:
                     self._error = ""
                     self._started_at = time.time()
                     self._process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                 self._wait_for_process(mode, folder, int(cfg.get("recording_retention_days", 7)))
             except OSError as exc:
+                LOGGER.error("%s: kunde inte starta ffmpeg: %s", self.camera_id, exc)
                 with self._lock:
                     self._error = f"Kunde inte starta ffmpeg: {exc}"
                 return
@@ -117,6 +129,7 @@ class RecordingManager:
         while not self._stop.wait(5):
             process = self._process
             if process is None or process.poll() is not None:
+                LOGGER.warning("%s: ffmpeg avslutades - försöker återansluta.", self.camera_id)
                 with self._lock:
                     self._error = "ffmpeg avslutades - försöker återansluta."
                 return

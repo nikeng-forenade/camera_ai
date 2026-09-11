@@ -44,7 +44,9 @@ from analyzer import (
 )
 from camera_stream import CameraPool, CameraWorker, scan_camera, test_rtsp
 from ha_client import HAClient
+from log_store import entries as log_entries, install as install_log_buffer
 
+install_log_buffer()
 analyzer = YoloAnalyzer()
 ha = HAClient(config)
 pool = CameraPool(analyzer)  # flera live-kameror: RTSP -> YOLO -> Dashboard
@@ -884,6 +886,12 @@ def health():
         "yolo_state": s.get("yolo_state", "stopped"),
         "actual_device": s.get("actual_device"),
     }
+
+
+@app.get("/api/logs")
+def logs(limit: int = 200):
+    """Recent application log entries for the diagnostics view."""
+    return {"entries": log_entries(limit)}
 
 
 @app.get("/api/ha/status")

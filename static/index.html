@@ -28,6 +28,7 @@
     <button class="tab" data-view="lpr">🔎 LPR-test</button>
     <button class="tab" data-view="historik">📊 Historik</button>
     <button class="tab" data-view="inspelningar">⏺ Inspelningar</button>
+    <button class="tab" data-view="loggar">📋 Loggar</button>
     <button class="tab" data-view="modeller">🤖 Modeller &amp; System</button>
     <button class="tab" data-view="settings">⚙️ Inställningar</button>
   </nav>
@@ -233,6 +234,17 @@
         <p id="recordingsNow" class="hint">Välj ett segment i tidslinjen.</p>
         <div id="recordingsTimeline" class="recordings-timeline"><p class="empty">Välj en kamera med inspelning.</p></div>
         <div id="recordingsEvents" class="recordings-events"></div>
+      </section>
+    </section>
+
+    <!-- ============================= LOGGAR ============================= -->
+    <section id="view-loggar" class="view">
+      <section class="card">
+        <div class="stats-head">
+          <div><h2>📋 Loggar</h2><p class="hint">Senaste meddelandena från appen, kameror och inspelning.</p></div>
+          <button id="logsRefresh" class="btn" type="button">↻ Uppdatera</button>
+        </div>
+        <div id="logsBox" class="logs-box"><p class="empty">Laddar loggar…</p></div>
       </section>
     </section>
 

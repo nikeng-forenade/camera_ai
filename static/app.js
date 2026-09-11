@@ -149,6 +149,34 @@ document.querySelectorAll(".recordings-span-btn").forEach((button) => button.add
 }));
 document.getElementById("recordingsRefresh")?.addEventListener("click", loadRecordings);
 
+/* ---- Loggar ---- */
+function renderLogs(entries) {
+  const box = document.getElementById("logsBox");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!entries.length) { box.innerHTML = '<p class="empty">Inga loggrader ännu.</p>'; return; }
+  entries.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "log-row";
+    const time = document.createElement("span"); time.className = "log-time"; time.textContent = entry.time || "";
+    const level = document.createElement("span"); level.className = "log-level " + String(entry.level || "INFO"); level.textContent = entry.level || "INFO";
+    const source = document.createElement("span"); source.className = "log-source"; source.textContent = entry.source || "";
+    const message = document.createElement("span"); message.className = "log-message"; message.textContent = entry.message || "";
+    row.append(time, level, source, message); box.appendChild(row);
+  });
+}
+async function loadLogs() {
+  const box = document.getElementById("logsBox");
+  if (!box) return;
+  try {
+    const response = await fetch("/api/logs?limit=500");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Kunde inte hämta loggar.");
+    renderLogs(data.entries || []);
+  } catch (error) { box.innerHTML = ""; const message = document.createElement("p"); message.className = "save-msg err"; message.textContent = "❌ " + error.message; box.appendChild(message); }
+}
+document.getElementById("logsRefresh")?.addEventListener("click", loadLogs);
+
 confInput.addEventListener("input", () => {
   confValue.textContent = parseFloat(confInput.value).toFixed(2);
 });
@@ -1033,6 +1061,7 @@ loadStats();
       loadLpr();
     }
     if (name === "inspelningar") loadRecordings();
+    if (name === "loggar") loadLogs();
     window.scrollTo({ top: 0 });
   }
   document.querySelectorAll(".tab").forEach((b) =>
